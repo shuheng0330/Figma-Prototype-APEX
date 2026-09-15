@@ -19,6 +19,7 @@ export const SAMPLE_ACCOUNTS: PrototypeAccount[] = [
 
 const EMPLOYEE_PATHS = [
   "/performance", "/performance/my-kpi-plan", "/performance/my-assessments",
+  "/portal", "/calendar", "/profile",
 ];
 
 const MANAGER_PATHS = [
@@ -31,9 +32,10 @@ const HR_PATHS = [
 ];
 
 const SUPER_ADMIN_PATHS = [
+  "/upload", "/review", "/quiz-review", "/assign-training", "/training-score",
   "/performance/review-periods", "/performance/company-kpis",
   "/performance/attitude-setup", "/org-eval", "/staff-profile",
-  "/performance/hr-appraisals",
+  "/performance/hr-appraisals", "/users",
 ];
 
 const TRAINER_PATHS = [
