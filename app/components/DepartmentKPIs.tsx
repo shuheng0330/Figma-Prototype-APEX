@@ -757,6 +757,7 @@ export function DepartmentKPIs() {
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
   const [viewId, setViewId]             = useState<string | null>(null);
+  const [historyId, setHistoryId]       = useState<string | null>(null);
   const [editId, setEditId]             = useState<string | null>(null);
   const [editIsCreate, setEditIsCreate] = useState(false);
   const [editIsRevision, setEditIsRevision] = useState(false);
@@ -787,6 +788,7 @@ export function DepartmentKPIs() {
   const remaining = maxAlloc - publishedWeight;
 
   const viewKpi  = viewId ? (kpis.find(k => k.id === viewId) ?? null) : null;
+  const historyKpi = historyId ? (kpis.find(k => k.id === historyId) ?? null) : null;
   const editKpi  = editId ? (kpis.find(k => k.id === editId) ?? null) : null;
 
   // Published weight excluding current edit target
@@ -1081,6 +1083,7 @@ export function DepartmentKPIs() {
                             style={{ color: MUTED, borderColor: BORDER }}>
                             <Eye size={11} /> View
                           </button>
+                          {kpi.previousVersions?.length ? <button onClick={() => setHistoryId(kpi.id)} className="px-2.5 py-1.5 rounded text-[11px] font-medium border" style={{ color: BLUE, borderColor: "#93B4E8" }}>View Version History</button> : null}
                           {/* Edit */}
                           {canEditRow && (
                             <button onClick={() => openEdit(kpi.id)}
@@ -1143,6 +1146,7 @@ export function DepartmentKPIs() {
           kpi={viewKpi} period={selectedPeriod} periodStatus={periodStatus}
           onClose={() => setViewId(null)} onEdit={() => openEdit(viewKpi.id)} onRevise={() => openRevision(viewKpi.id)} />
       )}
+      {historyKpi && <VersionHistoryModal kpi={historyKpi} onClose={() => setHistoryId(null)} />}
       {(editIsCreate || editId) && (
         <EditDrawer
           editKpi={editIsCreate ? null : editKpi}
