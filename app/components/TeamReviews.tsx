@@ -25,7 +25,7 @@ const SCORE_META: Record<number, { label: string; color: string }> = {
 const SCORE_KEYS = ["s5","s4","s3","s2","s1"] as const;
 
 type KpiLevel          = "Company" | "Department" | "Individual";
-type ReviewStatus      = "Pending Review" | "Pending Approval" | "Completed" | "Returned for Revision";
+type ReviewStatus      = "Pending Review" | "Pending Approval" | "Reviewed" | "Approved" | "Returned";
 type ReviewType        = "Individual KPI Approval" | "KPI Assessment" | "Attitude Evaluation";
 type KpiApprovalStatus = "Pending" | "Approved" | "Returned";
 
@@ -51,13 +51,14 @@ const LEVEL_STYLE: Record<KpiLevel, { color: string; bg: string }> = {
 
 const STATUS_STYLE: Record<ReviewStatus, { color: string; bg: string }> = {
   "Pending Review":        { color: AMBER, bg: "#FEF9EC" },
-  "Completed":             { color: TEAL,  bg: "#ECFDF9" },
-  "Returned for Revision": { color: RED,   bg: "#FEF3F2" },
+  "Reviewed":              { color: TEAL,  bg: "#ECFDF9" },
+  "Approved":              { color: TEAL,  bg: "#ECFDF9" },
+  "Returned":              { color: RED,   bg: "#FEF3F2" },
   "Pending Approval":      { color: AMBER, bg: "#FEF9EC" },
 };
 
 const STATUS_ORDER: Record<ReviewStatus, number> = {
-  "Pending Approval": 0, "Pending Review": 1, "Returned for Revision": 2, "Completed": 3,
+  "Pending Approval": 0, "Pending Review": 1, "Returned": 2, "Approved": 3, "Reviewed": 4,
 };
 
 // ── Individual KPIs for Amir's approval ──────────────────────────────────────
@@ -152,10 +153,10 @@ const ATTITUDE_ROWS = [
 const INIT_QUEUE: ReviewItem[] = [
   { id: "r1", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Pending Approval", overdue: true },
   { id: "r2", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Pending Review"        },
-  { id: "r3", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Completed"             },
+  { id: "r3", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Approved"              },
   { id: "r4", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Attitude Evaluation",     checkpoint: "Annual 2027", due: "20 Dec 2027", dueTs: 20271220, status: "Pending Review", overdue: true },
   { id: "r5", employee: "Rizal Hamdan", initials: "RH", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Pending Review", overdue: true },
-  { id: "r6", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Completed"            },
+  { id: "r6", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Reviewed"             },
 ];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -396,8 +397,8 @@ export function TeamReviews() {
 
   // ── Derived state for the active drawer ──
   const rid         = drawerItem?.id ?? "";
-  const isCompleted = drawerItem?.status === "Completed";
-  const isReturned  = drawerItem?.status === "Returned for Revision";
+  const isCompleted = drawerItem?.status === "Reviewed" || drawerItem?.status === "Approved";
+  const isReturned  = drawerItem?.status === "Returned";
   const isReadOnly  = isCompleted || isReturned;
 
   // Individual KPI Approval
@@ -442,7 +443,7 @@ export function TeamReviews() {
 
   function handleCompleteReview() {
     if (!drawerItem) return;
-    updateStatus(drawerItem.id, "Completed");
+    updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
     setCompletionDialog(null);
     setDrawerItem(null);
   }
@@ -450,14 +451,14 @@ export function TeamReviews() {
   function handleReturn(reason: string) {
     if (!drawerItem) return;
     setReturnReasons(prev => ({ ...prev, [drawerItem.id]: reason }));
-    updateStatus(drawerItem.id, "Returned for Revision");
+    updateStatus(drawerItem.id, "Returned");
     setReturnDialog(null);
     setDrawerItem(null);
   }
 
   function actionLabel(status: ReviewStatus): string {
-    if (status === "Completed") return "View Result";
-    if (status === "Returned for Revision") return "View";
+    if (status === "Reviewed" || status === "Approved") return "View Result";
+    if (status === "Returned") return "View";
     return "Review";
   }
 
@@ -503,7 +504,7 @@ export function TeamReviews() {
           <span className="text-[12px] font-semibold" style={{ color: MUTED }}>Filter by</span>
           {[
             { label: "Type",     value: filterType,   set: setFilterType,   opts: ["Individual KPI Approval","KPI Assessment","Attitude Evaluation"] },
-            { label: "Status",   value: filterStatus, set: setFilterStatus, opts: ["Pending Approval","Pending Review","Returned for Revision","Completed"]   },
+            { label: "Status",   value: filterStatus, set: setFilterStatus, opts: ["Pending Approval","Pending Review","Returned","Approved","Reviewed"]   },
             { label: "Employee", value: filterEmp,    set: setFilterEmp,    opts: employees                                                         },
           ].map(f => (
             <div key={f.label} className="relative">
@@ -581,7 +582,7 @@ export function TeamReviews() {
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setDrawerItem(r)}
                         className="px-3 py-1.5 rounded-md text-[12px] font-semibold whitespace-nowrap"
-                        style={{ color: r.status === "Completed" ? MUTED : BLUE, backgroundColor: r.status === "Completed" ? "#F2F4F7" : "#EEF3FC" }}>
+                        style={{ color: (r.status === "Reviewed" || r.status === "Approved") ? MUTED : BLUE, backgroundColor: (r.status === "Reviewed" || r.status === "Approved") ? "#F2F4F7" : "#EEF3FC" }}>
                         {actionLabel(r.status)}
                       </button>
                     </td>
@@ -650,7 +651,7 @@ export function TeamReviews() {
                   {isCompleted && (
                     <div className="flex items-center gap-2 p-3 rounded-lg mb-5" style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
-                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Approval Review Completed</p>
+                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Individual KPI Approval Approved</p>
                       <span className="text-[12px]" style={{ color: MUTED }}>· {approvCount} approved · {retCount} returned</span>
                     </div>
                   )}
@@ -798,7 +799,7 @@ export function TeamReviews() {
                       style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
                       <p className="text-[12px] font-semibold" style={{ color: TEAL }}>
-                        Review Completed · {ALL_KPIS.length} KPIs assessed
+                        Reviewed · {ALL_KPIS.length} KPIs assessed
                       </p>
                     </div>
                   )}
@@ -939,7 +940,7 @@ export function TeamReviews() {
                     <div className="flex items-center gap-2 p-3 rounded-lg mb-5"
                       style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
-                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Attitude Evaluation Review Completed</p>
+                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Attitude Evaluation Reviewed</p>
                     </div>
                   )}
 

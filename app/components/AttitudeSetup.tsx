@@ -766,46 +766,11 @@ export function AttitudeSetup() {
               <div>
                 <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Attitude Evaluation Setup</h1>
                 <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-                  Configure attitude evaluation forms, criteria and role assignments.
+                  Configure the reusable attitude evaluation criteria, rating scale, evaluation formats, and role assignments.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {/* Period selector */}
-                <div ref={periodRef} className="relative">
-                  <button onClick={() => setShowPeriodDd(o => !o)}
-                    className="flex items-center gap-2 px-3 py-2 bg-white rounded-md text-[13px]"
-                    style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Period</span>
-                    <span className="font-semibold" style={{ color: BLUE }}>{period.split(" ")[0]}</span>
-                    <span style={{ color: MUTED }}>Annual KPI Review</span>
-                    <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
-                    <ChevronDown size={13} style={{ color: MUTED }} />
-                  </button>
-                  {showPeriodDd && (
-                    <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
-                      style={{ minWidth: 260, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                      {PERIOD_OPTIONS.map(p => {
-                        const ps = PERIOD_STATUS[p] ?? "Closed";
-                        const pss = PERIOD_STATUS_STYLE[ps];
-                        return (
-                          <button key={p} onClick={() => { setPeriod(p); setShowPeriodDd(false); setEditingRating(null); }}
-                            className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] flex items-center justify-between"
-                            style={{ color: period === p ? BLUE : TEXT, fontWeight: period === p ? 600 : 400 }}>
-                            {p}
-                            <Pill label={ps} color={pss.color} bg={pss.bg} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
                 {/* Action buttons */}
-                <button onClick={() => setShowPreview(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
-                  style={{ color: TEXT, borderColor: BORDER }}>
-                  <Eye size={14} /> Preview Forms
-                </button>
                 {isEditable && (
                   <>
                     <button onClick={handleSaveDraft}
@@ -829,10 +794,6 @@ export function AttitudeSetup() {
                 Configuration:
                 <Pill label={cfg.configStatus} color={cssSty.color} bg={cssSty.bg} />
               </div>
-              <div className="flex items-center gap-2 text-[12px]" style={{ color: MUTED }}>
-                Review Period:
-                <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
-              </div>
               <div className="text-[12px]" style={{ color: MUTED }}>
                 Last Updated: <span className="font-medium" style={{ color: TEXT }}>{cfg.lastUpdated}</span>
               </div>
@@ -847,28 +808,9 @@ export function AttitudeSetup() {
             )}
 
             {/* Info / lock banners */}
-            {isEditable && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                <Info size={13} className="mt-0.5 shrink-0" />
-                Changes apply to this Annual KPI Review Period only. Once the Review Period opens,
-                this configuration becomes read-only.
-              </div>
-            )}
-            {pStatus === "Open" && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#F2F4F7", color: MUTED }}>
-                <Lock size={13} className="mt-0.5 shrink-0" />
-                This configuration is locked because the Annual KPI Review Period has opened.
-              </div>
-            )}
-            {pStatus === "Closed" && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#F2F4F7", color: MUTED }}>
-                <Lock size={13} className="mt-0.5 shrink-0" />
-                This is a historical read-only view of the configuration used for this closed period.
-              </div>
-            )}
+            <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]" style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
+              <Info size={13} className="mt-0.5 shrink-0" /> Published configurations are saved for each Review Period, so future changes will not affect existing evaluations.
+            </div>
           </div>
         </SectionCard>
 
@@ -876,14 +818,14 @@ export function AttitudeSetup() {
         <SectionCard>
           <SectionHeader
             title="Rating Scale"
-            helper="This rating scale is shared across all Attitude Evaluation formats. Numeric scores are fixed — you may edit labels and descriptions."
+            helper="This rating scale is shared across all Attitude Evaluation formats. Numeric points are fixed — you may edit labels and descriptions."
           />
           <div className="p-5">
             <div className="rounded-lg overflow-hidden border" style={{ borderColor: BORDER }}>
               <table className="w-full text-[12px]">
                 <thead>
                   <tr style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
-                    {["Score", "Label", "Description", ...(isEditable ? ["Edit"] : [])].map(h => (
+                    {["Point", "Label", "Description", ...(isEditable ? ["Edit"] : [])].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide"
                         style={{ color: MUTED }}>{h}</th>
                     ))}
@@ -943,7 +885,7 @@ export function AttitudeSetup() {
             </div>
             <p className="text-[11px] mt-3 flex items-start gap-1.5" style={{ color: AMBER }}>
               <Info size={11} className="mt-0.5 shrink-0" />
-              Attitude Evaluation Score calculation is To Be Confirmed with TBM.
+              The official Attitude Evaluation Score is calculated from the Superior's assessment points.
             </p>
           </div>
         </SectionCard>
@@ -1103,9 +1045,6 @@ export function AttitudeSetup() {
       )}
       {showPublish && (
         <PublishDialog period={period} onClose={() => setShowPublish(false)} onConfirm={handlePublish} />
-      )}
-      {showPreview && (
-        <PreviewDrawer config={cfg} onClose={() => setShowPreview(false)} />
       )}
     </div>
   );
