@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer,
@@ -683,6 +683,10 @@ function AttitudeDrawer({ attitude, onClose }: { attitude: AttitudeData; onClose
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function StaffProfileHR() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnToAppraisals = searchParams.get("returnTo") === "hr-appraisals";
+  const returnPeriod = searchParams.get("period") ?? LIVE_PERIOD;
 
   const empId    = id ?? "amir";
   const emp      = EMPLOYEES[empId] ?? EMPLOYEES.amir;
@@ -714,6 +718,12 @@ export function StaffProfileHR() {
 
         {/* ── 1. Header ── */}
         <div>
+          {returnToAppraisals && (
+            <button onClick={() => navigate(`/performance/hr-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+              <ArrowLeft size={14} /> Back to Appraisal Reviews
+            </button>
+          )}
           <div className="bg-white rounded-lg p-5 flex items-center gap-4"
             style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-[18px] font-bold shrink-0"

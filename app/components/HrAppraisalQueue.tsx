@@ -156,7 +156,7 @@ export function HrAppraisalQueue() {
             <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>HR Appraisal Review</h1>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>HR / Super Admin view · Retail Sales Department</p>
             <p className="text-[13px] mt-1" style={{ color: MUTED }}>
-              Review submitted appraisals, approve outcomes, or return to managers for revision.
+              Review submitted appraisals, approve outcomes, or return to Superiors for revision.
             </p>
           </div>
           <div className="relative">

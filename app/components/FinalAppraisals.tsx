@@ -106,7 +106,7 @@ function HistoryDrawer({ period, data, onClose }: HistoryDrawerProps) {
 
           {/* Manager recommendation */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Manager Recommendation</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Superior Recommendation</p>
             <div className="inline-flex items-center px-3 py-1.5 rounded-md text-[13px] font-semibold mb-3" style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
               {data.managerDecision ?? "—"}
             </div>
@@ -132,7 +132,7 @@ function HistoryDrawer({ period, data, onClose }: HistoryDrawerProps) {
 
             {isOverride && (
               <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Manager Recommendation</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Superior Recommendation</p>
                 <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{data.managerDecision}</p>
               </div>
             )}
@@ -297,7 +297,7 @@ export function FinalAppraisals() {
       status: "Approve",
       hrDecision: decision,
       hrOverrideReason: "",
-      hrRemarks: "Approved. The manager's recommendation has been reviewed and endorsed by HR.",
+      hrRemarks: "Approved. The Superior's recommendation has been reviewed and endorsed by HR.",
       finalDate: todayStr(),
     });
   }
@@ -314,7 +314,7 @@ export function FinalAppraisals() {
       status: "Override and Approve",
       hrDecision: overrideDec,
       hrOverrideReason: `HR has applied an override per company policy. Original recommendation of "${decision}" has been adjusted to "${overrideDec}". See policy guidelines for override criteria.`,
-      hrRemarks: "Override applied. HR final decision takes precedence per company guidelines. Manager to be notified separately.",
+      hrRemarks: "Override applied. HR final decision takes precedence per company guidelines. Superior to be notified separately.",
       finalDate: todayStr(),
     });
   }
@@ -348,7 +348,7 @@ export function FinalAppraisals() {
               </span>
             </div>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-              Manager view · {emp.name} ({emp.staffId}) · {selectedPeriod}
+              Superior view · {emp.name} ({emp.staffId}) · {selectedPeriod}
             </p>
             <button
               onClick={() => navigate(`/staff-profile/${empId}`)}
@@ -466,7 +466,7 @@ export function FinalAppraisals() {
               {status === "Override and Approve" ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Original Manager Recommendation</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Original Superior Recommendation</p>
                     <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{pd.managerDecision}</p>
                   </div>
                   <div>
@@ -505,8 +505,8 @@ export function FinalAppraisals() {
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: "KPI Performance Score",    value: pd.kpiScore,   color: BLUE,   bg: "#EEF3FC", note: `${selectedYear} Annual KPI Review result` },
-            { label: "Attitude Evaluation Score", value: pd.attScore,   color: TEAL,   bg: "#ECFDF9", note: "Manager evaluation across core values" },
-            { label: "Final Appraisal Score",     value: pd.finalScore, color: PURPLE, bg: "#F5F3FF", note: "50% KPI + 50% Attitude (example split)" },
+            { label: "Attitude Evaluation Score", value: pd.attScore,   color: TEAL,   bg: "#ECFDF9", note: "Superior evaluation across core values" },
+            { label: "Final Appraisal Score",     value: pd.finalScore, color: PURPLE, bg: "#F5F3FF", note: "50% KPI + 50% Attitude" },
           ].map(c => (
             <div
               key={c.label}
@@ -526,16 +526,12 @@ export function FinalAppraisals() {
           ))}
         </div>
 
-        {/* Formula warning */}
         <div
           className="flex items-center gap-2 px-4 py-2.5 rounded-lg"
-          style={{ backgroundColor: "#FEF9EC", border: "1px solid #FEC84B" }}
+          style={{ backgroundColor: "#EEF3FC", border: "1px solid #C7D8F5" }}
         >
-          <span className="text-[11px] font-bold uppercase shrink-0" style={{ color: AMBER }}>
-            Example — To Be Confirmed with TBM
-          </span>
-          <span className="text-[12px]" style={{ color: TEXT }}>
-            The final score formula (50% KPI + 50% Attitude) is a prototype example. The actual formula will be confirmed with TBM before the first live review period.
+          <span className="text-[12px]" style={{ color: BLUE }}>
+            Final Appraisal Score uses the confirmed 50% KPI + 50% Attitude default. The allocation is configurable in Review Period.
           </span>
         </div>
 
@@ -623,7 +619,7 @@ export function FinalAppraisals() {
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr style={{ backgroundColor: "#F8FAFC" }}>
-                      {["Review Period", "Final Score", "Manager Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
+                      {["Review Period", "Final Score", "Superior Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
                         <th
                           key={h}
                           className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
@@ -681,12 +677,12 @@ export function FinalAppraisals() {
           </div>
         )}
 
-        {/* ── Manager Recommendation ── */}
+        {/* ── Superior Recommendation ── */}
         <div
           className="bg-white rounded-lg p-5"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}
         >
-          <h2 className="text-[14px] font-bold mb-1" style={{ color: TEXT }}>Manager Recommendation</h2>
+          <h2 className="text-[14px] font-bold mb-1" style={{ color: TEXT }}>Superior Recommendation</h2>
           <p className="text-[12px] mb-4" style={{ color: MUTED }}>
             Select a recommendation to submit to HR. This is a recommendation only — HR will review and confirm.
           </p>

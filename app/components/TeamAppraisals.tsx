@@ -30,6 +30,14 @@ const ACTION_LABEL: Record<AppStatus, string> = {
   "Approve":              "View Appraisal",
   "Override and Approve": "View Appraisal",
 };
+const STATUS_LABEL: Record<AppStatus, string> = {
+  "Ready for Appraisal": "Ready for Appraisal",
+  "Draft": "Draft",
+  "Pending Review": "Pending Review",
+  "Return for Revision": "Returned",
+  "Approve": "Approved",
+  "Override and Approve": "Approved",
+};
 
 const ALL_STATUSES: AppStatus[] = [
   "Ready for Appraisal", "Draft", "Pending Review",
@@ -124,7 +132,7 @@ export function TeamAppraisals() {
     { label: "Ready for Appraisal", key: "Ready for Appraisal", color: BLUE,  bg: "#EEF3FC" },
     { label: "Draft",               key: "Draft",               color: AMBER, bg: "#FEF9EC" },
     { label: "Pending Review",      key: "Pending Review",      color: TEAL,  bg: "#ECFDF9" },
-    { label: "Return for Revision", key: "Return for Revision", color: RED,   bg: "#FEF3F2" },
+    { label: "Returned",            key: "Return for Revision", color: RED,   bg: "#FEF3F2" },
     { label: "Approved",            key: "Approved",            color: GREEN, bg: "#ECFDF5" },
   ] as const;
 
@@ -136,7 +144,7 @@ export function TeamAppraisals() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Appraisals</h1>
-            <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Manager view · Retail Sales Department</p>
+            <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Superior view · Retail Sales Department</p>
             <p className="text-[13px] mt-1" style={{ color: MUTED }}>
               Review employees who are ready for final appraisal and submit recommendations to HR.
             </p>
@@ -185,7 +193,7 @@ export function TeamAppraisals() {
               style={{ border: `1px solid ${BORDER}`, color: TEXT }}
             >
               <option value="All">Status: All</option>
-              {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
             <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
           </div>
@@ -310,7 +318,7 @@ export function TeamAppraisals() {
                         className="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
                         style={{ color: ss.color, backgroundColor: ss.bg }}
                       >
-                        {emp.status}
+                        {STATUS_LABEL[emp.status]}
                       </span>
                     </td>
                     <td className="px-4 py-3">
