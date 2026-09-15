@@ -36,12 +36,14 @@ interface KpiRow {
   overdue?: boolean;
   version?: number;
   revisedOn?: string;
+  revisedBy?: string;
   revisionReason?: string;
   previousVersions?: KpiVersion[];
 }
 interface KpiVersion {
   version: number;
   revisedOn?: string;
+  revisedBy?: string;
   revisionReason?: string;
   perspective: string;
   kra: string;
@@ -280,6 +282,52 @@ function ScoringGuideModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Version History ───────────────────────────────────────────────────────────
+function VersionHistoryModal({ kpi, onClose }: { kpi: KpiRow; onClose: () => void }) {
+  const versions = kpi.previousVersions ?? [];
+  const [selectedIndex, setSelectedIndex] = useState(versions.length - 1);
+  const selected = versions[selectedIndex];
+  const [showAll, setShowAll] = useState(false);
+  const current: KpiVersion = {
+    version: kpi.version ?? 1, perspective: kpi.perspective, kra: kpi.kra, name: kpi.name,
+    target: kpi.target, weightage: kpi.weightage, scoreDef: kpi.scoreDef,
+    revisedOn: kpi.revisedOn, revisedBy: kpi.revisedBy, revisionReason: kpi.revisionReason,
+  };
+  const fields = [
+    ["Perspective", selected?.perspective, current.perspective], ["KRA", selected?.kra, current.kra],
+    ["KPI Name", selected?.name, current.name], ["Target", selected?.target, current.target],
+    ["Weightage", selected ? `${selected.weightage}%` : "", `${current.weightage}%`],
+    ...SCORE_KEYS.map((key, i) => [`Point ${5 - i}`, selected?.scoreDef[key], current.scoreDef[key]]),
+  ] as [string, string | undefined, string][];
+  const visibleFields = showAll ? fields : fields.filter(([, before, after]) => before !== after);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
+          <div><h2 className="text-[16px] font-bold" style={{ color: TEXT }}>Version History</h2><p className="text-[11px]" style={{ color: MUTED }}>Company KPI revision audit</p></div>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="rounded-lg p-4" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
+            <p className="text-[13px] font-bold" style={{ color: TEXT }}>Version {current.version} — Current</p>
+            <p className="text-[12px] mt-1" style={{ color: MUTED }}>Revised on: {current.revisedOn ?? "—"} · Revised by: {current.revisedBy ?? "Super Admin"}</p>
+            <p className="text-[12px] mt-2"><span className="font-semibold" style={{ color: TEXT }}>Revision Reason: </span><span style={{ color: MUTED }}>{current.revisionReason ?? "—"}</span></p>
+          </div>
+          {selected && <>
+            <div className="flex items-center justify-between gap-3"><p className="text-[12px] font-semibold" style={{ color: TEXT }}>Comparing Version {selected.version} with Version {current.version}</p><button onClick={() => setShowAll(value => !value)} className="text-[12px] font-semibold" style={{ color: BLUE }}>{showAll ? "Show changed fields" : "Show all fields"}</button></div>
+            <div className="border rounded-lg overflow-hidden" style={{ borderColor: BORDER }}>
+              <table className="w-full text-[12px]"><thead><tr style={{ backgroundColor: "#F8FAFC" }}><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Field</th><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Version {selected.version}</th><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Version {current.version}</th></tr></thead><tbody>{visibleFields.map(([label, before, after]) => { const changed = before !== after; return <tr key={label} style={{ borderTop: `1px solid ${BORDER}` }}><td className="px-3 py-2 font-medium" style={{ color: TEXT }}>{label}</td><td className="px-3 py-2" style={{ color: changed ? MUTED : TEXT }}>{before || "—"}</td><td className="px-3 py-2 font-semibold" style={{ color: changed ? BLUE : MUTED, backgroundColor: changed ? "#EEF3FC" : undefined }}>{after || "—"}</td></tr>; })}</tbody></table>
+            </div>
+          </>}
+          <div><p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Version History</p><div className="flex flex-wrap gap-2"><button className="px-3 py-2 rounded-md text-[12px] font-semibold" style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>Version {current.version} — Current version</button>{versions.map((version, index) => <button key={version.version} onClick={() => { setSelectedIndex(index); setShowAll(false); }} className="px-3 py-2 rounded-md text-[12px] font-medium border" style={{ color: selectedIndex === index ? BLUE : TEXT, borderColor: selectedIndex === index ? "#93B4E8" : BORDER }}>Version {version.version} — {version.revisionReason ? "Previous version" : "Original published version"}</button>)}</div></div>
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t" style={{ borderColor: BORDER }}><button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Close</button></div>
+      </div>
+    </div>
+  );
+}
+
 // ── View Drawer ───────────────────────────────────────────────────────────────
 function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
   kpi: KpiRow; period: string; periodStatus: PeriodStatus;
@@ -288,7 +336,7 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
   const ss = KPI_STATUS_STYLE[kpi.status];
   const canEdit = periodStatus === "Upcoming";
   const canRevise = kpi.status === "Published" && periodStatus !== "Closed";
-  const [showPrevious, setShowPrevious] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const previous = kpi.previousVersions?.[kpi.previousVersions.length - 1];
 
   function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
@@ -330,7 +378,7 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
             </DetailRow>
             {kpi.status === "Published" && <DetailRow label="Overdue">{kpi.overdue ? "Yes" : "No"}</DetailRow>}
             {kpi.status === "Published" && <DetailRow label="Version">
-              <span className="flex items-center gap-2 flex-wrap">Version {kpi.version ?? 1}{kpi.revisedOn && <>· Revised on {kpi.revisedOn}</>}{previous && <button onClick={() => setShowPrevious(value => !value)} className="text-[12px] font-semibold" style={{ color:BLUE }}>{showPrevious ? "Hide Previous Version" : "View Previous Version"}</button>}</span>
+              <span className="flex items-center gap-2 flex-wrap">Version {kpi.version ?? 1}{kpi.revisedOn && <>· Revised on {kpi.revisedOn}</>}{previous && <button onClick={() => setShowHistory(true)} className="text-[12px] font-semibold" style={{ color:BLUE }}>View Version History</button>}</span>
             </DetailRow>}
             <DetailRow label="Applies To">
               <span className="flex items-center gap-1.5">
@@ -349,12 +397,6 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
             </div>
           )}
 
-          {showPrevious && previous && (
-            <div className="p-3 rounded-md" style={{ backgroundColor:"#F8FAFC", border:`1px solid ${BORDER}` }}>
-              <p className="text-[11px] font-bold mb-1" style={{ color:TEXT }}>Version {previous.version}</p>
-              <p className="text-[11px]" style={{ color:MUTED }}>{previous.revisionReason || "Original published version"}</p>
-            </div>
-          )}
 
           <div>
             <h4 className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: MUTED }}>Scoring Definition</h4>
@@ -385,6 +427,7 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
             style={{ color: TEXT, borderColor: BORDER }}>Close</button>
         </div>
       </div>
+      {showHistory && <VersionHistoryModal kpi={kpi} onClose={() => setShowHistory(false)} />}
     </>
   );
 }
@@ -821,13 +864,13 @@ export function CompanyKPIs() {
     mutatePeriod(prev => prev.map(kpi => {
       if (kpi.id !== editId) return kpi;
       const previous: KpiVersion = {
-        version: kpi.version ?? 1, revisedOn: kpi.revisedOn, revisionReason: kpi.revisionReason,
+        version: kpi.version ?? 1, revisedOn: kpi.revisedOn, revisedBy: kpi.revisedBy, revisionReason: kpi.revisionReason,
         perspective: kpi.perspective, kra: kpi.kra, name: kpi.name, target: kpi.target,
         weightage: kpi.weightage, scoreDef: kpi.scoreDef,
       };
       return {
         ...kpi, ...data, status: "Published", version: (kpi.version ?? 1) + 1,
-        revisedOn, revisionReason: data.revisionReason, previousVersions: [...(kpi.previousVersions ?? []), previous],
+        revisedOn, revisedBy: "Super Admin", revisionReason: data.revisionReason, previousVersions: [...(kpi.previousVersions ?? []), previous],
       };
     }));
     closeEdit();

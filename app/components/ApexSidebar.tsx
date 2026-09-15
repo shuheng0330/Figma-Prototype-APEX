@@ -88,7 +88,7 @@ const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
       { id: "company-kpis", label: "Company KPIs", path: "/performance/company-kpis", icon: Building2 },
       { id: "attitude-setup", label: "Attitude Setup", path: "/performance/attitude-setup", icon: SlidersHorizontal },
     ],
-  }, ORGANISATION, APPRAISAL_MANAGEMENT, TRAINING_MANAGEMENT, ADMINISTRATION],
+  }, ORGANISATION, TRAINING_MANAGEMENT, ADMINISTRATION],
   trainer: [TRAINING_MANAGEMENT, MY_LEARNING],
 };
 
