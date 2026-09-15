@@ -962,7 +962,7 @@ export function MyAssessments() {
   >(INIT_CHECKPOINT_STATES);
   const [attitudeRows, setAttitudeRows] =
     useState<AttitudeRow[]>(INIT_ATTITUDE);
-  const [attSubmitted, setAttSubmitted] = useState(false);
+  const [attStatus, setAttStatus] = useState<"Draft" | "Pending Review" | "Reviewed">("Draft");
   const [showKpiDialog, setShowKpiDialog] = useState(false);
   const [showAttDialog, setShowAttDialog] = useState(false);
   const [criteriaKpiId, setCriteriaId] = useState<
@@ -1063,7 +1063,7 @@ export function MyAssessments() {
   }
 
   function handleAttSubmit() {
-    setAttSubmitted(true);
+    setAttStatus("Pending Review");
     setShowAttDialog(false);
   }
 
@@ -1600,17 +1600,17 @@ export function MyAssessments() {
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{
-                    color: attSubmitted ? TEAL : AMBER,
-                    backgroundColor: attSubmitted
+                    color: attStatus === "Draft" ? AMBER : TEAL,
+                    backgroundColor: attStatus === "Draft"
                       ? "#ECFDF9"
                       : "#FEF9EC",
                   }}
                 >
-                  {attSubmitted ? "Submitted" : "Draft"}
+                  {attStatus}
                 </span>
                 <span>Deadline: 20 Dec 2027</span>
               </div>
-              {!attSubmitted && (
+              {attStatus === "Draft" && (
                 <div className="flex gap-2">
                   <button
                     className="px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
@@ -1643,7 +1643,7 @@ export function MyAssessments() {
             </p>
 
             {/* Attitude submit block reason */}
-            {!attSubmitted && !attAllScored && (
+            {attStatus === "Draft" && !attAllScored && (
               <p
                 className="text-[12px] flex items-center gap-1.5"
                 style={{ color: MUTED }}
@@ -1658,7 +1658,7 @@ export function MyAssessments() {
             )}
 
             {/* Submitted banner */}
-            {attSubmitted && (
+            {attStatus === "Pending Review" && (
               <div
                 className="flex items-start gap-3 p-4 rounded-lg"
                 style={{
@@ -1746,7 +1746,7 @@ export function MyAssessments() {
                         </p>
                       </div>
                       <div className="shrink-0">
-                        {attSubmitted ? (
+                        {attStatus !== "Draft" ? (
                           <div className="text-right">
                             {r.score !== null ? (
                               <>
@@ -1794,7 +1794,7 @@ export function MyAssessments() {
                         )}
                       </div>
                     </div>
-                    {!attSubmitted && (
+                    {attStatus === "Draft" && (
                       <textarea
                         value={r.comment}
                         onChange={(e) =>
@@ -1818,7 +1818,7 @@ export function MyAssessments() {
                         }}
                       />
                     )}
-                    {attSubmitted && r.comment && (
+                    {attStatus !== "Draft" && r.comment && (
                       <p
                         className="mt-2 text-[12px]"
                         style={{ color: MUTED }}
