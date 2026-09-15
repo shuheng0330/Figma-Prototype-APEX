@@ -1,0 +1,1861 @@
+import { useState, useRef } from "react";
+import {
+  X,
+  Send,
+  ChevronDown,
+  CheckCircle,
+  AlertTriangle,
+  Paperclip,
+  FileText,
+  RotateCcw,
+} from "lucide-react";
+
+const BLUE = "#2457A6";
+const TEAL = "#0F9F8F";
+const AMBER = "#D99000";
+const RED = "#D14343";
+const GREEN = "#059669";
+const TEXT = "#172033";
+const MUTED = "#667085";
+const BORDER = "#DCE3EC";
+const BG = "#F4F6F9";
+const PURPLE = "#7C3AED";
+
+// ── Score metadata ────────────────────────────────────────────────────────────
+
+const SCORE_META: Record<
+  number,
+  { label: string; color: string }
+> = {
+  5: { label: "Exceptional", color: GREEN },
+  4: { label: "Exceeds Expectations", color: TEAL },
+  3: { label: "Meets Expectations", color: BLUE },
+  2: { label: "Partially Meets Expectations", color: AMBER },
+  1: {
+    label: "Needs Significant Improvement",
+    color: "#E06B3A",
+  },
+  0: { label: "Not Achieved", color: RED },
+};
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type KpiLevel = "Company" | "Department" | "Individual";
+type CheckpointStatus =
+  "Reviewed" | "Draft" | "Upcoming" | "Submitted" | "Returned";
+type CheckpointId = "jan" | "feb" | "mar";
+
+interface ScoreDef {
+  s5: string;
+  s4: string;
+  s3: string;
+  s2: string;
+  s1: string;
+  s0: string;
+}
+interface KpiRow {
+  id: string;
+  level: KpiLevel;
+  name: string;
+  target: string;
+  scoreDef: ScoreDef;
+}
+interface EvidenceFile {
+  name: string;
+  size: string;
+}
+interface CheckpointData {
+  status: CheckpointStatus;
+  scores: Record<string, number | null>;
+  comments: Record<string, string>;
+  evidence: Record<string, EvidenceFile | null>;
+  returnReason?: string;
+  returnDate?: string;
+}
+interface CheckpointMeta {
+  id: CheckpointId;
+  label: string;
+  date: string;
+  deadline: string;
+}
+interface AttitudeRow {
+  id: string;
+  criterion: string;
+  description: string;
+  score: number | null;
+  comment: string;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const LEVEL_STYLE: Record<
+  KpiLevel,
+  { color: string; bg: string }
+> = {
+  Company: { color: BLUE, bg: "#EEF3FC" },
+  Department: { color: PURPLE, bg: "#F5F3FF" },
+  Individual: { color: TEAL, bg: "#ECFDF9" },
+};
+
+const CP_STATUS_STYLE: Record<
+  CheckpointStatus,
+  { color: string; bg: string; label: string }
+> = {
+  Reviewed: { color: TEAL, bg: "#ECFDF9", label: "Reviewed" },
+  Draft: { color: AMBER, bg: "#FEF9EC", label: "Draft" },
+  Upcoming: { color: MUTED, bg: "#F2F4F7", label: "Upcoming" },
+  Submitted: { color: TEAL, bg: "#ECFDF9", label: "Submitted" },
+  Returned: {
+    color: RED,
+    bg: "#FEF3F2",
+    label: "Returned for Revision",
+  },
+};
+
+const CHECKPOINTS: CheckpointMeta[] = [
+  {
+    id: "jan",
+    label: "January 2027",
+    date: "31 Jan 2027",
+    deadline: "5 Feb 2027",
+  },
+  {
+    id: "feb",
+    label: "February 2027",
+    date: "28 Feb 2027",
+    deadline: "5 Mar 2027",
+  },
+  {
+    id: "mar",
+    label: "March 2027",
+    date: "31 Mar 2027",
+    deadline: "5 Apr 2027",
+  },
+];
+
+const SCORE_KEYS: (keyof ScoreDef)[] = [
+  "s5",
+  "s4",
+  "s3",
+  "s2",
+  "s1",
+  "s0",
+];
+
+const KPI_ROWS: KpiRow[] = [
+  {
+    id: "c1",
+    level: "Company",
+    name: "Company Revenue Growth",
+    target: "≥ 8% YoY",
+    scoreDef: {
+      s5: "Revenue grows 10% or more above target YoY",
+      s4: "Revenue grows 8%–9.9% YoY",
+      s3: "Revenue grows 5%–7.9% YoY",
+      s2: "Revenue grows 2%–4.9% YoY",
+      s1: "Revenue grows 0%–1.9% YoY",
+      s0: "Revenue declines year-on-year",
+    },
+  },
+  {
+    id: "c2",
+    level: "Company",
+    name: "Customer Satisfaction Index",
+    target: "≥ 85%",
+    scoreDef: {
+      s5: "CSI score 95% or above",
+      s4: "CSI score 90%–94%",
+      s3: "CSI score 85%–89%",
+      s2: "CSI score 75%–84%",
+      s1: "CSI score 60%–74%",
+      s0: "CSI score below 60%",
+    },
+  },
+  {
+    id: "c3",
+    level: "Company",
+    name: "Branch Operations Score",
+    target: "≥ 90%",
+    scoreDef: {
+      s5: "Operations score 98% or above",
+      s4: "Operations score 93%–97%",
+      s3: "Operations score 90%–92%",
+      s2: "Operations score 80%–89%",
+      s1: "Operations score 70%–79%",
+      s0: "Operations score below 70%",
+    },
+  },
+  {
+    id: "d1",
+    level: "Department",
+    name: "Monthly Sales Achievement",
+    target: "RM 80,000/month",
+    scoreDef: {
+      s5: "Achieves 110% or more of monthly sales target",
+      s4: "Achieves 100%–109% of monthly sales target",
+      s3: "Achieves 90%–99% of monthly sales target",
+      s2: "Achieves 75%–89% of monthly sales target",
+      s1: "Achieves 50%–74% of monthly sales target",
+      s0: "Achieves less than 50% of monthly sales target",
+    },
+  },
+  {
+    id: "d2",
+    level: "Department",
+    name: "Product Coverage",
+    target: "≥ 80% product range",
+    scoreDef: {
+      s5: "Covers 95% or more of the product range",
+      s4: "Covers 90%–94% of the product range",
+      s3: "Covers 80%–89% of the product range",
+      s2: "Covers 70%–79% of the product range",
+      s1: "Covers 50%–69% of the product range",
+      s0: "Covers less than 50% of the product range",
+    },
+  },
+  {
+    id: "i1",
+    level: "Individual",
+    name: "New Customer Acquisition",
+    target: "10 new customers/month",
+    scoreDef: {
+      s5: "Acquires 13 or more new customers per month",
+      s4: "Acquires 11–12 new customers per month",
+      s3: "Acquires 10 new customers per month",
+      s2: "Acquires 8–9 new customers per month",
+      s1: "Acquires 5–7 new customers per month",
+      s0: "Acquires fewer than 5 new customers per month",
+    },
+  },
+  {
+    id: "i2",
+    level: "Individual",
+    name: "Cross-Sell Rate",
+    target: "≥ 20%",
+    scoreDef: {
+      s5: "Cross-sell rate 25% or above",
+      s4: "Cross-sell rate 22%–24%",
+      s3: "Cross-sell rate 20%–21%",
+      s2: "Cross-sell rate 15%–19%",
+      s1: "Cross-sell rate 10%–14%",
+      s0: "Cross-sell rate below 10%",
+    },
+  },
+];
+
+const INIT_CHECKPOINT_STATES: Record<
+  CheckpointId,
+  CheckpointData
+> = {
+  jan: {
+    status: "Reviewed",
+    scores: { c1: 4, c2: 3, c3: 4, d1: 3, d2: 4, i1: 3, i2: 2 },
+    comments: {
+      c1: "Strong start to the year. Company revenue tracking ahead of target.",
+      d1: "Achieved RM 73,200 against the RM 80,000 target. Narrowly missed due to the public holiday period.",
+      i2: "Cross-sell at 16% for January. Will focus on increasing product pairing conversations in February.",
+    },
+    evidence: {
+      d1: { name: "sales-report-jan-2027.pdf", size: "2.4 MB" },
+    },
+  },
+  feb: {
+    status: "Draft",
+    scores: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, null]),
+    ),
+    comments: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, ""]),
+    ),
+    evidence: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, null]),
+    ),
+  },
+  mar: {
+    status: "Upcoming",
+    scores: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, null]),
+    ),
+    comments: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, ""]),
+    ),
+    evidence: Object.fromEntries(
+      KPI_ROWS.map((k) => [k.id, null]),
+    ),
+  },
+};
+
+const INIT_ATTITUDE: AttitudeRow[] = [
+  {
+    id: "a1",
+    criterion: "Integrity & Professionalism",
+    description:
+      "Demonstrates honesty, ethical conduct and professional standards at all times.",
+    score: null,
+    comment: "",
+  },
+  {
+    id: "a2",
+    criterion: "Customer Focus",
+    description:
+      "Consistently prioritises customer needs, resolves issues promptly and delivers quality service.",
+    score: null,
+    comment: "",
+  },
+  {
+    id: "a3",
+    criterion: "Sales Initiative & Drive",
+    description:
+      "Proactively identifies sales opportunities, takes ownership of targets and drives results.",
+    score: null,
+    comment: "",
+  },
+  {
+    id: "a4",
+    criterion: "Teamwork & Collaboration",
+    description:
+      "Supports colleagues, shares product knowledge and contributes to a positive team environment.",
+    score: null,
+    comment: "",
+  },
+  {
+    id: "a5",
+    criterion: "Product Knowledge",
+    description:
+      "Demonstrates up-to-date knowledge of products, promotions and services to effectively advise customers.",
+    score: null,
+    comment: "",
+  },
+  {
+    id: "a6",
+    criterion: "Adaptability",
+    description:
+      "Responds positively to change, learns quickly and adjusts approach when needed.",
+    score: null,
+    comment: "",
+  },
+];
+
+// ── Score Selector ────────────────────────────────────────────────────────────
+
+function ScoreSelector({
+  value,
+  onChange,
+  readOnly,
+  minScore = 0,
+}: {
+  value: number | null;
+  onChange?: (v: number) => void;
+  readOnly?: boolean;
+  minScore?: number;
+}) {
+  const scores = Array.from(
+    { length: 6 - minScore },
+    (_, i) => i + minScore,
+  );
+  return (
+    <div>
+      <div className="flex gap-1 flex-wrap">
+        {scores.map((n) => {
+          const sel = value === n;
+          const m = SCORE_META[n];
+          return (
+            <button
+              key={n}
+              onClick={() => !readOnly && onChange?.(n)}
+              title={m.label}
+              className="w-7 h-7 rounded text-[12px] font-bold transition-colors"
+              style={{
+                backgroundColor: sel ? m.color : "#F2F4F7",
+                color: sel ? "white" : MUTED,
+                cursor: readOnly ? "default" : "pointer",
+              }}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+      {value !== null &&
+        value !== undefined &&
+        SCORE_META[value] && (
+          <p
+            className="text-[10px] mt-1"
+            style={{ color: SCORE_META[value].color }}
+          >
+            {SCORE_META[value].label}
+          </p>
+        )}
+    </div>
+  );
+}
+
+// ── Scoring Criteria Drawer ───────────────────────────────────────────────────
+
+function ScoringCriteriaDrawer({
+  kpi,
+  onClose,
+}: {
+  kpi: KpiRow;
+  onClose: () => void;
+}) {
+  const ls = LEVEL_STYLE[kpi.level];
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/30"
+        onClick={onClose}
+      />
+      <div
+        className="fixed right-0 top-0 bottom-0 z-50 w-[400px] bg-white shadow-2xl flex flex-col"
+        style={{ borderLeft: `1px solid ${BORDER}` }}
+      >
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b shrink-0"
+          style={{ borderColor: BORDER }}
+        >
+          <div>
+            <h3
+              className="text-[14px] font-bold"
+              style={{ color: TEXT }}
+            >
+              KPI-Specific Scoring Criteria
+            </h3>
+            <p
+              className="text-[11px] mt-0.5"
+              style={{ color: MUTED }}
+            >
+              Each KPI may use different achievement thresholds.
+              Review these criteria before selecting your
+              Self-Assessment Score.
+            </p>
+          </div>
+          <button onClick={onClose} className="ml-3 shrink-0">
+            <X size={18} style={{ color: MUTED }} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div
+            className="mb-4 pb-4 border-b"
+            style={{ borderColor: BORDER }}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className="text-[13px] font-bold"
+                style={{ color: TEXT }}
+              >
+                {kpi.name}
+              </span>
+              <span
+                className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                style={{
+                  color: ls.color,
+                  backgroundColor: ls.bg,
+                }}
+              >
+                {kpi.level}-Level
+              </span>
+            </div>
+            <p className="text-[12px]" style={{ color: MUTED }}>
+              Target: {kpi.target}
+            </p>
+          </div>
+          <div className="space-y-4">
+            {SCORE_KEYS.map((key, i) => {
+              const score = 5 - i;
+              const m = SCORE_META[score];
+              return (
+                <div key={key} className="flex gap-3">
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                    style={{ backgroundColor: m.color }}
+                  >
+                    {score}
+                  </div>
+                  <div>
+                    <p
+                      className="text-[11px] font-semibold"
+                      style={{ color: m.color }}
+                    >
+                      {m.label}
+                    </p>
+                    <p
+                      className="text-[12px]"
+                      style={{ color: TEXT }}
+                    >
+                      {kpi.scoreDef[key]}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div
+          className="px-6 py-4 border-t shrink-0"
+          style={{ borderColor: BORDER }}
+        >
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Per-KPI Evidence Cell ─────────────────────────────────────────────────────
+
+function EvidenceCell({
+  evidence,
+  onChange,
+  readOnly,
+}: {
+  evidence: EvidenceFile | null;
+  onChange: (f: EvidenceFile | null) => void;
+  readOnly?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+  const [showRemove, setShowRemove] = useState(false);
+  const [showView, setShowView] = useState(false);
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!["pdf", "png", "jpg", "jpeg"].includes(ext)) {
+      setError(
+        "Unsupported format. Please attach a PDF, PNG, JPG or JPEG file.",
+      );
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError(
+        "File exceeds 10 MB. Please attach a smaller file.",
+      );
+      e.target.value = "";
+      return;
+    }
+    setError("");
+    const mb = file.size / (1024 * 1024);
+    const kb = file.size / 1024;
+    onChange({
+      name: file.name,
+      size:
+        mb >= 1
+          ? `${mb.toFixed(1)} MB`
+          : `${Math.round(kb)} KB`,
+    });
+    e.target.value = "";
+  }
+
+  return (
+    <div>
+      {evidence ? (
+        <div
+          className="flex items-center gap-2 px-2 py-1.5 rounded-md"
+          style={{
+            backgroundColor: "#F8FAFC",
+            border: `1px solid ${BORDER}`,
+          }}
+        >
+          <FileText
+            size={13}
+            style={{ color: BLUE }}
+            className="shrink-0"
+          />
+          <div className="flex-1 min-w-0">
+            <p
+              className="text-[11px] font-medium truncate"
+              style={{ color: TEXT }}
+            >
+              {evidence.name}
+            </p>
+            <p className="text-[10px]" style={{ color: MUTED }}>
+              {evidence.size}
+            </p>
+          </div>
+          <div className="flex gap-1 shrink-0">
+            <button
+              onClick={() => setShowView(true)}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{
+                color: BLUE,
+                backgroundColor: "#EEF3FC",
+              }}
+            >
+              View
+            </button>
+            {!readOnly && (
+              <button
+                onClick={() => setShowRemove(true)}
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                style={{
+                  color: RED,
+                  backgroundColor: "#FEF3F2",
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      ) : !readOnly ? (
+        <div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg"
+            className="hidden"
+            onChange={handleFile}
+          />
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="flex items-center gap-1 text-[11px] font-medium"
+            style={{ color: BLUE }}
+          >
+            <Paperclip size={11} /> Attach Evidence
+          </button>
+          {error && (
+            <p
+              className="text-[10px] mt-1 flex items-start gap-1"
+              style={{ color: RED }}
+            >
+              <AlertTriangle
+                size={9}
+                className="mt-0.5 shrink-0"
+              />{" "}
+              {error}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {/* View modal */}
+      {showView && evidence && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-[400px] overflow-hidden">
+            <div
+              className="flex items-center justify-between px-6 py-4 border-b"
+              style={{ borderColor: BORDER }}
+            >
+              <h3
+                className="text-[14px] font-bold"
+                style={{ color: TEXT }}
+              >
+                Attached Evidence
+              </h3>
+              <button onClick={() => setShowView(false)}>
+                <X size={16} style={{ color: MUTED }} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <FileText
+                  size={28}
+                  style={{ color: BLUE }}
+                  className="shrink-0"
+                />
+                <div>
+                  <p
+                    className="text-[13px] font-semibold"
+                    style={{ color: TEXT }}
+                  >
+                    {evidence.name}
+                  </p>
+                  <p
+                    className="text-[12px]"
+                    style={{ color: MUTED }}
+                  >
+                    {evidence.size}
+                  </p>
+                </div>
+              </div>
+              <p
+                className="text-[12px] p-3 rounded-md"
+                style={{
+                  color: MUTED,
+                  backgroundColor: "#F8FAFC",
+                }}
+              >
+                File preview is not available in this prototype.
+                In the live application, the file would open in
+                a viewer here.
+              </p>
+            </div>
+            <div
+              className="flex justify-end px-6 py-4 border-t"
+              style={{ borderColor: BORDER }}
+            >
+              <button
+                onClick={() => setShowView(false)}
+                className="px-4 py-2 rounded-md text-[13px] font-medium border"
+                style={{ color: TEXT, borderColor: BORDER }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove confirm */}
+      {showRemove && evidence && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-[380px] overflow-hidden">
+            <div className="px-6 py-5 space-y-2">
+              <p
+                className="text-[14px] font-bold"
+                style={{ color: TEXT }}
+              >
+                Remove evidence?
+              </p>
+              <p
+                className="text-[13px]"
+                style={{ color: MUTED }}
+              >
+                "{evidence.name}" will be removed from this KPI.
+              </p>
+            </div>
+            <div
+              className="flex justify-end gap-2 px-6 py-4 border-t"
+              style={{ borderColor: BORDER }}
+            >
+              <button
+                onClick={() => setShowRemove(false)}
+                className="px-4 py-2 rounded-md text-[13px] border"
+                style={{ color: TEXT, borderColor: BORDER }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  onChange(null);
+                  setShowRemove(false);
+                }}
+                className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+                style={{ backgroundColor: RED }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── KPI Submit Dialog ─────────────────────────────────────────────────────────
+
+function KpiSubmitDialog({
+  checkpoint,
+  evidenceCount,
+  onClose,
+  onSubmit,
+}: {
+  checkpoint: CheckpointMeta;
+  evidenceCount: number;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-[480px] overflow-hidden">
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: BORDER }}
+        >
+          <h2
+            className="text-[15px] font-bold"
+            style={{ color: TEXT }}
+          >
+            Submit KPI Self-Assessment
+          </h2>
+          <button onClick={onClose}>
+            <X size={18} style={{ color: MUTED }} />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-[13px]" style={{ color: TEXT }}>
+            You are submitting your KPI Self-Assessment for{" "}
+            <strong>{checkpoint.label}</strong> to your Manager.
+            After submission, you will not be able to edit it
+            unless it is returned for revision.
+          </p>
+          <div
+            className="p-3 rounded-md space-y-1.5"
+            style={{
+              backgroundColor: "#F8FAFC",
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {[
+              ["Review Checkpoint", checkpoint.label],
+              ["Checkpoint Date", checkpoint.date],
+              ["Submission Deadline", checkpoint.deadline],
+              [
+                "KPIs Completed",
+                `${KPI_ROWS.length} / ${KPI_ROWS.length}`,
+              ],
+              [
+                "Evidence Attached",
+                evidenceCount > 0
+                  ? `${evidenceCount} file${evidenceCount > 1 ? "s" : ""}`
+                  : "None",
+              ],
+              ["Submitting to", "Sales Manager"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="flex justify-between text-[12px]"
+              >
+                <span style={{ color: MUTED }}>{label}</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: TEXT }}
+                >
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div
+          className="flex justify-end gap-2 px-6 py-4 border-t"
+          style={{ borderColor: BORDER }}
+        >
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+            style={{ backgroundColor: TEAL }}
+          >
+            Submit to Manager
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Attitude Submit Dialog ────────────────────────────────────────────────────
+
+function AttitudeSubmitDialog({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-[460px] overflow-hidden">
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: BORDER }}
+        >
+          <h2
+            className="text-[15px] font-bold"
+            style={{ color: TEXT }}
+          >
+            Submit Annual Attitude Self-Assessment
+          </h2>
+          <button onClick={onClose}>
+            <X size={18} style={{ color: MUTED }} />
+          </button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-[13px]" style={{ color: TEXT }}>
+            Your Annual Attitude Self-Assessment will be
+            submitted to your Manager for review. After
+            submission, you will not be able to edit it.
+          </p>
+          <div
+            className="p-3 rounded-md space-y-1.5"
+            style={{
+              backgroundColor: "#F8FAFC",
+              border: `1px solid ${BORDER}`,
+            }}
+          >
+            {[
+              ["Review Period", "2027 Annual KPI Review"],
+              ["Evaluation Form", "Sales"],
+              [
+                "Criteria Completed",
+                `${INIT_ATTITUDE.length} / ${INIT_ATTITUDE.length}`,
+              ],
+              ["Deadline", "20 Dec 2027"],
+              ["Submitting to", "Sales Manager"],
+            ].map(([label, value]) => (
+              <div
+                key={label}
+                className="flex justify-between text-[12px]"
+              >
+                <span style={{ color: MUTED }}>{label}</span>
+                <span
+                  className="font-semibold"
+                  style={{ color: TEXT }}
+                >
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div
+          className="flex justify-end gap-2 px-6 py-4 border-t"
+          style={{ borderColor: BORDER }}
+        >
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSubmit}
+            className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+            style={{ backgroundColor: TEAL }}
+          >
+            Submit Assessment
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export function MyAssessments() {
+  const [tab, setTab] = useState<"kpi" | "attitude">("kpi");
+  const [selectedCpId, setSelectedCpId] =
+    useState<CheckpointId>("feb");
+  const [cpStates, setCpStates] = useState<
+    Record<CheckpointId, CheckpointData>
+  >(INIT_CHECKPOINT_STATES);
+  const [attitudeRows, setAttitudeRows] =
+    useState<AttitudeRow[]>(INIT_ATTITUDE);
+  const [attSubmitted, setAttSubmitted] = useState(false);
+  const [showKpiDialog, setShowKpiDialog] = useState(false);
+  const [showAttDialog, setShowAttDialog] = useState(false);
+  const [criteriaKpiId, setCriteriaId] = useState<
+    string | null
+  >(null);
+  const [draftSaved, setDraftSaved] = useState(false);
+
+  const currentCp = CHECKPOINTS.find(
+    (c) => c.id === selectedCpId,
+  )!;
+  const currentState = cpStates[selectedCpId];
+  const isReadOnly =
+    currentState.status === "Reviewed" ||
+    currentState.status === "Submitted";
+  const isUpcoming = currentState.status === "Upcoming";
+  const isEditable =
+    currentState.status === "Draft" ||
+    currentState.status === "Returned";
+
+  const allKpiScored = KPI_ROWS.every(
+    (k) => (currentState.scores[k.id] ?? null) !== null,
+  );
+  const evidenceCount = Object.values(
+    currentState.evidence,
+  ).filter(Boolean).length;
+
+  const attAllScored = attitudeRows.every(
+    (r) => r.score !== null,
+  );
+
+  const criteriaKpi = criteriaKpiId
+    ? (KPI_ROWS.find((k) => k.id === criteriaKpiId) ?? null)
+    : null;
+
+  // ── Checkpoint state updaters ──
+  function setScore(kpiId: string, score: number) {
+    setCpStates((prev) => ({
+      ...prev,
+      [selectedCpId]: {
+        ...prev[selectedCpId],
+        scores: {
+          ...prev[selectedCpId].scores,
+          [kpiId]: score,
+        },
+      },
+    }));
+  }
+  function setComment(kpiId: string, comment: string) {
+    setCpStates((prev) => ({
+      ...prev,
+      [selectedCpId]: {
+        ...prev[selectedCpId],
+        comments: {
+          ...prev[selectedCpId].comments,
+          [kpiId]: comment,
+        },
+      },
+    }));
+  }
+  function setEvidence(
+    kpiId: string,
+    file: EvidenceFile | null,
+  ) {
+    setCpStates((prev) => ({
+      ...prev,
+      [selectedCpId]: {
+        ...prev[selectedCpId],
+        evidence: {
+          ...prev[selectedCpId].evidence,
+          [kpiId]: file,
+        },
+      },
+    }));
+  }
+
+  function updateCpStatus(
+    status: CheckpointStatus,
+    extra?: Partial<CheckpointData>,
+  ) {
+    setCpStates((prev) => ({
+      ...prev,
+      [selectedCpId]: {
+        ...prev[selectedCpId],
+        status,
+        ...extra,
+      },
+    }));
+  }
+
+  function handleSaveDraft() {
+    setDraftSaved(true);
+    setTimeout(() => setDraftSaved(false), 2000);
+  }
+
+  function handleKpiSubmit() {
+    updateCpStatus("Submitted");
+    setShowKpiDialog(false);
+  }
+
+  function handleAttSubmit() {
+    setAttSubmitted(true);
+    setShowAttDialog(false);
+  }
+
+  function handleSimulateReturn() {
+    updateCpStatus("Returned", {
+      returnReason:
+        "Please provide additional supporting information for the Cross-Sell Rate KPI. The current comment does not sufficiently explain the score difference from January.",
+      returnDate: "8 Mar 2027",
+    });
+  }
+
+  function handleResubmit() {
+    updateCpStatus("Submitted", {
+      returnReason: undefined,
+      returnDate: undefined,
+    });
+  }
+
+  const cpStatusStyle = CP_STATUS_STYLE[currentState.status];
+
+  return (
+    <div
+      style={{
+        backgroundColor: BG,
+        minHeight: "calc(100vh - 56px)",
+      }}
+    >
+      <div className="p-6 space-y-5">
+        {/* ── Header ── */}
+        <div>
+          <h1
+            className="text-[20px] font-bold"
+            style={{ color: TEXT }}
+          >
+            My Assessments
+          </h1>
+          <p
+            className="text-[13px] mt-0.5"
+            style={{ color: MUTED }}
+          >
+            Amir Hassan · RS-1042 · 2027 Annual KPI Review
+          </p>
+        </div>
+
+        {/* ── Tabs ── */}
+        <div
+          className="flex gap-1 p-1 rounded-lg w-fit"
+          style={{ backgroundColor: "#E9EDF2" }}
+        >
+          {[
+            { key: "kpi", label: "Monthly KPI Assessment" },
+            {
+              key: "attitude",
+              label: "Annual Attitude Self-Assessment",
+            },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() =>
+                setTab(t.key as "kpi" | "attitude")
+              }
+              className="px-5 py-2 rounded-md text-[13px] font-medium transition-colors"
+              style={
+                tab === t.key
+                  ? {
+                      backgroundColor: "white",
+                      color: TEXT,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                      fontWeight: 600,
+                    }
+                  : { color: MUTED }
+              }
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ════════════════════════════════════════════════════
+            TAB 1: MONTHLY KPI ASSESSMENT
+        ════════════════════════════════════════════════════ */}
+        {tab === "kpi" && (
+          <>
+            {/* Checkpoint selector + compact info */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Checkpoint dropdown */}
+                <div className="relative">
+                  <select
+                    value={selectedCpId}
+                    onChange={(e) =>
+                      setSelectedCpId(
+                        e.target.value as CheckpointId,
+                      )
+                    }
+                    className="appearance-none pl-3 pr-8 py-2 rounded-md text-[13px] font-semibold outline-none bg-white"
+                    style={{
+                      border: `1px solid ${BORDER}`,
+                      color: TEXT,
+                    }}
+                  >
+                    {CHECKPOINTS.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown
+                    size={13}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ color: MUTED }}
+                  />
+                </div>
+                {/* Compact checkpoint info */}
+                <div
+                  className="flex items-center gap-3 text-[12px]"
+                  style={{ color: MUTED }}
+                >
+                  <span
+                    className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                    style={{
+                      color: cpStatusStyle.color,
+                      backgroundColor: cpStatusStyle.bg,
+                    }}
+                  >
+                    {cpStatusStyle.label}
+                  </span>
+                  <span>Checkpoint: {currentCp.date}</span>
+                  <span>Deadline: {currentCp.deadline}</span>
+                  <span>KPIs: {KPI_ROWS.length}</span>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {isEditable && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveDraft}
+                    className="px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
+                    style={{ color: TEXT, borderColor: BORDER }}
+                  >
+                    {draftSaved ? "Saved ✓" : "Save Draft"}
+                  </button>
+                  <button
+                    onClick={() =>
+                      allKpiScored && setShowKpiDialog(true)
+                    }
+                    disabled={!allKpiScored}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-semibold text-white transition-opacity"
+                    style={{
+                      backgroundColor: allKpiScored
+                        ? TEAL
+                        : "#9CA3AF",
+                    }}
+                  >
+                    <Send size={13} />
+                    {currentState.status === "Returned"
+                      ? "Resubmit Assessment"
+                      : "Submit Assessment"}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Submit block reason */}
+            {isEditable && !allKpiScored && (
+              <p
+                className="text-[12px] flex items-center gap-1.5"
+                style={{ color: MUTED }}
+              >
+                <AlertTriangle
+                  size={13}
+                  style={{ color: AMBER }}
+                />
+                Complete the Self-Assessment Score for all KPIs
+                before submitting.
+              </p>
+            )}
+
+            {/* Upcoming state */}
+            {isUpcoming && (
+              <div
+                className="flex items-center gap-3 px-4 py-3 rounded-lg text-[13px]"
+                style={{
+                  backgroundColor: "#F2F4F7",
+                  border: `1px solid ${BORDER}`,
+                }}
+              >
+                <span style={{ color: MUTED }}>
+                  This Review Checkpoint is not yet open for
+                  Self-Assessment.
+                </span>
+              </div>
+            )}
+
+            {/* Returned banner */}
+            {currentState.status === "Returned" && (
+              <div
+                className="p-4 rounded-lg"
+                style={{
+                  backgroundColor: "#FEF3F2",
+                  border: `1px solid #FECACA`,
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <RotateCcw size={14} style={{ color: RED }} />
+                  <p
+                    className="text-[13px] font-semibold"
+                    style={{ color: RED }}
+                  >
+                    Returned for Revision
+                  </p>
+                  {currentState.returnDate && (
+                    <span
+                      className="text-[11px]"
+                      style={{ color: RED }}
+                    >
+                      · Returned {currentState.returnDate}
+                    </span>
+                  )}
+                </div>
+                {currentState.returnReason && (
+                  <p
+                    className="text-[12px] mt-1"
+                    style={{ color: RED }}
+                  >
+                    <strong>Reason:</strong>{" "}
+                    {currentState.returnReason}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Submitted success banner */}
+            {currentState.status === "Submitted" && (
+              <div className="space-y-2">
+                <div
+                  className="flex items-start gap-3 p-4 rounded-lg"
+                  style={{
+                    backgroundColor: "#ECFDF9",
+                    border: `1px solid #6EE7B7`,
+                  }}
+                >
+                  <CheckCircle
+                    size={16}
+                    className="mt-0.5 shrink-0"
+                    style={{ color: TEAL }}
+                  />
+                  <div>
+                    <p
+                      className="text-[13px] font-semibold"
+                      style={{ color: TEAL }}
+                    >
+                      Your KPI Self-Assessment for{" "}
+                      {currentCp.label} has been submitted to
+                      your Manager.
+                    </p>
+                    <p
+                      className="text-[12px] mt-0.5"
+                      style={{ color: MUTED }}
+                    >
+                      You can edit this assessment again only if
+                      your Manager returns it for revision.
+                    </p>
+                  </div>
+                </div>
+                {/* Prototype: simulate manager return */}
+                <button
+                  onClick={handleSimulateReturn}
+                  className="text-[11px] underline"
+                  style={{ color: MUTED }}
+                >
+                  Prototype: Simulate Manager returns for
+                  revision
+                </button>
+              </div>
+            )}
+
+            {/* KPI Table */}
+            <div
+              className="bg-white rounded-lg overflow-hidden"
+              style={{
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              <div
+                className="px-5 py-4 border-b"
+                style={{ borderColor: BORDER }}
+              >
+                <h2
+                  className="text-[14px] font-bold"
+                  style={{ color: TEXT }}
+                >
+                  KPI Assessment — {currentCp.label}
+                </h2>
+                {!isUpcoming && (
+                  <p
+                    className="text-[12px] mt-0.5"
+                    style={{ color: MUTED }}
+                  >
+                    Select a Self-Assessment Score from 0–5
+                    based on the scoring criteria defined for
+                    each KPI. Add a supporting comment or
+                    evidence where appropriate.
+                  </p>
+                )}
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[13px]">
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "#F8FAFC",
+                        borderBottom: `1px solid ${BORDER}`,
+                      }}
+                    >
+                      {[
+                        "KPI Level",
+                        "KPI Name",
+                        "Target",
+                        "Scoring Definition",
+                        "Self-Assessment Score",
+                        "Comment / Evidence",
+                      ].map((h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                          style={{ color: MUTED }}
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {KPI_ROWS.map((kpi, i) => {
+                      const ls = LEVEL_STYLE[kpi.level];
+                      const score =
+                        currentState.scores[kpi.id] ?? null;
+                      const comment =
+                        currentState.comments[kpi.id] ?? "";
+                      const evidence =
+                        currentState.evidence[kpi.id] ?? null;
+                      const isLast = i === KPI_ROWS.length - 1;
+                      return (
+                        <tr
+                          key={kpi.id}
+                          style={{
+                            borderBottom: isLast
+                              ? "none"
+                              : `1px solid ${BORDER}`,
+                          }}
+                        >
+                          {/* KPI Level */}
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            <span
+                              className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold"
+                              style={{
+                                color: ls.color,
+                                backgroundColor: ls.bg,
+                              }}
+                            >
+                              {kpi.level}-Level
+                            </span>
+                          </td>
+                          {/* KPI Name */}
+                          <td className="px-4 py-4 w-44">
+                            <p
+                              className="text-[13px] font-medium"
+                              style={{ color: TEXT }}
+                            >
+                              {kpi.name}
+                            </p>
+                          </td>
+                          {/* Target */}
+                          <td
+                            className="px-4 py-4 w-32 text-[12px] whitespace-nowrap"
+                            style={{ color: TEXT }}
+                          >
+                            {kpi.target}
+                          </td>
+                          {/* Scoring Definition */}
+                          <td className="px-4 py-4 w-36">
+                            {!isUpcoming && (
+                              <button
+                                onClick={() =>
+                                  setCriteriaId(kpi.id)
+                                }
+                                className="text-[11px] font-medium underline-offset-2 hover:underline whitespace-nowrap"
+                                style={{ color: BLUE }}
+                              >
+                                View Scoring Definition
+                              </button>
+                            )}
+                          </td>
+                          {/* Self-Assessment Score */}
+                          <td
+                            className="px-4 py-4"
+                            style={{ minWidth: 200 }}
+                          >
+                            {isUpcoming ? (
+                              <span
+                                className="text-[12px]"
+                                style={{ color: MUTED }}
+                              >
+                                —
+                              </span>
+                            ) : isReadOnly ? (
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className="w-7 h-7 rounded flex items-center justify-center text-[12px] font-bold text-white shrink-0"
+                                  style={{
+                                    backgroundColor:
+                                      score !== null
+                                        ? SCORE_META[score]
+                                            ?.color
+                                        : "#9CA3AF",
+                                  }}
+                                >
+                                  {score ?? "—"}
+                                </div>
+                                {score !== null && (
+                                  <span
+                                    className="text-[11px]"
+                                    style={{
+                                      color:
+                                        SCORE_META[score]
+                                          ?.color,
+                                    }}
+                                  >
+                                    {SCORE_META[score]?.label}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <ScoreSelector
+                                value={score}
+                                onChange={(v) =>
+                                  setScore(kpi.id, v)
+                                }
+                              />
+                            )}
+                          </td>
+                          {/* Comment / Evidence */}
+                          <td
+                            className="px-4 py-4"
+                            style={{ width: 400 }}
+                          >
+                            {isUpcoming ? null : isReadOnly ? (
+                              <div className="space-y-2">
+                                {comment ? (
+                                  <p
+                                    className="text-[12px]"
+                                    style={{ color: TEXT }}
+                                  >
+                                    {comment}
+                                  </p>
+                                ) : (
+                                  <p
+                                    className="text-[12px]"
+                                    style={{ color: MUTED }}
+                                  >
+                                    No comment
+                                  </p>
+                                )}
+                                {evidence && (
+                                  <EvidenceCell
+                                    evidence={evidence}
+                                    onChange={() => {}}
+                                    readOnly
+                                  />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={comment}
+                                  onChange={(e) =>
+                                    setComment(
+                                      kpi.id,
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="Add supporting comment…"
+                                  rows={2}
+                                  className="w-full px-2 py-1.5 rounded text-[12px] outline-none resize-none"
+                                  style={{
+                                    border: `1px solid ${BORDER}`,
+                                    color: TEXT,
+                                  }}
+                                />
+                                <EvidenceCell
+                                  evidence={evidence}
+                                  onChange={(f) =>
+                                    setEvidence(kpi.id, f)
+                                  }
+                                />
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            TAB 2: ANNUAL ATTITUDE SELF-ASSESSMENT
+        ════════════════════════════════════════════════════ */}
+        {tab === "attitude" && (
+          <>
+            {/* Annual info row */}
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div
+                className="flex items-center gap-3 flex-wrap text-[12px]"
+                style={{ color: MUTED }}
+              >
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                  style={{
+                    color: BLUE,
+                    backgroundColor: "#EEF3FC",
+                  }}
+                >
+                  Sales Evaluation Form
+                </span>
+                <span>2027 Annual KPI Review</span>
+                <span
+                  className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                  style={{
+                    color: attSubmitted ? TEAL : AMBER,
+                    backgroundColor: attSubmitted
+                      ? "#ECFDF9"
+                      : "#FEF9EC",
+                  }}
+                >
+                  {attSubmitted ? "Submitted" : "Draft"}
+                </span>
+                <span>Deadline: 20 Dec 2027</span>
+              </div>
+              {!attSubmitted && (
+                <div className="flex gap-2">
+                  <button
+                    className="px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
+                    style={{ color: TEXT, borderColor: BORDER }}
+                  >
+                    Save Draft
+                  </button>
+                  <button
+                    onClick={() =>
+                      attAllScored && setShowAttDialog(true)
+                    }
+                    disabled={!attAllScored}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-semibold text-white"
+                    style={{
+                      backgroundColor: attAllScored
+                        ? TEAL
+                        : "#9CA3AF",
+                    }}
+                  >
+                    <Send size={13} /> Submit Assessment
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Form info note */}
+            <p className="text-[12px]" style={{ color: MUTED }}>
+              This evaluation format is selected based on your
+              current role.
+            </p>
+
+            {/* Attitude submit block reason */}
+            {!attSubmitted && !attAllScored && (
+              <p
+                className="text-[12px] flex items-center gap-1.5"
+                style={{ color: MUTED }}
+              >
+                <AlertTriangle
+                  size={13}
+                  style={{ color: AMBER }}
+                />
+                Complete the Self-Assessment Score for all
+                criteria before submitting.
+              </p>
+            )}
+
+            {/* Submitted banner */}
+            {attSubmitted && (
+              <div
+                className="flex items-start gap-3 p-4 rounded-lg"
+                style={{
+                  backgroundColor: "#ECFDF9",
+                  border: `1px solid #6EE7B7`,
+                }}
+              >
+                <CheckCircle
+                  size={16}
+                  className="mt-0.5 shrink-0"
+                  style={{ color: TEAL }}
+                />
+                <div>
+                  <p
+                    className="text-[13px] font-semibold"
+                    style={{ color: TEAL }}
+                  >
+                    Your Annual Attitude Self-Assessment has
+                    been submitted to your Manager.
+                  </p>
+                  <p
+                    className="text-[12px] mt-0.5"
+                    style={{ color: MUTED }}
+                  >
+                    Your Manager will review your
+                    self-assessment and provide their own
+                    evaluation.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Attitude criteria table */}
+            <div
+              className="bg-white rounded-lg overflow-hidden"
+              style={{
+                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              <div
+                className="px-5 py-4 border-b"
+                style={{ borderColor: BORDER }}
+              >
+                <h2
+                  className="text-[14px] font-bold"
+                  style={{ color: TEXT }}
+                >
+                  Sales Attitude Evaluation — Annual
+                  Self-Assessment
+                </h2>
+                <p
+                  className="text-[12px] mt-0.5"
+                  style={{ color: MUTED }}
+                >
+                  Rate yourself honestly on each criterion.
+                  Scores are reviewed by your Manager.
+                </p>
+              </div>
+              <div>
+                {attitudeRows.map((r, i) => (
+                  <div
+                    key={r.id}
+                    className="px-5 py-4"
+                    style={{
+                      borderBottom:
+                        i < attitudeRows.length - 1
+                          ? `1px solid ${BORDER}`
+                          : "none",
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <p
+                          className="text-[13px] font-semibold"
+                          style={{ color: TEXT }}
+                        >
+                          {r.criterion}
+                        </p>
+                        <p
+                          className="text-[12px] mt-0.5"
+                          style={{ color: MUTED }}
+                        >
+                          {r.description}
+                        </p>
+                      </div>
+                      <div className="shrink-0">
+                        {attSubmitted ? (
+                          <div className="text-right">
+                            {r.score !== null ? (
+                              <>
+                                <span
+                                  className="text-[16px] font-bold"
+                                  style={{
+                                    color:
+                                      SCORE_META[r.score]
+                                        ?.color,
+                                  }}
+                                >
+                                  {r.score}
+                                </span>
+                                <p
+                                  className="text-[11px]"
+                                  style={{
+                                    color:
+                                      SCORE_META[r.score]
+                                        ?.color,
+                                  }}
+                                >
+                                  {SCORE_META[r.score]?.label}
+                                </p>
+                              </>
+                            ) : (
+                              <span style={{ color: MUTED }}>
+                                —
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <ScoreSelector
+                            value={r.score}
+                            minScore={1}
+                            onChange={(v) =>
+                              setAttitudeRows((prev) =>
+                                prev.map((a) =>
+                                  a.id === r.id
+                                    ? { ...a, score: v }
+                                    : a,
+                                ),
+                              )
+                            }
+                          />
+                        )}
+                      </div>
+                    </div>
+                    {!attSubmitted && (
+                      <textarea
+                        value={r.comment}
+                        onChange={(e) =>
+                          setAttitudeRows((prev) =>
+                            prev.map((a) =>
+                              a.id === r.id
+                                ? {
+                                    ...a,
+                                    comment: e.target.value,
+                                  }
+                                : a,
+                            ),
+                          )
+                        }
+                        placeholder="Optional comment…"
+                        rows={2}
+                        className="mt-3 w-full px-3 py-2 rounded-md text-[12px] outline-none resize-none"
+                        style={{
+                          border: `1px solid ${BORDER}`,
+                          color: TEXT,
+                        }}
+                      />
+                    )}
+                    {attSubmitted && r.comment && (
+                      <p
+                        className="mt-2 text-[12px]"
+                        style={{ color: MUTED }}
+                      >
+                        {r.comment}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Scoring Criteria Drawer ── */}
+      {criteriaKpi && (
+        <ScoringCriteriaDrawer
+          kpi={criteriaKpi}
+          onClose={() => setCriteriaId(null)}
+        />
+      )}
+
+      {/* ── Dialogs ── */}
+      {showKpiDialog && (
+        <KpiSubmitDialog
+          checkpoint={currentCp}
+          evidenceCount={evidenceCount}
+          onClose={() => setShowKpiDialog(false)}
+          onSubmit={handleKpiSubmit}
+        />
+      )}
+      {showAttDialog && (
+        <AttitudeSubmitDialog
+          onClose={() => setShowAttDialog(false)}
+          onSubmit={handleAttSubmit}
+        />
+      )}
+    </div>
+  );
+}

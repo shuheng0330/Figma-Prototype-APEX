@@ -1,0 +1,956 @@
+import { useState, useMemo } from "react";
+import { Plus, X, CheckCircle, Info, Eye, BookOpen, Send, AlertTriangle, Pencil } from "lucide-react";
+
+const BLUE   = "#2457A6";
+const TEAL   = "#0F9F8F";
+const AMBER  = "#D99000";
+const RED    = "#D14343";
+const TEXT   = "#172033";
+const MUTED  = "#667085";
+const BORDER = "#DCE3EC";
+const BG     = "#F4F6F9";
+const PURPLE = "#7C3AED";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type ApprovalStatus =
+  | "Assigned"
+  | "Approved"
+  | "Pending Manager Approval"
+  | "Draft"
+  | "Returned for Revision";
+
+type KpiLevel = "Company" | "Department" | "Individual";
+
+interface ScoreDef {
+  s5: string; s4: string; s3: string; s2: string; s1: string; s0: string;
+}
+
+interface KpiRow {
+  id: string;
+  level: KpiLevel;
+  perspective: string;
+  kra: string;
+  name: string;
+  target: string;
+  weightage: number;
+  status: ApprovalStatus;
+  returnReason?: string;
+  scoreDef: ScoreDef;
+}
+
+const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "", s0: "" };
+const SCORE_KEYS: (keyof ScoreDef)[] = ["s5", "s4", "s3", "s2", "s1", "s0"];
+
+const STATUS_STYLE: Record<ApprovalStatus, { color: string; bg: string }> = {
+  "Assigned":                 { color: MUTED,  bg: "#F2F4F7" },
+  "Approved":                 { color: TEAL,   bg: "#ECFDF9" },
+  "Pending Manager Approval": { color: AMBER,  bg: "#FEF9EC" },
+  "Draft":                    { color: "#374151", bg: "#F3F4F6" },
+  "Returned for Revision":    { color: RED,    bg: "#FEF3F2" },
+};
+
+const LEVEL_STYLE: Record<KpiLevel, { color: string; bg: string }> = {
+  Company:    { color: BLUE,   bg: "#EEF3FC" },
+  Department: { color: PURPLE, bg: "#F5F3FF" },
+  Individual: { color: TEAL,   bg: "#ECFDF9" },
+};
+
+const PERSPECTIVES = ["Financial", "Customer", "Internal Process", "Learning & Growth"];
+const KRA_BY_PERSPECTIVE: Record<string, string[]> = {
+  "Financial":         ["Company Target", "Sales Performance"],
+  "Customer":          ["Customer Satisfaction", "Service Quality"],
+  "Internal Process":  ["Service Quality"],
+  "Learning & Growth": ["Staff Development"],
+};
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+
+const INIT_KPIS: KpiRow[] = [
+  {
+    id: "c1", level: "Company", perspective: "Financial", kra: "Company Target",
+    name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Assigned",
+    scoreDef: {
+      s5: "Revenue grows 10% or more above target YoY",
+      s4: "Revenue grows 8%–9.9% YoY",
+      s3: "Revenue grows 5%–7.9% YoY",
+      s2: "Revenue grows 2%–4.9% YoY",
+      s1: "Revenue grows 0%–1.9% YoY",
+      s0: "Revenue declines year-on-year",
+    },
+  },
+  {
+    id: "c2", level: "Company", perspective: "Customer", kra: "Customer Satisfaction",
+    name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Assigned",
+    scoreDef: {
+      s5: "CSI score 95% or above",
+      s4: "CSI score 90%–94%",
+      s3: "CSI score 85%–89%",
+      s2: "CSI score 75%–84%",
+      s1: "CSI score 60%–74%",
+      s0: "CSI score below 60%",
+    },
+  },
+  {
+    id: "c3", level: "Company", perspective: "Internal Process", kra: "Service Quality",
+    name: "Branch Operations Score", target: "≥ 90%", weightage: 3, status: "Assigned",
+    scoreDef: {
+      s5: "Operations score 98% or above",
+      s4: "Operations score 93%–97%",
+      s3: "Operations score 90%–92%",
+      s2: "Operations score 80%–89%",
+      s1: "Operations score 70%–79%",
+      s0: "Operations score below 70%",
+    },
+  },
+  {
+    id: "d1", level: "Department", perspective: "Financial", kra: "Sales Performance",
+    name: "Monthly Sales Achievement", target: "RM 80,000/month", weightage: 15, status: "Assigned",
+    scoreDef: {
+      s5: "Achieves 110% or more of monthly sales target",
+      s4: "Achieves 100%–109% of monthly sales target",
+      s3: "Achieves 90%–99% of monthly sales target",
+      s2: "Achieves 75%–89% of monthly sales target",
+      s1: "Achieves 50%–74% of monthly sales target",
+      s0: "Achieves less than 50% of monthly sales target",
+    },
+  },
+  {
+    id: "d2", level: "Department", perspective: "Financial", kra: "Sales Performance",
+    name: "Product Coverage", target: "≥ 80% range", weightage: 10, status: "Assigned",
+    scoreDef: {
+      s5: "Covers 95% or more of the product range",
+      s4: "Covers 90%–94% of the product range",
+      s3: "Covers 80%–89% of the product range",
+      s2: "Covers 70%–79% of the product range",
+      s1: "Covers 50%–69% of the product range",
+      s0: "Covers less than 50% of the product range",
+    },
+  },
+  {
+    id: "i1", level: "Individual", perspective: "Customer", kra: "Customer Satisfaction",
+    name: "New Customer Acquisition", target: "10 new customers/month", weightage: 30,
+    status: "Pending Manager Approval",
+    scoreDef: {
+      s5: "Acquires 13 or more new customers per month",
+      s4: "Acquires 11–12 new customers per month",
+      s3: "Acquires 10 new customers per month",
+      s2: "Acquires 8–9 new customers per month",
+      s1: "Acquires 5–7 new customers per month",
+      s0: "Acquires fewer than 5 new customers per month",
+    },
+  },
+  {
+    id: "i2", level: "Individual", perspective: "Financial", kra: "Sales Performance",
+    name: "Cross-Sell Rate", target: "≥ 20%", weightage: 30,
+    status: "Returned for Revision",
+    returnReason: "Target is unclear. Please clarify whether this is measured as a percentage of transactions or percentage of customers served. Update the scoring definition and resubmit.",
+    scoreDef: {
+      s5: "Cross-sell rate 25% or above",
+      s4: "Cross-sell rate 22%–24%",
+      s3: "Cross-sell rate 20%–21%",
+      s2: "Cross-sell rate 15%–19%",
+      s1: "Cross-sell rate 10%–14%",
+      s0: "Cross-sell rate below 10%",
+    },
+  },
+];
+
+// ── Shared UI helpers ─────────────────────────────────────────────────────────
+
+function Pill({ label, color, bg }: { label: string; color: string; bg: string }) {
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
+      style={{ color, backgroundColor: bg }}>{label}</span>
+  );
+}
+
+function InfoTip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  return (
+    <span className="relative inline-block ml-1">
+      <Info size={12} className="cursor-help align-middle" style={{ color: MUTED }}
+        onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} />
+      {show && (
+        <span className="absolute z-50 left-5 top-0 w-52 p-2.5 rounded-md text-[11px] leading-snug bg-[#1A1F2E] text-white shadow-xl">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ScoreRow({ label, value, onChange, readOnly }: {
+  label: string; value: string; onChange?: (v: string) => void; readOnly?: boolean;
+}) {
+  return (
+    <div className="flex gap-3 items-start">
+      <span className="w-14 shrink-0 pt-2 text-[11px] font-bold" style={{ color: BLUE }}>{label}</span>
+      {readOnly ? (
+        <p className="flex-1 text-[12px] py-2" style={{ color: value ? TEXT : MUTED }}>
+          {value || "—"}
+        </p>
+      ) : (
+        <textarea value={value} onChange={e => onChange?.(e.target.value)} rows={2}
+          placeholder="Describe the achievement required for this score…"
+          className="flex-1 px-3 py-2 rounded-md text-[12px] outline-none resize-none"
+          style={{ border: `1px solid ${BORDER}`, color: TEXT }} />
+      )}
+    </div>
+  );
+}
+
+// ── Scoring Guide Modal ───────────────────────────────────────────────────────
+
+function ScoringGuideModal({ onClose }: { onClose: () => void }) {
+  const GUIDE = [
+    { score: "5", label: "Exceptional",                  desc: "Performance significantly exceeded all expectations." },
+    { score: "4", label: "Exceeds Expectations",          desc: "Performance consistently exceeded requirements." },
+    { score: "3", label: "Meets Expectations",            desc: "Performance fully met the defined target." },
+    { score: "2", label: "Partially Meets Expectations",  desc: "Performance partially met the target; improvement is needed." },
+    { score: "1", label: "Needs Significant Improvement", desc: "Performance fell significantly short of the target." },
+    { score: "0", label: "Not Achieved",                  desc: "Target was not achieved." },
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+      <div className="bg-white rounded-xl shadow-2xl w-[520px] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
+          <h2 className="text-[15px] font-bold" style={{ color: TEXT }}>KPI Scoring Guide</h2>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+        <div className="px-6 py-5 space-y-1">
+          {GUIDE.map(g => (
+            <div key={g.score} className="flex gap-3 py-2.5 border-b last:border-b-0" style={{ borderColor: BORDER }}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white shrink-0"
+                style={{ backgroundColor: BLUE }}>{g.score}</div>
+              <div>
+                <p className="text-[12px] font-semibold" style={{ color: TEXT }}>{g.label}</p>
+                <p className="text-[12px]" style={{ color: MUTED }}>{g.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 pb-4">
+          <p className="text-[11px] p-3 rounded-md" style={{ color: AMBER, backgroundColor: "#FEF9EC" }}>
+            Actual achievement thresholds are defined separately for each KPI. These ratings are not linked to fixed percentage thresholds.
+          </p>
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t" style={{ borderColor: BORDER }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── KPI Detail Drawer (View) ──────────────────────────────────────────────────
+
+function ViewDrawer({ kpi, onClose, onEdit }: {
+  kpi: KpiRow; onClose: () => void; onEdit: () => void;
+}) {
+  const ls = LEVEL_STYLE[kpi.level];
+  const ss = STATUS_STYLE[kpi.status];
+  const canEdit = kpi.level === "Individual"
+    && (kpi.status === "Draft" || kpi.status === "Returned for Revision");
+
+  function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+      <div className="flex items-start gap-3 py-2.5 border-b last:border-b-0" style={{ borderColor: BORDER }}>
+        <span className="text-[11px] w-40 shrink-0 pt-0.5 leading-snug" style={{ color: MUTED }}>{label}</span>
+        <div className="text-[13px] font-medium flex-1" style={{ color: TEXT }}>{children}</div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-[480px] bg-white shadow-2xl flex flex-col"
+        style={{ borderLeft: `1px solid ${BORDER}` }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: BORDER }}>
+          <div>
+            <h3 className="text-[15px] font-bold" style={{ color: TEXT }}>KPI Detail</h3>
+            <p className="text-[11px]" style={{ color: MUTED }}>Read-only view</p>
+          </div>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+          {/* Section 1: KPI Details */}
+          <div>
+            <h4 className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: MUTED }}>
+              KPI Details
+            </h4>
+            <DetailRow label="KPI Level">
+              <Pill label={`${kpi.level}-Level`} color={ls.color} bg={ls.bg} />
+            </DetailRow>
+            <DetailRow label="Perspective">{kpi.perspective}</DetailRow>
+            <DetailRow label="KRA">{kpi.kra}</DetailRow>
+            <DetailRow label="KPI Name / Description">{kpi.name}</DetailRow>
+            <DetailRow label="Target">{kpi.target}</DetailRow>
+            <DetailRow label="Weightage">{kpi.weightage}%</DetailRow>
+            <DetailRow label="Review Period">2027 Annual KPI Review</DetailRow>
+            <DetailRow label="Status">
+              <Pill label={kpi.status} color={ss.color} bg={ss.bg} />
+            </DetailRow>
+          </div>
+
+          {/* Contextual messages */}
+          {kpi.status === "Returned for Revision" && kpi.returnReason && (
+            <div className="p-3 rounded-md" style={{ backgroundColor: "#FEF3F2", border: `1px solid #FECACA` }}>
+              <p className="text-[11px] font-bold mb-1.5" style={{ color: RED }}>Manager Return Reason</p>
+              <p className="text-[12px]" style={{ color: RED }}>{kpi.returnReason}</p>
+            </div>
+          )}
+          {kpi.status === "Pending Manager Approval" && (
+            <div className="p-3 rounded-md" style={{ backgroundColor: "#FEF9EC" }}>
+              <p className="text-[12px]" style={{ color: AMBER }}>
+                This KPI is awaiting Manager review. No changes can be made until the Manager responds.
+              </p>
+            </div>
+          )}
+          {kpi.status === "Approved" && (
+            <div className="flex items-start gap-2 p-3 rounded-md" style={{ backgroundColor: "#ECFDF9" }}>
+              <CheckCircle size={14} style={{ color: TEAL }} className="mt-0.5 shrink-0" />
+              <p className="text-[12px]" style={{ color: TEAL }}>
+                This KPI has been approved and is part of your confirmed KPI plan.
+              </p>
+            </div>
+          )}
+
+          {/* Section 2: Scoring Definition */}
+          <div>
+            <h4 className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: MUTED }}>
+              Scoring Definition
+            </h4>
+            <div className="space-y-2">
+              {SCORE_KEYS.map((key, i) => (
+                <ScoreRow key={key} label={`Score ${5 - i}`} value={kpi.scoreDef[key]} readOnly />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0" style={{ borderColor: BORDER }}>
+          {canEdit && (
+            <button onClick={onEdit}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+              style={{ backgroundColor: BLUE }}>
+              <Pencil size={13} /> Edit KPI
+            </button>
+          )}
+          <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}>Close</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Create / Edit Individual KPI Drawer ───────────────────────────────────────
+
+function EditDrawer({ editKpi, totalExcludingThis, onClose, onSave }: {
+  editKpi: KpiRow | null;
+  totalExcludingThis: number;
+  onClose: () => void;
+  onSave: (data: Omit<KpiRow, "id" | "level" | "status" | "returnReason">) => void;
+}) {
+  const isCreate = editKpi === null;
+
+  const [perspective, setPerspective] = useState(editKpi?.perspective ?? "Financial");
+  const [kra, setKra] = useState(editKpi?.kra ?? "Sales Performance");
+  const [name, setName] = useState(editKpi?.name ?? "");
+  const [target, setTarget] = useState(editKpi?.target ?? "");
+  const [weightage, setWeightage] = useState(editKpi?.weightage ?? 10);
+  const [scoreDef, setScoreDef] = useState<ScoreDef>(editKpi?.scoreDef ?? { ...EMPTY_SCORE });
+  const [attempted, setAttempted] = useState(false);
+
+  const kraOptions = KRA_BY_PERSPECTIVE[perspective] ?? [];
+
+  function changePerspective(p: string) {
+    setPerspective(p);
+    const opts = KRA_BY_PERSPECTIVE[p] ?? [];
+    if (!opts.includes(kra)) setKra(opts[0] ?? "");
+  }
+
+  const resultingTotal = totalExcludingThis + weightage;
+  const weightageOver = resultingTotal > 100;
+  const remaining = 100 - resultingTotal;
+
+  const nameOk   = name.trim() !== "";
+  const targetOk = target.trim() !== "";
+  const allScoresFilled = SCORE_KEYS.every(k => scoreDef[k].trim() !== "");
+
+  function handleSave() {
+    setAttempted(true);
+    if (!nameOk || !targetOk || weightageOver) return;
+    onSave({ perspective, kra, name, target, weightage, scoreDef });
+  }
+
+  function setScore(key: keyof ScoreDef, val: string) {
+    setScoreDef(prev => ({ ...prev, [key]: val }));
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-[520px] bg-white shadow-2xl flex flex-col"
+        style={{ borderLeft: `1px solid ${BORDER}` }}>
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: BORDER }}>
+          <div>
+            <h3 className="text-[15px] font-bold" style={{ color: TEXT }}>
+              {isCreate ? "Create Individual KPI" : "Edit Individual KPI"}
+            </h3>
+            {editKpi?.status === "Returned for Revision" && (
+              <p className="text-[11px] mt-0.5" style={{ color: RED }}>
+                This KPI was returned for revision
+              </p>
+            )}
+          </div>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-7">
+          {/* Return reason (edit mode only) */}
+          {editKpi?.returnReason && (
+            <div className="p-3 rounded-md" style={{ backgroundColor: "#FEF3F2", border: `1px solid #FECACA` }}>
+              <p className="text-[11px] font-bold mb-1.5" style={{ color: RED }}>Manager Return Reason</p>
+              <p className="text-[12px]" style={{ color: RED }}>{editKpi.returnReason}</p>
+            </div>
+          )}
+
+          {/* Section 1: KPI Information */}
+          <div>
+            <h4 className="text-[10px] font-bold uppercase tracking-wider pb-2 mb-4 border-b"
+              style={{ color: MUTED, borderColor: BORDER }}>1 — KPI Information</h4>
+
+            <div className="space-y-4">
+              {/* Perspective */}
+              <div>
+                <label className="flex items-center text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>
+                  Perspective
+                  <InfoTip text="The broad performance area that the KPI contributes to." />
+                </label>
+                <select value={perspective} onChange={e => changePerspective(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none border"
+                  style={{ borderColor: BORDER, color: TEXT }}>
+                  {PERSPECTIVES.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <p className="text-[10px] mt-1 italic" style={{ color: MUTED }}>
+                  Example predefined values — To Be Confirmed with TBM
+                </p>
+              </div>
+
+              {/* KRA */}
+              <div>
+                <label className="flex items-center text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>
+                  KRA (Key Result Area)
+                  <InfoTip text="Key Result Area; the specific performance area that the KPI measures." />
+                </label>
+                <select value={kra} onChange={e => setKra(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none border"
+                  style={{ borderColor: BORDER, color: TEXT }}>
+                  {kraOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                </select>
+                <p className="text-[10px] mt-1 italic" style={{ color: MUTED }}>
+                  Example predefined values — To Be Confirmed with TBM
+                </p>
+              </div>
+
+              {/* KPI Name */}
+              <div>
+                <label className="block text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>
+                  KPI Name / Description *
+                </label>
+                <input value={name} onChange={e => setName(e.target.value)}
+                  placeholder="e.g. New Customer Acquisition"
+                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none"
+                  style={{ border: `1px solid ${attempted && !nameOk ? RED : BORDER}`, color: TEXT }} />
+                {attempted && !nameOk && (
+                  <p className="text-[11px] mt-1 flex items-center gap-1" style={{ color: RED }}>
+                    <AlertTriangle size={10} /> KPI Name is required.
+                  </p>
+                )}
+              </div>
+
+              {/* Target */}
+              <div>
+                <label className="block text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>Target *</label>
+                <input value={target} onChange={e => setTarget(e.target.value)}
+                  placeholder="e.g. RM 80,000 / 95% / 10 new customers per month"
+                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none"
+                  style={{ border: `1px solid ${attempted && !targetOk ? RED : BORDER}`, color: TEXT }} />
+                {attempted && !targetOk && (
+                  <p className="text-[11px] mt-1 flex items-center gap-1" style={{ color: RED }}>
+                    <AlertTriangle size={10} /> Target is required.
+                  </p>
+                )}
+              </div>
+
+              {/* Weightage */}
+              <div>
+                <label className="block text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>Weightage (%)</label>
+                <input type="number" min={1} max={100} value={weightage}
+                  onChange={e => setWeightage(Math.max(0, Number(e.target.value)))}
+                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none"
+                  style={{ border: `1px solid ${weightageOver ? RED : BORDER}`, color: TEXT }} />
+
+                {/* Weightage breakdown */}
+                <div className="mt-2 p-3 rounded-md space-y-1.5" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
+                  <div className="flex justify-between text-[11px]">
+                    <span style={{ color: MUTED }}>Current total {isCreate ? "" : "(excl. this KPI)"}</span>
+                    <span className="font-semibold" style={{ color: TEXT }}>{totalExcludingThis}%</span>
+                  </div>
+                  <div className="flex justify-between text-[11px]">
+                    <span style={{ color: MUTED }}>This KPI</span>
+                    <span className="font-semibold" style={{ color: TEXT }}>+ {weightage}%</span>
+                  </div>
+                  <div className="h-px" style={{ backgroundColor: BORDER }} />
+                  <div className="flex justify-between text-[12px] font-bold">
+                    <span style={{ color: TEXT }}>Resulting total</span>
+                    <span style={{ color: weightageOver ? RED : resultingTotal === 100 ? TEAL : TEXT }}>
+                      {resultingTotal}%
+                    </span>
+                  </div>
+                </div>
+
+                {weightageOver && (
+                  <p className="text-[11px] mt-1.5 flex items-start gap-1" style={{ color: RED }}>
+                    <AlertTriangle size={10} className="mt-0.5 shrink-0" />
+                    This weightage would increase your total KPI weightage to {resultingTotal}%. Reduce it by at least {resultingTotal - 100}%.
+                  </p>
+                )}
+                {!weightageOver && remaining > 0 && (
+                  <p className="text-[11px] mt-1.5" style={{ color: MUTED }}>
+                    Your total KPI weightage will be {resultingTotal}% after saving. Add {remaining}% more before submitting.
+                  </p>
+                )}
+                {!weightageOver && remaining === 0 && (
+                  <p className="text-[11px] mt-1.5" style={{ color: TEAL }}>
+                    ✓ Weightage will reach exactly 100% after saving.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Scoring Definition */}
+          <div>
+            <h4 className="text-[10px] font-bold uppercase tracking-wider pb-2 mb-4 border-b"
+              style={{ color: MUTED, borderColor: BORDER }}>2 — Scoring Definition</h4>
+
+            <p className="text-[12px] mb-3" style={{ color: MUTED }}>
+              Define the achievement required for each score. Your Manager will review these criteria together with the proposed KPI.
+            </p>
+            <div className="space-y-3">
+              {SCORE_KEYS.map((key, i) => (
+                <ScoreRow key={key} label={`Score ${5 - i}`} value={scoreDef[key]}
+                  onChange={v => setScore(key, v)} />
+              ))}
+            </div>
+
+            {attempted && !allScoresFilled && (
+              <p className="text-[11px] mt-3 flex items-center gap-1.5" style={{ color: AMBER }}>
+                <AlertTriangle size={11} />
+                All scoring criteria should be filled before submitting to your Manager.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-2 px-6 py-4 border-t shrink-0" style={{ borderColor: BORDER }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
+          <button onClick={handleSave} disabled={weightageOver}
+            className="flex-1 py-2 rounded-md text-[13px] font-semibold text-white transition-opacity"
+            style={{ backgroundColor: weightageOver ? "#9CA3AF" : BLUE }}>
+            Save Draft
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Submit Confirmation Dialog ─────────────────────────────────────────────────
+
+function SubmitDialog({ kpis, onClose, onSubmit }: {
+  kpis: KpiRow[]; onClose: () => void; onSubmit: () => void;
+}) {
+  const toSubmit = kpis.filter(k =>
+    k.level === "Individual" && (k.status === "Draft" || k.status === "Returned for Revision")
+  );
+  const indivWeightage = toSubmit.reduce((s, k) => s + k.weightage, 0);
+  const totalWeightage = kpis.reduce((s, k) => s + k.weightage, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
+      <div className="bg-white rounded-xl shadow-2xl w-[480px] overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
+          <h2 className="text-[15px] font-bold" style={{ color: TEXT }}>Submit Individual KPIs for Approval</h2>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-[13px]" style={{ color: TEXT }}>
+            The following Individual KPIs will be submitted to your Manager for review:
+          </p>
+          <ul className="space-y-1.5">
+            {toSubmit.map(k => (
+              <li key={k.id} className="flex items-center gap-2 text-[12px]">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: TEAL }} />
+                <span style={{ color: TEXT }}>{k.name}</span>
+                {k.status === "Returned for Revision" && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full ml-1" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Resubmitting</span>
+                )}
+                <span className="ml-auto font-semibold" style={{ color: MUTED }}>{k.weightage}%</span>
+              </li>
+            ))}
+          </ul>
+          <div className="p-3 rounded-md space-y-1.5" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
+            {[
+              { label: "KPIs being submitted", value: String(toSubmit.length) },
+              { label: "Individual-Level weightage", value: `${indivWeightage}%` },
+              { label: "Overall KPI weightage", value: `${totalWeightage}%` },
+              { label: "Submission to", value: "Sales Manager" },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex justify-between text-[12px]">
+                <span style={{ color: MUTED }}>{label}</span>
+                <span className="font-semibold" style={{ color: TEXT }}>{value}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[12px]" style={{ color: MUTED }}>
+            Your Manager may approve the KPIs or return them to you for revision.
+          </p>
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: BORDER }}>
+          <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
+            style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
+          <button onClick={onSubmit}
+            className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+            style={{ backgroundColor: TEAL }}>Submit to Manager</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export function MyKpiPlan() {
+  const [kpis, setKpis] = useState<KpiRow[]>(INIT_KPIS);
+  const [viewId, setViewId]                 = useState<string | null>(null);
+  const [editId, setEditId]                 = useState<string | null>(null);
+  const [editIsCreate, setEditIsCreate]     = useState(false);
+  const [showSubmitDialog, setShowDialog]   = useState(false);
+  const [showGuide, setShowGuide]           = useState(false);
+  const [submitted, setSubmitted]           = useState(false);
+
+  const totalWeightage = useMemo(() => kpis.reduce((s, k) => s + k.weightage, 0), [kpis]);
+  const pct = Math.min(100, totalWeightage);
+
+  const byLevelWeight = useMemo(() => ({
+    Company:    kpis.filter(k => k.level === "Company").reduce((s, k) => s + k.weightage, 0),
+    Department: kpis.filter(k => k.level === "Department").reduce((s, k) => s + k.weightage, 0),
+    Individual: kpis.filter(k => k.level === "Individual").reduce((s, k) => s + k.weightage, 0),
+  }), [kpis]);
+
+  const submittableKpis = useMemo(() =>
+    kpis.filter(k => k.level === "Individual" &&
+      (k.status === "Draft" || k.status === "Returned for Revision")),
+  [kpis]);
+
+  const allScoresDefined = useMemo(() =>
+    submittableKpis.every(k => SCORE_KEYS.every(key => k.scoreDef[key].trim() !== "")),
+  [submittableKpis]);
+
+  const canSubmit = totalWeightage === 100 && submittableKpis.length > 0 && allScoresDefined;
+
+  const submitBlockReason = useMemo(() => {
+    if (submittableKpis.length === 0) return "There are no Draft or Returned Individual KPIs to submit.";
+    if (totalWeightage < 100) return `Total KPI weightage is ${totalWeightage}% — it must equal 100% before submitting.`;
+    if (totalWeightage > 100) return `Total KPI weightage is ${totalWeightage}% — reduce by ${totalWeightage - 100}% before submitting.`;
+    if (!allScoresDefined) return "Some Individual KPIs have incomplete scoring criteria. Complete all Score 0–5 fields before submitting.";
+    return "";
+  }, [submittableKpis, totalWeightage, allScoresDefined]);
+
+  // Resolved objects for open drawers
+  const viewKpi = viewId ? (kpis.find(k => k.id === viewId) ?? null) : null;
+  const editKpi = editId ? (kpis.find(k => k.id === editId) ?? null) : null;
+
+  const totalExcludingEdit = useMemo(() => {
+    if (editIsCreate) return totalWeightage;
+    return kpis.filter(k => k.id !== editId).reduce((s, k) => s + k.weightage, 0);
+  }, [kpis, editId, editIsCreate, totalWeightage]);
+
+  // Plan status
+  const planStatus: ApprovalStatus = submitted
+    ? "Pending Manager Approval"
+    : kpis.some(k => k.level === "Individual" && k.status === "Returned for Revision")
+    ? "Returned for Revision"
+    : "Draft";
+
+  // ── Actions ──
+  function openView(id: string) { setViewId(id); }
+  function closeView() { setViewId(null); }
+
+  function openEdit(id: string) { setEditId(id); setEditIsCreate(false); setViewId(null); }
+  function openCreate() { setEditId(null); setEditIsCreate(true); setViewId(null); }
+  function closeEdit() { setEditId(null); setEditIsCreate(false); }
+
+  function saveEdit(data: Omit<KpiRow, "id" | "level" | "status" | "returnReason">) {
+    if (editIsCreate) {
+      const newKpi: KpiRow = {
+        id: `i${Date.now()}`, level: "Individual", status: "Draft", ...data,
+      };
+      setKpis(prev => [...prev, newKpi]);
+    } else if (editId) {
+      setKpis(prev => prev.map(k =>
+        k.id === editId
+          ? { ...k, ...data, status: k.status === "Returned for Revision" ? "Draft" : k.status }
+          : k
+      ));
+    }
+    closeEdit();
+  }
+
+  function handleSubmit() {
+    setKpis(prev => prev.map(k =>
+      k.level === "Individual" && (k.status === "Draft" || k.status === "Returned for Revision")
+        ? { ...k, status: "Pending Manager Approval" }
+        : k
+    ));
+    setSubmitted(true);
+    setShowDialog(false);
+  }
+
+  return (
+    <div style={{ backgroundColor: BG, minHeight: "calc(100vh - 56px)" }}>
+      <div className="p-6 space-y-5">
+
+        {/* ── Page Header ── */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>My KPI Plan</h1>
+            <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
+              2027 Annual KPI Review · Retail Sales Executive · Monthly Review Frequency
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button onClick={() => setShowGuide(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
+              style={{ color: TEXT, borderColor: BORDER }}>
+              <BookOpen size={14} /> View Scoring Guide
+            </button>
+            <button onClick={openCreate}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-semibold text-white transition-opacity hover:opacity-90"
+              style={{ backgroundColor: BLUE }}>
+              <Plus size={14} /> Add Individual KPI
+            </button>
+            <button
+              onClick={() => canSubmit && setShowDialog(true)}
+              disabled={!canSubmit}
+              title={submitBlockReason || undefined}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-semibold text-white transition-opacity"
+              style={{ backgroundColor: canSubmit ? TEAL : "#9CA3AF" }}>
+              <Send size={14} /> Submit Individual KPIs for Approval
+            </button>
+          </div>
+        </div>
+
+        {/* Submit block reason */}
+        {!submitted && submitBlockReason && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-md text-[12px]"
+            style={{ backgroundColor: "#FEF9EC", color: AMBER }}>
+            <AlertTriangle size={13} className="shrink-0" />
+            {submitBlockReason}
+          </div>
+        )}
+
+        {/* ── Employee Summary + Weightage ── */}
+        <div className="grid grid-cols-5 gap-4">
+          {/* Employee card */}
+          <div className="bg-white rounded-lg p-5 col-span-3"
+            style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-[16px] shrink-0"
+                style={{ backgroundColor: BLUE }}>AH</div>
+              <div className="flex-1">
+                <p className="text-[15px] font-bold" style={{ color: TEXT }}>Amir Hassan</p>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-1.5">
+                  {([
+                    ["Staff ID", "RS-1042"],
+                    ["Role", "Retail Sales Executive"],
+                    ["Department", "Retail Sales"],
+                    ["Reporting Manager", "Sales Manager"],
+                  ] as [string, string][]).map(([label, value]) => (
+                    <p key={label} className="text-[12px]">
+                      <span className="font-semibold" style={{ color: MUTED }}>{label}:</span>{" "}
+                      <span style={{ color: TEXT }}>{value}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Weightage card */}
+          <div className="bg-white rounded-lg p-5 col-span-2"
+            style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-2.5" style={{ color: MUTED }}>
+              KPI Weightage Total
+            </p>
+            <div className="flex items-end gap-2 mb-2">
+              <span className="text-[28px] font-bold leading-none" style={{
+                color: totalWeightage === 100 ? TEAL : totalWeightage > 100 ? RED : AMBER,
+              }}>{totalWeightage}%</span>
+              <span className="text-[13px] mb-1" style={{ color: MUTED }}>/ 100%</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden mb-3">
+              <div className="h-full rounded-full transition-all" style={{
+                width: `${pct}%`,
+                backgroundColor: totalWeightage === 100 ? TEAL : totalWeightage > 100 ? RED : AMBER,
+              }} />
+            </div>
+            <div className="space-y-1.5">
+              {(["Company", "Department", "Individual"] as KpiLevel[]).map(lvl => (
+                <div key={lvl} className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: LEVEL_STYLE[lvl].color }} />
+                    <span style={{ color: MUTED }}>{lvl}</span>
+                  </span>
+                  <span className="font-semibold" style={{ color: TEXT }}>{byLevelWeight[lvl]}%</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2.5 pt-2.5 border-t" style={{
+              borderColor: BORDER,
+              color: totalWeightage === 100 ? TEAL : totalWeightage > 100 ? RED : AMBER,
+            }}>
+              {totalWeightage === 100
+                ? "✓ Total weightage reached"
+                : totalWeightage < 100
+                ? `${100 - totalWeightage}% remaining`
+                : `${totalWeightage - 100}% over limit`}
+            </p>
+          </div>
+        </div>
+
+        {/* Submission success banner */}
+        {submitted && (
+          <div className="flex items-start gap-3 p-4 rounded-lg"
+            style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
+            <CheckCircle size={16} className="mt-0.5 shrink-0" style={{ color: TEAL }} />
+            <div>
+              <p className="text-[13px] font-semibold" style={{ color: TEAL }}>
+                Your Individual KPIs and their scoring definitions have been submitted to your Manager for review.
+              </p>
+              <p className="text-[12px] mt-1" style={{ color: MUTED }}>
+                Your Manager may approve the KPIs or return them to you for revision.
+                Company and Department KPIs are pre-assigned and do not require approval.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── KPI Table ── */}
+        <div className="bg-white rounded-lg overflow-hidden"
+          style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
+          <div className="px-5 py-4 border-b" style={{ borderColor: BORDER }}>
+            <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>
+              KPI Plan — 2027 Annual KPI Review
+            </h2>
+            <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>
+              Company and Department KPIs are assigned to you. Individual KPIs are proposed by you and require Manager approval.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
+                  {["KPI Level", "KPI Name", "Target", "Weightage", "Approval Status", "Actions"].map(h => (
+                    <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                      style={{ color: MUTED }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {kpis.map((k, i) => {
+                  const ls = LEVEL_STYLE[k.level];
+                  const ss = STATUS_STYLE[k.status];
+                  const canEdit = k.level === "Individual"
+                    && (k.status === "Draft" || k.status === "Returned for Revision");
+                  return (
+                    <tr key={k.id} className="hover:bg-[#F8FAFC] transition-colors"
+                      style={{ borderBottom: i < kpis.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+                      <td className="px-4 py-3">
+                        <Pill label={`${k.level}-Level`} color={ls.color} bg={ls.bg} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-[13px] font-medium" style={{ color: TEXT }}>{k.name}</p>
+                        {k.status === "Returned for Revision" && (
+                          <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: RED }}>
+                            <AlertTriangle size={9} /> Returned — revision required
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[12px] whitespace-nowrap" style={{ color: TEXT }}>
+                        {k.target}
+                      </td>
+                      <td className="px-4 py-3 text-[13px] font-semibold" style={{ color: TEXT }}>
+                        {k.weightage}%
+                      </td>
+                      <td className="px-4 py-3">
+                        <Pill label={k.status} color={ss.color} bg={ss.bg} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => openView(k.id)}
+                            className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-gray-50"
+                            style={{ color: MUTED, borderColor: BORDER }}>
+                            <Eye size={11} /> View
+                          </button>
+                          {canEdit && (
+                            <button onClick={() => openEdit(k.id)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-blue-50"
+                              style={{ color: BLUE, borderColor: "#93B4E8" }}>
+                              <Pencil size={11} /> Edit
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-2.5 border-t" style={{ borderColor: BORDER }}>
+            <span className="text-[11px]" style={{ color: MUTED }}>
+              {kpis.length} KPIs · Total weightage: {totalWeightage}%
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Drawers and Modals ── */}
+      {viewKpi && (
+        <ViewDrawer kpi={viewKpi} onClose={closeView} onEdit={() => openEdit(viewKpi.id)} />
+      )}
+      {(editId || editIsCreate) && (
+        <EditDrawer
+          editKpi={editIsCreate ? null : editKpi}
+          totalExcludingThis={totalExcludingEdit}
+          onClose={closeEdit}
+          onSave={saveEdit}
+        />
+      )}
+      {showSubmitDialog && (
+        <SubmitDialog kpis={kpis} onClose={() => setShowDialog(false)} onSubmit={handleSubmit} />
+      )}
+      {showGuide && <ScoringGuideModal onClose={() => setShowGuide(false)} />}
+    </div>
+  );
+}
