@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, Eye, Pencil } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2 } from "lucide-react";
 
 const BLUE  = "#2457A6";
 const TEAL  = "#0F9F8F";
@@ -10,15 +10,13 @@ const MUTED = "#667085";
 const BORDER= "#DCE3EC";
 const BG    = "#F4F6F9";
 
-type ReviewStatus = "Draft" | "Upcoming" | "Open" | "Closed" | "Cancelled";
+type ReviewStatus = "Draft" | "Upcoming" | "Open" | "Closed";
 
 interface ReviewPeriod {
   id: string; name: string;
   startDate: string; endDate: string;
-  eligibleGroup: string;
   status: ReviewStatus;
   lastUpdated: string;
-  editable: boolean;
 }
 
 const STATUS_STYLE: Record<ReviewStatus, { color:string; bg:string }> = {
@@ -26,14 +24,13 @@ const STATUS_STYLE: Record<ReviewStatus, { color:string; bg:string }> = {
   Upcoming:  { color: AMBER,     bg: "#FEF9EC" },
   Open:      { color: TEAL,      bg: "#ECFDF9" },
   Closed:    { color: "#374151", bg: "#F3F4F6" },
-  Cancelled: { color: "#D14343", bg: "#FEF3F2" },
 };
 
 const PERIODS: ReviewPeriod[] = [
-  { id:"2027", name:"2027 Annual KPI Review", startDate:"2027-01-01", endDate:"2027-12-31", eligibleGroup:"All Confirmed Staff",    status:"Draft",  lastUpdated:"2026-08-22", editable:true  },
-  { id:"2026", name:"2026 Annual KPI Review", startDate:"2026-01-01", endDate:"2026-12-31", eligibleGroup:"All Confirmed Staff",    status:"Open",   lastUpdated:"2026-01-10", editable:true  },
-  { id:"2025", name:"2025 Annual KPI Review", startDate:"2025-01-01", endDate:"2025-12-31", eligibleGroup:"All Confirmed Staff",    status:"Closed", lastUpdated:"2025-12-28", editable:false },
-  { id:"2024", name:"2024 Annual KPI Review", startDate:"2024-01-01", endDate:"2024-12-31", eligibleGroup:"Retail Division Staff", status:"Closed", lastUpdated:"2024-12-26", editable:false },
+  { id:"2028", name:"2028 Annual KPI Review", startDate:"2028-01-01", endDate:"2028-12-31", status:"Upcoming", lastUpdated:"2026-09-10" },
+  { id:"2027", name:"2027 Annual KPI Review", startDate:"2027-01-01", endDate:"2027-12-31", status:"Draft",    lastUpdated:"2026-08-22" },
+  { id:"2026", name:"2026 Annual KPI Review", startDate:"2026-01-01", endDate:"2026-12-31", status:"Open",     lastUpdated:"2026-01-10" },
+  { id:"2025", name:"2025 Annual KPI Review", startDate:"2025-01-01", endDate:"2025-12-31", status:"Closed",   lastUpdated:"2025-12-28" },
 ];
 
 function StatusPill({ status }: { status: ReviewStatus }) {
@@ -58,11 +55,12 @@ export function ReviewPeriods() {
   const [search, setSearch]         = useState("");
   const [statusFilter, setStatus]   = useState("All");
   const [yearFilter, setYear]        = useState("All");
+  const [periods, setPeriods]        = useState(PERIODS);
 
-  const visible = PERIODS.filter(p => {
+  const visible = periods.filter(p => {
     const q = search.toLowerCase();
     return (
-      (p.name.toLowerCase().includes(q) || p.eligibleGroup.toLowerCase().includes(q)) &&
+      p.name.toLowerCase().includes(q) &&
       (statusFilter === "All" || p.status === statusFilter) &&
       (yearFilter   === "All" || p.id === yearFilter)
     );
@@ -77,7 +75,7 @@ export function ReviewPeriods() {
           <h1 className="text-[20px] font-bold mb-1" style={{ color: TEXT }}>Review Periods</h1>
           <p className="text-[13px] max-w-2xl" style={{ color: MUTED }}>
             Each review period stores its own role-frequency rules, deadline configuration, and weightage settings.
-            Closed periods open as read-only. Only one period can be Open at a time.
+            Draft and Upcoming periods can be edited. Open and Closed periods retain their configuration in read-only mode.
           </p>
         </div>
         <button
@@ -103,7 +101,7 @@ export function ReviewPeriods() {
           className="px-3 py-2 bg-white border rounded-md text-[13px] outline-none cursor-pointer"
           style={{ borderColor: BORDER, color: TEXT }}>
           <option value="All">All Statuses</option>
-          {(["Draft","Upcoming","Open","Closed","Cancelled"] as ReviewStatus[]).map(s =>
+          {(["Draft","Upcoming","Open","Closed"] as ReviewStatus[]).map(s =>
             <option key={s} value={s}>{s}</option>
           )}
         </select>
@@ -111,7 +109,7 @@ export function ReviewPeriods() {
           className="px-3 py-2 bg-white border rounded-md text-[13px] outline-none cursor-pointer"
           style={{ borderColor: BORDER, color: TEXT }}>
           <option value="All">All Years</option>
-          {["2027","2026","2025","2024"].map(y => <option key={y} value={y}>{y}</option>)}
+          {["2028","2027","2026","2025"].map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
 
@@ -121,7 +119,7 @@ export function ReviewPeriods() {
         <table className="w-full text-[13px]">
           <thead>
             <tr style={{ backgroundColor:"#F8FAFC", borderBottom:`1px solid ${BORDER}` }}>
-              {["Review Period Name","Performance Period","Eligible Staff Group","Status","Last Updated","Actions"].map(h => (
+              {["Review Period Name","Performance Period","Status","Last Updated","Actions"].map(h => (
                 <th key={h} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide whitespace-nowrap"
                   style={{ color: MUTED }}>{h}</th>
               ))}
@@ -130,7 +128,7 @@ export function ReviewPeriods() {
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-14 text-center text-[13px]" style={{ color: MUTED }}>
+                <td colSpan={5} className="px-4 py-14 text-center text-[13px]" style={{ color: MUTED }}>
                   No review periods match your filters.
                 </td>
               </tr>
@@ -144,7 +142,6 @@ export function ReviewPeriods() {
                 <td className="px-4 py-3.5 text-[12px] whitespace-nowrap" style={{ color: MUTED }}>
                   {fmt(p.startDate)} – {fmt(p.endDate)}
                 </td>
-                <td className="px-4 py-3.5 text-[12px]" style={{ color: MUTED }}>{p.eligibleGroup}</td>
                 <td className="px-4 py-3.5"><StatusPill status={p.status}/></td>
                 <td className="px-4 py-3.5 text-[12px] whitespace-nowrap" style={{ color: MUTED }}>{fmt(p.lastUpdated)}</td>
                 <td className="px-4 py-3.5">
@@ -155,13 +152,21 @@ export function ReviewPeriods() {
                       style={{ color: MUTED, borderColor: BORDER }}>
                       <Eye size={11}/> View
                     </button>
-                    {p.editable && (
-                      <button
-                        onClick={() => navigate(`/performance/review-periods/${p.id}/edit`)}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-blue-50"
-                        style={{ color: BLUE, borderColor: "#93B4E8" }}>
-                        <Pencil size={11}/> Edit
-                      </button>
+                    {(["Draft", "Upcoming"] as ReviewStatus[]).includes(p.status) && (
+                      <>
+                        <button
+                          onClick={() => navigate(`/performance/review-periods/${p.id}/edit`)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-blue-50"
+                          style={{ color: BLUE, borderColor: "#93B4E8" }}>
+                          <Pencil size={11}/> Edit
+                        </button>
+                        <button
+                          onClick={() => setPeriods(current => current.filter(period => period.id !== p.id))}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-red-50"
+                          style={{ color: "#D14343", borderColor: "#F2B8B5" }}>
+                          <Trash2 size={11}/> Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>
@@ -173,7 +178,7 @@ export function ReviewPeriods() {
         {/* Table footer count */}
         <div className="px-4 py-2.5 border-t flex items-center justify-between" style={{ borderColor: BORDER }}>
           <span className="text-[11px]" style={{ color: MUTED }}>
-            {visible.length} of {PERIODS.length} periods
+            {visible.length} of {periods.length} periods
           </span>
         </div>
       </div>
