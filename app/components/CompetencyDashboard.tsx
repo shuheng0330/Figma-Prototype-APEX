@@ -1,12 +1,12 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer,
 } from "recharts";
 import {
   ChevronDown, TrendingUp, TrendingDown, Users,
-  ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, ChevronRight, Search,
+  ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, ChevronRight, Search, ArrowLeft,
 } from "lucide-react";
 import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus,
@@ -238,8 +238,14 @@ function TrendTip({ active, payload, label }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 export function CompetencyDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedPeriod = searchParams.get("period");
+  const returnToOrganisation = searchParams.get("returnTo") === "organisation-performance";
+  const requestedDepartment = searchParams.get("department");
 
-  const [selectedPeriod, setSelectedPeriod] = useState(LIVE_PERIOD);
+  const [selectedPeriod, setSelectedPeriod] = useState(
+    requestedPeriod && PERIOD_OPTIONS.includes(requestedPeriod) ? requestedPeriod : LIVE_PERIOD
+  );
   const [showPeriod, setShowPeriod]         = useState(false);
   const [trendMetric, setTrendMetric]       = useState<Metric>("final");
   const [trendYears, setTrendYears]         = useState<3 | 5>(5);
@@ -371,9 +377,15 @@ export function CompetencyDashboard() {
         {/* ── 1. Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
+            {returnToOrganisation && (
+              <button onClick={() => navigate(`/org-eval?period=${encodeURIComponent(selectedPeriod)}`)}
+                className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+                <ArrowLeft size={14} /> Back to Organisation Performance
+              </button>
+            )}
             <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Performance</h1>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-              Retail Sales Department · Performance overview
+              {requestedDepartment ?? "Retail Sales"} Department · Performance overview
             </p>
           </div>
           <div ref={periodRef} className="relative">
@@ -410,25 +422,25 @@ export function CompetencyDashboard() {
         <div className="grid grid-cols-4 gap-4">
           {[
             {
-              label: "Team Members",
-              value: TEAM_IDS.length.toString(),
-              sub: `${rowsWithData.length} of ${TEAM_IDS.length} with available results`,
+              label: "Employees with Results",
+              value: rowsWithData.length.toString(),
+              sub: `of ${TEAM_IDS.length} employees in the team`,
               color: BLUE,
               iconBg: "#EEF3FC",
               icon: <Users size={16} style={{ color: BLUE }} />,
             },
             {
-              label: "Team KPI Performance",
+              label: "Team KPI Performance Score",
               value: teamKpiAvg !== null ? teamKpiAvg.toFixed(1) : "—",
-              sub: "Average KPI score",
+              sub: "Average KPI Performance Score",
               color: TEAL,
               iconBg: "#ECFDF9",
               icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none"><path d="M2 12L6 8L9 10L14 4" stroke={TEAL} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"/></svg>,
             },
             {
-              label: "Team Attitude Score",
+              label: "Team Attitude Evaluation Score",
               value: teamAttAvg !== null ? teamAttAvg.toFixed(1) : "—",
-              sub: "Average attitude evaluation",
+              sub: "Average Attitude Evaluation Score",
               color: PURPLE,
               iconBg: "#F5F3FF",
               icon: <svg width={16} height={16} viewBox="0 0 16 16" fill="none"><circle cx={8} cy={6} r={2.5} stroke={PURPLE} strokeWidth={1.6}/><path d="M3 13c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke={PURPLE} strokeWidth={1.6} strokeLinecap="round"/></svg>,
@@ -481,7 +493,7 @@ export function CompetencyDashboard() {
               </div>
             ))}
           </div>
-          <button onClick={() => navigate("/performance/team-reviews")}
+          <button onClick={() => navigate(`/performance/team-reviews?from=team-performance&period=${encodeURIComponent(selectedPeriod)}`)}
             className="flex items-center gap-1 text-[12px] font-semibold shrink-0 hover:underline"
             style={{ color: BLUE }}>
             View Pending Reviews
@@ -499,7 +511,7 @@ export function CompetencyDashboard() {
               <div>
                 <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Team Performance Trend</h2>
                 <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>
-                  Team average vs. organisation average
+                  3–5 year view of the team's KPI Performance, Attitude Evaluation and Final Appraisal results.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -603,7 +615,7 @@ export function CompetencyDashboard() {
           <div className="flex items-center justify-between px-5 py-3.5 gap-3 flex-wrap"
             style={{ borderBottom: `1px solid ${BORDER}` }}>
             <div className="flex items-center gap-2">
-              <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Team Performance</h2>
+              <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Employee Performance</h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold"
                 style={{ backgroundColor: "#F3F4F6", color: MUTED }}>
                 {sortedRows.length} of {TEAM_IDS.length}
@@ -674,10 +686,10 @@ export function CompetencyDashboard() {
                 <tr>
                   <PlainTh label="Employee" />
                   <PlainTh label="Role" />
-                  <SortTh label="KPI Score"      sortKey="kpiScore"    current={sortKey} dir={sortDir} onSort={toggleSort} />
-                  <SortTh label="Attitude Score"  sortKey="attScore"    current={sortKey} dir={sortDir} onSort={toggleSort} />
-                  <SortTh label="Final Score"     sortKey="finalScore"  current={sortKey} dir={sortDir} onSort={toggleSort} />
-                  <SortTh label="Trend"           sortKey="trendDelta"  current={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortTh label="KPI Performance Score"      sortKey="kpiScore"    current={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Attitude Evaluation Score"  sortKey="attScore"    current={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortTh label="Final Appraisal Score"     sortKey="finalScore"  current={sortKey} dir={sortDir} onSort={toggleSort} />
+                  <SortTh label="YoY Change"           sortKey="trendDelta"  current={sortKey} dir={sortDir} onSort={toggleSort} />
                   <PlainTh label="Appraisal Status" />
                   <PlainTh label="Action" />
                 </tr>
@@ -745,10 +757,10 @@ export function CompetencyDashboard() {
                       </td>
                       {/* Action */}
                       <td className="px-4 py-3">
-                        <button onClick={() => navigate(`/staff-profile/${row.id}`)}
+                        <button onClick={() => navigate(`/staff-profile/${row.id}?returnTo=team-performance&period=${encodeURIComponent(selectedPeriod)}`)}
                           className="text-[11px] font-semibold hover:underline whitespace-nowrap"
                           style={{ color: BLUE }}>
-                          View Performance →
+                          View Employee →
                         </button>
                       </td>
                     </tr>

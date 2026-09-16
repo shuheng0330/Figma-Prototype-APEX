@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   X, ChevronDown, CheckCircle, RotateCcw, ArrowUp, ArrowDown, FileText,
+  ArrowLeft,
 } from "lucide-react";
 
 const BLUE   = "#2457A6";
@@ -22,10 +24,10 @@ const SCORE_META: Record<number, { label: string; color: string }> = {
   0: { label: "Not Achieved",                  color: RED       },
 };
 
-const SCORE_KEYS = ["s5","s4","s3","s2","s1","s0"] as const;
+const SCORE_KEYS = ["s5","s4","s3","s2","s1"] as const;
 
 type KpiLevel          = "Company" | "Department" | "Individual";
-type ReviewStatus      = "Pending Review" | "Completed" | "Returned for Revision" | "Overdue";
+type ReviewStatus      = "Pending Review" | "Pending Approval" | "Reviewed" | "Approved" | "Returned";
 type ReviewType        = "Individual KPI Approval" | "KPI Assessment" | "Attitude Evaluation";
 type KpiApprovalStatus = "Pending" | "Approved" | "Returned";
 
@@ -33,10 +35,11 @@ interface ScoreDef { s5: string; s4: string; s3: string; s2: string; s1: string;
 interface KpiRow {
   id: string; level: KpiLevel; perspective: string; kra: string;
   name: string; target: string; weightage: number; scoreDef: ScoreDef;
+  isRevision?: boolean; revisionReason?: string; previousTarget?: string; previousWeightage?: number;
 }
 interface ReviewItem {
   id: string; employee: string; initials: string; role: string; dept: string;
-  type: ReviewType; checkpoint: string; due: string; dueTs: number; status: ReviewStatus;
+  type: ReviewType; checkpoint: string; due: string; dueTs: number; status: ReviewStatus; overdue?: boolean;
 }
 interface EmpAssessment {
   score: number; comment: string; evidence?: { name: string; size: string };
@@ -50,20 +53,21 @@ const LEVEL_STYLE: Record<KpiLevel, { color: string; bg: string }> = {
 
 const STATUS_STYLE: Record<ReviewStatus, { color: string; bg: string }> = {
   "Pending Review":        { color: AMBER, bg: "#FEF9EC" },
-  "Completed":             { color: TEAL,  bg: "#ECFDF9" },
-  "Returned for Revision": { color: RED,   bg: "#FEF3F2" },
-  "Overdue":               { color: RED,   bg: "#FEF3F2" },
+  "Reviewed":              { color: TEAL,  bg: "#ECFDF9" },
+  "Approved":              { color: TEAL,  bg: "#ECFDF9" },
+  "Returned":              { color: RED,   bg: "#FEF3F2" },
+  "Pending Approval":      { color: AMBER, bg: "#FEF9EC" },
 };
 
 const STATUS_ORDER: Record<ReviewStatus, number> = {
-  "Overdue": 0, "Pending Review": 1, "Returned for Revision": 2, "Completed": 3,
+  "Pending Approval": 0, "Pending Review": 1, "Returned": 2, "Approved": 3, "Reviewed": 4,
 };
 
 // ── Individual KPIs for Amir's approval ──────────────────────────────────────
 const IND_KPIS: KpiRow[] = [
   {
     id: "i1", level: "Individual", perspective: "Customer", kra: "Customer Growth",
-    name: "New Customer Acquisition", target: "10 new customers/month", weightage: 15,
+    name: "New Customer Acquisition", target: "10 new customers/month", weightage: 15, isRevision: true, previousTarget: "8 new customers/month", previousWeightage: 15, revisionReason: "Updated acquisition target to reflect the revised sales plan.",
     scoreDef: {
       s5: "Acquires 13 or more new customers per month",
       s4: "Acquires 11–12 new customers per month",
@@ -149,12 +153,12 @@ const ATTITUDE_ROWS = [
 
 // ── Queue ─────────────────────────────────────────────────────────────────────
 const INIT_QUEUE: ReviewItem[] = [
-  { id: "r1", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Pending Review"        },
+  { id: "r1", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Pending Approval", overdue: true },
   { id: "r2", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Pending Review"        },
-  { id: "r3", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Completed"             },
-  { id: "r4", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Attitude Evaluation",     checkpoint: "Annual 2027", due: "20 Dec 2027", dueTs: 20271220, status: "Returned for Revision" },
-  { id: "r5", employee: "Rizal Hamdan", initials: "RH", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Overdue"              },
-  { id: "r6", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Completed"            },
+  { id: "r3", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "Individual KPI Approval", checkpoint: "Jan 2027",    due: "14 Jan 2027", dueTs: 20270114, status: "Approved"              },
+  { id: "r4", employee: "Amir Hassan",  initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales", type: "Attitude Evaluation",     checkpoint: "Annual 2027", due: "20 Dec 2027", dueTs: 20271220, status: "Pending Review", overdue: true },
+  { id: "r5", employee: "Rizal Hamdan", initials: "RH", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Pending Review", overdue: true },
+  { id: "r6", employee: "Sarah Chen",   initials: "SC", role: "Retail Sales Executive", dept: "Retail Sales", type: "KPI Assessment",          checkpoint: "Jan 2027",    due: "25 Jan 2027", dueTs: 20270125, status: "Reviewed"             },
 ];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -167,7 +171,7 @@ function ScoreSelector({ value, onChange, readOnly }: {
   return (
     <div>
       <div className="flex gap-1">
-        {[0,1,2,3,4,5].map(n => {
+        {[1,2,3,4,5].map(n => {
           const sel = value === n;
           const m = SCORE_META[n];
           return (
@@ -336,6 +340,10 @@ function CompletionDialog({ item, summaryRows, onClose, onConfirm }: {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function TeamReviews() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnToTeamPerformance = searchParams.get("from") === "team-performance";
+  const returnPeriod = searchParams.get("period");
   const [queue, setQueue]               = useState<ReviewItem[]>(INIT_QUEUE);
   const [filterType, setFilterType]     = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -361,6 +369,7 @@ export function TeamReviews() {
 
   // Dialogs/modals
   const [returnDialog, setReturnDialog]       = useState<{ label: string; desc: string; onConfirm: (r: string) => void } | null>(null);
+  const [showRevisionHistory, setShowRevisionHistory] = useState(false);
   const [completionDialog, setCompletionDialog] = useState<ReviewItem | null>(null);
   const [scoringDefKpi, setScoringDefKpi]     = useState<KpiRow | null>(null);
   const [evidenceFile, setEvidenceFile]       = useState<{ name: string; size: string } | null>(null);
@@ -394,8 +403,8 @@ export function TeamReviews() {
 
   // ── Derived state for the active drawer ──
   const rid         = drawerItem?.id ?? "";
-  const isCompleted = drawerItem?.status === "Completed";
-  const isReturned  = drawerItem?.status === "Returned for Revision";
+  const isCompleted = drawerItem?.status === "Reviewed" || drawerItem?.status === "Approved";
+  const isReturned  = drawerItem?.status === "Returned";
   const isReadOnly  = isCompleted || isReturned;
 
   // Individual KPI Approval
@@ -440,7 +449,7 @@ export function TeamReviews() {
 
   function handleCompleteReview() {
     if (!drawerItem) return;
-    updateStatus(drawerItem.id, "Completed");
+    updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
     setCompletionDialog(null);
     setDrawerItem(null);
   }
@@ -448,14 +457,14 @@ export function TeamReviews() {
   function handleReturn(reason: string) {
     if (!drawerItem) return;
     setReturnReasons(prev => ({ ...prev, [drawerItem.id]: reason }));
-    updateStatus(drawerItem.id, "Returned for Revision");
+    updateStatus(drawerItem.id, "Returned");
     setReturnDialog(null);
     setDrawerItem(null);
   }
 
   function actionLabel(status: ReviewStatus): string {
-    if (status === "Completed") return "View Result";
-    if (status === "Returned for Revision") return "View";
+    if (status === "Reviewed" || status === "Approved") return "View Result";
+    if (status === "Returned") return "View";
     return "Review";
   }
 
@@ -488,8 +497,14 @@ export function TeamReviews() {
 
         {/* ── Header ── */}
         <div>
+          {returnToTeamPerformance && (
+            <button onClick={() => navigate(`/dashboard${returnPeriod ? `?period=${encodeURIComponent(returnPeriod)}` : ""}`)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+              <ArrowLeft size={14} /> Back to Team Performance
+            </button>
+          )}
           <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Review Workspace</h1>
-          <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Manager view · 2027 Annual KPI Review · Retail Sales Department</p>
+          <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Superior view · 2027 Annual KPI Review · Retail Sales Department</p>
           <p className="text-[13px] mt-1" style={{ color: MUTED }}>
             Review Individual KPI proposals, KPI Self-Assessments and Attitude Evaluations submitted by your team.
           </p>
@@ -501,7 +516,7 @@ export function TeamReviews() {
           <span className="text-[12px] font-semibold" style={{ color: MUTED }}>Filter by</span>
           {[
             { label: "Type",     value: filterType,   set: setFilterType,   opts: ["Individual KPI Approval","KPI Assessment","Attitude Evaluation"] },
-            { label: "Status",   value: filterStatus, set: setFilterStatus, opts: ["Pending Review","Returned for Revision","Completed","Overdue"]   },
+            { label: "Status",   value: filterStatus, set: setFilterStatus, opts: ["Pending Approval","Pending Review","Returned","Approved","Reviewed"]   },
             { label: "Employee", value: filterEmp,    set: setFilterEmp,    opts: employees                                                         },
           ].map(f => (
             <div key={f.label} className="relative">
@@ -574,13 +589,12 @@ export function TeamReviews() {
                     <td className="px-4 py-3 text-[12px]" style={{ color: MUTED }}>{r.checkpoint}</td>
                     <td className="px-4 py-3 text-[12px] whitespace-nowrap" style={{ color: MUTED }}>{r.due}</td>
                     <td className="px-4 py-3">
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
-                        style={{ color: ss.color, backgroundColor: ss.bg }}>{r.status}</span>
+                      <span className="flex gap-1.5"><span className="text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ color: ss.color, backgroundColor: ss.bg }}>{r.status}</span>{r.overdue && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}</span>
                     </td>
                     <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setDrawerItem(r)}
                         className="px-3 py-1.5 rounded-md text-[12px] font-semibold whitespace-nowrap"
-                        style={{ color: r.status === "Completed" ? MUTED : BLUE, backgroundColor: r.status === "Completed" ? "#F2F4F7" : "#EEF3FC" }}>
+                        style={{ color: (r.status === "Reviewed" || r.status === "Approved") ? MUTED : BLUE, backgroundColor: (r.status === "Reviewed" || r.status === "Approved") ? "#F2F4F7" : "#EEF3FC" }}>
                         {actionLabel(r.status)}
                       </button>
                     </td>
@@ -643,13 +657,13 @@ export function TeamReviews() {
                 <>
                   {!isReadOnly && (
                     <p className="text-[12px] mb-5 p-3 rounded-md" style={{ color: MUTED, backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                      Review the KPI details and Score 0–5 achievement criteria before approving or returning each KPI.
+                      Review the KPI details and Point 1–5 achievement criteria before approving or returning each KPI.
                     </p>
                   )}
                   {isCompleted && (
                     <div className="flex items-center gap-2 p-3 rounded-lg mb-5" style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
-                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Approval Review Completed</p>
+                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Individual KPI Approval Approved</p>
                       <span className="text-[12px]" style={{ color: MUTED }}>· {approvCount} approved · {retCount} returned</span>
                     </div>
                   )}
@@ -680,6 +694,7 @@ export function TeamReviews() {
                                   style={{ color: ls.color, backgroundColor: ls.bg }}>{kpi.level}-Level</span>
                               </div>
                               <p className="text-[11px] mt-0.5" style={{ color: MUTED }}>{kpi.perspective} · {kpi.kra}</p>
+                              {kpi.isRevision && <div className="mt-2 p-2 rounded-md text-[11px]" style={{ color: BLUE, backgroundColor: "#EEF3FC" }}><b>KPI Revision · Version 2</b><br />Revision Reason: {kpi.revisionReason}<br /><span style={{ color: MUTED }}>Target: {kpi.previousTarget} → {kpi.target} · Weightage: {kpi.previousWeightage}% → {kpi.weightage}%</span></div>}
                             </div>
                             {kpiStatus !== "Pending" && (
                               <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold"
@@ -710,7 +725,7 @@ export function TeamReviews() {
                           <div className="px-5 py-4"
                             style={{ borderBottom: (!isReadOnly && kpiStatus === "Pending") ? `1px solid ${BORDER}` : "none" }}>
                             <p className="text-[10px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>
-                              Scoring Definition (Score 0–5)
+                              Scoring Definition (Point 1–5)
                             </p>
                             <div className="space-y-2">
                               {SCORE_KEYS.map((key, i) => {
@@ -729,8 +744,9 @@ export function TeamReviews() {
                               })}
                             </div>
                             <p className="text-[10px] mt-3 italic" style={{ color: MUTED }}>
-                              These criteria will be used by both the employee and Manager during KPI assessment.
+                              These criteria will be used by both the employee and Superior during KPI assessment.
                             </p>
+                            {kpi.isRevision && <button onClick={() => setShowRevisionHistory(true)} className="text-[11px] font-semibold mt-2" style={{ color: BLUE }}>View Version History</button>}
                             {kpiStatus === "Returned" && approval?.returnReason && (
                               <div className="mt-3 p-3 rounded-md" style={{ backgroundColor: "#FEF3F2", border: `1px solid #FECACA` }}>
                                 <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: RED }}>Return Reason</p>
@@ -795,7 +811,7 @@ export function TeamReviews() {
                       style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
                       <p className="text-[12px] font-semibold" style={{ color: TEAL }}>
-                        Review Completed · {ALL_KPIS.length} KPIs assessed
+                        Reviewed · {ALL_KPIS.length} KPIs assessed
                       </p>
                     </div>
                   )}
@@ -866,7 +882,7 @@ export function TeamReviews() {
                             {/* Superior Assessment */}
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>
-                                Superior Assessment Score
+                                Superior Assessment Point
                               </p>
                               {isReadOnly ? (
                                 mgrScore !== null ? (
@@ -888,7 +904,7 @@ export function TeamReviews() {
                               )}
                               <div className="mt-3">
                                 <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>
-                                  Manager Comment
+                                  Superior Comment
                                 </p>
                                 {isReadOnly ? (
                                   mgrComment
@@ -896,7 +912,7 @@ export function TeamReviews() {
                                     : <p className="text-[12px] italic" style={{ color: MUTED }}>No comment</p>
                                 ) : (
                                   <textarea value={mgrComment} onChange={e => setComment(kpi.id, e.target.value)}
-                                    placeholder="Optional manager comment…" rows={2}
+                                    placeholder="Optional Superior comment…" rows={2}
                                     className="w-full px-2 py-1.5 rounded text-[12px] outline-none resize-none"
                                     style={{ border: `1px solid ${BORDER}`, color: TEXT }} />
                                 )}
@@ -936,7 +952,7 @@ export function TeamReviews() {
                     <div className="flex items-center gap-2 p-3 rounded-lg mb-5"
                       style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
                       <CheckCircle size={14} style={{ color: TEAL }} />
-                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Attitude Evaluation Review Completed</p>
+                      <p className="text-[12px] font-semibold" style={{ color: TEAL }}>Attitude Evaluation Reviewed</p>
                     </div>
                   )}
 
@@ -1022,20 +1038,10 @@ export function TeamReviews() {
                   style={{ color: TEXT, borderColor: BORDER }}>
                   {draftSaved ? "Saved ✓" : "Save Draft"}
                 </button>
-                <button
-                  onClick={() => setReturnDialog({
-                    label: `Return ${drawerItem.employee}'s KPI Assessment`,
-                    desc: "The employee will be able to edit and resubmit the assessment.",
-                    onConfirm: handleReturn,
-                  })}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium border"
-                  style={{ color: RED, borderColor: "#FECACA" }}>
-                  <RotateCcw size={13} /> Return for Revision
-                </button>
                 <button onClick={() => setCompletionDialog(drawerItem)} disabled={!allScored}
                   className="flex items-center gap-1.5 ml-auto px-4 py-2 rounded-md text-[13px] font-semibold text-white"
                   style={{ backgroundColor: allScored ? TEAL : "#9CA3AF" }}>
-                  <CheckCircle size={14} /> Complete Review
+                  <CheckCircle size={14} /> Submit Review
                 </button>
               </div>
             ) : drawerItem.type === "Attitude Evaluation" ? (
@@ -1045,20 +1051,10 @@ export function TeamReviews() {
                   style={{ color: TEXT, borderColor: BORDER }}>
                   {draftSaved ? "Saved ✓" : "Save Draft"}
                 </button>
-                <button
-                  onClick={() => setReturnDialog({
-                    label: `Return ${drawerItem.employee}'s Attitude Evaluation`,
-                    desc: "The employee will be able to edit and resubmit the evaluation.",
-                    onConfirm: handleReturn,
-                  })}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-medium border"
-                  style={{ color: RED, borderColor: "#FECACA" }}>
-                  <RotateCcw size={13} /> Return for Revision
-                </button>
                 <button onClick={() => setCompletionDialog(drawerItem)} disabled={!allAttScored}
                   className="flex items-center gap-1.5 ml-auto px-4 py-2 rounded-md text-[13px] font-semibold text-white"
                   style={{ backgroundColor: allAttScored ? TEAL : "#9CA3AF" }}>
-                  <CheckCircle size={14} /> Complete Review
+                  <CheckCircle size={14} /> Submit Review
                 </button>
               </div>
             ) : null}
@@ -1075,6 +1071,7 @@ export function TeamReviews() {
           onConfirm={returnDialog.onConfirm}
         />
       )}
+      {showRevisionHistory && <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,.4)" }}><div className="bg-white w-[540px] rounded-xl shadow-2xl overflow-hidden"><div className="flex justify-between p-5 border-b" style={{ borderColor: BORDER }}><div><h3 className="font-bold">KPI Version History</h3><p className="text-[11px]" style={{ color: MUTED }}>New Customer Acquisition</p></div><button onClick={() => setShowRevisionHistory(false)}><X size={18} /></button></div><div className="p-5 text-[12px] space-y-3"><p><b>Version 2 — Current KPI Revision</b></p><p>Revision Reason: Updated acquisition target to reflect the revised sales plan.</p><div className="grid grid-cols-3 gap-2 p-3 rounded" style={{ backgroundColor: "#F8FAFC" }}><b>Field</b><b>Version 1</b><b>Version 2</b><span>Target</span><span>8 new customers/month</span><span style={{ color: BLUE, fontWeight: 600 }}>10 new customers/month</span><span>Weightage</span><span>15%</span><span>15%</span></div></div><div className="flex justify-end p-4 border-t" style={{ borderColor: BORDER }}><button onClick={() => setShowRevisionHistory(false)} className="px-4 py-2 border rounded">Close</button></div></div></div>}
 
       {completionDialog && (
         <CompletionDialog

@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer, BarChart, Bar,
 } from "recharts";
-import { X, ChevronDown, ChevronRight, CheckCircle, AlertCircle, RotateCcw } from "lucide-react";
+import { X, ChevronDown, ChevronRight, CheckCircle, AlertCircle, RotateCcw, ArrowLeft } from "lucide-react";
 import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, Decision,
   PeriodAppraisal, resolvePeriodData, writeLive,
@@ -103,7 +103,7 @@ function HistoryDrawer({ period, data, onClose }: {
               {[
                 { label: "KPI Score",      value: data.kpiScore,   color: BLUE   },
                 { label: "Attitude Score", value: data.attScore,   color: TEAL   },
-                { label: "Final Score",    value: data.hrFinalScore ?? data.finalScore, color: PURPLE },
+                { label: "Final Score",    value: data.finalScore, color: PURPLE },
               ].map(s => (
                 <div
                   key={s.label}
@@ -117,9 +117,9 @@ function HistoryDrawer({ period, data, onClose }: {
             </div>
           </div>
 
-          {/* Manager Recommendation */}
+          {/* Superior Recommendation */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Manager Recommendation</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Superior Recommendation</p>
             <div
               className="inline-flex items-center px-3 py-1.5 rounded-md text-[13px] font-semibold mb-3"
               style={{ backgroundColor: "#EEF3FC", color: BLUE }}
@@ -148,7 +148,7 @@ function HistoryDrawer({ period, data, onClose }: {
 
             {isOverride && (
               <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Manager Recommendation</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Superior Recommendation</p>
                 <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{data.managerDecision}</p>
               </div>
             )}
@@ -175,13 +175,6 @@ function HistoryDrawer({ period, data, onClose }: {
               </div>
             )}
 
-            {data.hrRemarks && (
-              <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{data.hrRemarks}</p>
-              </div>
-            )}
-
             {data.finalDate && (
               <p className="text-[12px] mt-1" style={{ color: MUTED }}>
                 Finalised on: <span className="font-semibold" style={{ color: TEXT }}>{data.finalDate}</span>
@@ -198,9 +191,8 @@ function HistoryDrawer({ period, data, onClose }: {
 // Approve modal
 function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
   empName: string; decision: Decision | null; finalScore: number;
-  onConfirm: (remarks: string) => void; onClose: () => void;
+  onConfirm: () => void; onClose: () => void;
 }) {
-  const [remarks, setRemarks] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
       <div className="bg-white rounded-xl shadow-2xl w-[480px] overflow-hidden">
@@ -210,25 +202,16 @@ function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
-            You are approving <strong>{empName}</strong>'s appraisal with the Manager's recommendation of{" "}
+            You are approving <strong>{empName}</strong>'s appraisal with the Superior's recommendation of{" "}
             <strong>{decision ?? "—"}</strong> and a Final Score of <strong>{finalScore.toFixed(1)}</strong>.
           </p>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>HR Remarks (optional)</label>
-            <textarea
-              value={remarks} onChange={e => setRemarks(e.target.value)} rows={3}
-              placeholder="Add any remarks to the appraisal record…"
-              className="w-full px-3 py-2 rounded-md text-[13px] outline-none resize-none"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            />
-          </div>
           <p className="text-[12px] p-3 rounded-md" style={{ backgroundColor: "#F8FAFC", color: MUTED }}>
             <strong>Important:</strong> Approving this record confirms the appraisal outcome. It does not automatically execute any promotion or salary increment — separate HR processes apply.
           </p>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: BORDER }}>
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
-          <button onClick={() => onConfirm(remarks)} className="px-4 py-2 rounded-md text-[13px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-md text-[13px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
             Approve
           </button>
         </div>
@@ -240,13 +223,13 @@ function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
 // Override and Approve modal
 function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
   empName: string; decision: Decision | null; finalScore: number;
-  onConfirm: (hrDecision: Decision, hrFinalScore: number, reason: string, remarks: string) => void;
+  onConfirm: (hrDecision: Decision, reason: string) => void;
   onClose: () => void;
 }) {
-  const [overrideScore,    setOverrideScore]    = useState(finalScore.toFixed(1));
-  const [overrideDecision, setOverrideDecision] = useState<Decision>(decision ?? "Salary Increment");
-  const [overrideReason,   setOverrideReason]   = useState("");
-  const [remarks,          setRemarks]          = useState("");
+  const alternativeDecisions = (["Promotion", "Salary Increment", "Both", "No Recommendation"] as Decision[])
+    .filter(option => option !== decision);
+  const [overrideDecision, setOverrideDecision] = useState<Decision>(alternativeDecisions[0] ?? "Salary Increment");
+  const [overrideReason, setOverrideReason] = useState("");
   const canSubmit = overrideReason.trim().length > 10;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
@@ -257,17 +240,14 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
-            The original Manager recommendation (<strong>{decision ?? "—"}</strong>, score <strong>{finalScore.toFixed(1)}</strong>) will be preserved in the record alongside the HR override.
+            The Superior recommendation (<strong>{decision ?? "—"}</strong>) will be preserved. HR may select a different final decision, but cannot change the Final Appraisal Score.
           </p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Override Final Score</label>
-              <input
-                type="number" step="0.1" min={0} max={100}
-                value={overrideScore} onChange={e => setOverrideScore(e.target.value)}
-                className="w-full px-3 py-2 rounded-md text-[13px] outline-none"
-                style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-              />
+              <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Final Appraisal Score</label>
+              <p className="px-3 py-2 rounded-md text-[13px] font-semibold" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}`, color: TEXT }}>
+                {finalScore.toFixed(1)} / 100
+              </p>
             </div>
             <div>
               <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Final Decision</label>
@@ -278,7 +258,7 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
                   className="w-full appearance-none px-3 pr-8 py-2 rounded-md text-[13px] outline-none"
                   style={{ border: `1px solid ${BORDER}`, color: TEXT }}
                 >
-                  {(["Promotion", "Salary Increment", "Both", "No Recommendation"] as Decision[]).map(o => (
+                  {alternativeDecisions.map(o => (
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
@@ -295,20 +275,11 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
               style={{ border: `1px solid ${BORDER}`, color: TEXT }}
             />
           </div>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>HR Remarks (optional)</label>
-            <textarea
-              value={remarks} onChange={e => setRemarks(e.target.value)} rows={2}
-              placeholder="Additional remarks for the record…"
-              className="w-full px-3 py-2 rounded-md text-[13px] outline-none resize-none"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            />
-          </div>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: BORDER }}>
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
           <button
-            onClick={() => canSubmit && onConfirm(overrideDecision, parseFloat(overrideScore), overrideReason, remarks)}
+            onClick={() => canSubmit && onConfirm(overrideDecision, overrideReason)}
             disabled={!canSubmit}
             className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
             style={{ backgroundColor: canSubmit ? AMBER : "#9CA3AF", cursor: canSubmit ? "pointer" : "not-allowed" }}
@@ -336,7 +307,7 @@ function ReturnModal({ empName, onConfirm, onClose }: {
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
-            The appraisal will be returned to the manager for revision. <strong>{empName}</strong>'s status will be updated to "Return for Revision".
+            The appraisal will be returned to the Superior for revision. <strong>{empName}</strong>'s status will be updated to "Returned".
           </p>
           <div>
             <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Reason for Return *</label>
@@ -381,6 +352,7 @@ export function HrAppraisals() {
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [showReturnModal,   setShowReturnModal]   = useState(false);
   const [showDistNote,      setShowDistNote]      = useState(true);
+  const [showAiInsight,     setShowAiInsight]     = useState(false);
   const [prevExpanded,      setPrevExpanded]      = useState(false);
   const [histDrawer,        setHistDrawer]        = useState<{ period: string; data: PeriodAppraisal } | null>(null);
 
@@ -399,7 +371,7 @@ export function HrAppraisals() {
   const meta = EMP_META[empId] ?? { department: "—", manager: "—" };
   const status = pd.status;
   const isActionable = isLivePeriod && status === "Pending Review";
-  const displayedFinalScore = pd.hrFinalScore ?? pd.finalScore;
+  const displayedFinalScore = pd.finalScore;
   const ss = STATUS_STYLE[status];
 
   function patch(updates: Partial<PeriodAppraisal>) {
@@ -407,23 +379,21 @@ export function HrAppraisals() {
     setRefreshKey(k => k + 1);
   }
 
-  function handleApprove(remarks: string) {
+  function handleApprove() {
     patch({
       status: "Approve",
       hrDecision: pd!.managerDecision,
-      hrRemarks: remarks,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     });
     setShowApproveModal(false);
   }
 
-  function handleOverride(hrDecision: Decision, hrFinalScore: number, reason: string, remarks: string) {
+  function handleOverride(hrDecision: Decision, reason: string) {
+    if (hrDecision === pd!.managerDecision) return;
     patch({
       status: "Override and Approve",
       hrDecision,
-      hrFinalScore,
       hrOverrideReason: reason,
-      hrRemarks: remarks,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     });
     setShowOverrideModal(false);
@@ -453,6 +423,10 @@ export function HrAppraisals() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
+            <button onClick={() => navigate("/performance/hr-appraisals")}
+              className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: BLUE }}>
+              <ArrowLeft size={14} /> Back to Appraisal Reviews
+            </button>
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>HR Appraisal Review</h1>
               <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ color: ss.color, backgroundColor: ss.bg }}>
@@ -463,19 +437,6 @@ export function HrAppraisals() {
               HR / Super Admin view · {emp.name} ({emp.staffId}) · {selectedPeriod}
               {pd.submittedDate ? ` · Submitted ${pd.submittedDate}` : ""}
             </p>
-          </div>
-          <div className="relative">
-            <select
-              value={selectedPeriod}
-              onChange={e => navigate(`/performance/hr-appraisals/${empId}?period=${encodeURIComponent(e.target.value)}`)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-md text-[13px] font-semibold outline-none bg-white"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            >
-              {PERIOD_OPTIONS.filter(p => emp.periods[p] || p === LIVE_PERIOD).map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
           </div>
         </div>
 
@@ -489,7 +450,6 @@ export function HrAppraisals() {
                 HR decision: <strong>{pd.hrDecision ?? "—"}</strong>. Final Score: <strong>{displayedFinalScore.toFixed(1)}</strong>.
                 {pd.finalDate ? ` Finalised ${pd.finalDate}.` : ""}
               </p>
-              {pd.hrRemarks && <p className="text-[12px] mt-1.5" style={{ color: TEXT }}>{pd.hrRemarks}</p>}
               {!isLivePeriod && <p className="text-[11px] mt-2" style={{ color: MUTED }}>Historical record — read only.</p>}
             </div>
           </div>
@@ -501,13 +461,12 @@ export function HrAppraisals() {
             <div>
               <p className="text-[14px] font-bold" style={{ color: AMBER }}>HR Override Applied</p>
               <p className="text-[13px] mt-0.5" style={{ color: TEXT }}>
-                Final Score adjusted to <strong>{displayedFinalScore.toFixed(1)}</strong>. HR decision: <strong>{pd.hrDecision ?? "—"}</strong>.
+                Final Score remains <strong>{displayedFinalScore.toFixed(1)}</strong>. HR decision: <strong>{pd.hrDecision ?? "—"}</strong>.
                 {pd.finalDate ? ` Finalised ${pd.finalDate}.` : ""}
               </p>
               {pd.hrOverrideReason && (
                 <p className="text-[12px] mt-1.5" style={{ color: TEXT }}><strong>Override reason:</strong> {pd.hrOverrideReason}</p>
               )}
-              {pd.hrRemarks && <p className="text-[12px] mt-1" style={{ color: TEXT }}>{pd.hrRemarks}</p>}
               <p className="text-[12px] mt-1.5" style={{ color: MUTED }}>
                 Manager's original recommendation (<strong>{pd.managerDecision ?? "—"}</strong>, score <strong>{pd.finalScore.toFixed(1)}</strong>) is preserved in the record.
               </p>
@@ -520,7 +479,7 @@ export function HrAppraisals() {
             <RotateCcw size={18} style={{ color: RED }} className="mt-0.5 shrink-0" />
             <div>
               <p className="text-[14px] font-bold" style={{ color: RED }}>Returned for Revision</p>
-              <p className="text-[13px] mt-0.5" style={{ color: TEXT }}>This appraisal has been returned to the manager for revision.</p>
+              <p className="text-[13px] mt-0.5" style={{ color: TEXT }}>This appraisal has been returned to the Superior for revision.</p>
               {pd.hrReturnReason && (
                 <p className="text-[12px] mt-2 p-3 rounded-md" style={{ backgroundColor: "white", color: TEXT, border: `1px solid #FCA5A5` }}>
                   <strong>Reason:</strong> {pd.hrReturnReason}
@@ -557,7 +516,7 @@ export function HrAppraisals() {
             </div>
             <div className="mt-4 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
               <button
-                onClick={() => navigate(`/staff-profile/${empId}`)}
+                onClick={() => navigate(`/staff-profile/${empId}?returnTo=hr-appraisals&period=${encodeURIComponent(selectedPeriod)}`)}
                 className="text-[12px] font-semibold hover:opacity-70 transition-opacity"
                 style={{ color: BLUE }}
               >
@@ -657,7 +616,7 @@ export function HrAppraisals() {
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr style={{ backgroundColor: "#F8FAFC" }}>
-                      {["Review Period", "Final Score", "Manager Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
+                      {["Review Period", "Final Score", "Superior Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
                         <th
                           key={h}
                           className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
@@ -682,7 +641,7 @@ export function HrAppraisals() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="font-bold" style={{ color: PURPLE }}>
-                              {(d.hrFinalScore ?? d.finalScore).toFixed(1)}
+                              {d.finalScore.toFixed(1)}
                             </span>
                             <span className="ml-1" style={{ color: MUTED }}>/100</span>
                           </td>
@@ -717,14 +676,14 @@ export function HrAppraisals() {
           </div>
         )}
 
-        {/* Manager Comments + AI Insight */}
+        {/* Superior Comments + AI Insight */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white rounded-lg p-5" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
-            <h2 className="text-[14px] font-bold mb-3" style={{ color: TEXT }}>Manager Comments</h2>
+            <h2 className="text-[14px] font-bold mb-3" style={{ color: TEXT }}>Superior Recommendation & Justification</h2>
             {pd.justification ? (
               <p className="text-[13px] leading-relaxed" style={{ color: TEXT }}>{pd.justification}</p>
             ) : (
-              <p className="text-[13px]" style={{ color: MUTED }}>No manager comments submitted.</p>
+              <p className="text-[13px]" style={{ color: MUTED }}>No Superior justification submitted.</p>
             )}
             <div className="mt-3 pt-3 border-t" style={{ borderColor: BORDER }}>
               {pd.managerDecision ? (
@@ -732,7 +691,7 @@ export function HrAppraisals() {
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>
                     {pd.managerDecision}
                   </span>
-                  <span className="text-[11px] ml-2" style={{ color: MUTED }}>Manager Recommendation</span>
+                  <span className="text-[11px] ml-2" style={{ color: MUTED }}>Superior Recommendation</span>
                 </>
               ) : (
                 <span className="text-[11px]" style={{ color: MUTED }}>No recommendation submitted.</span>
@@ -740,15 +699,8 @@ export function HrAppraisals() {
             </div>
           </div>
           <div className="bg-white rounded-lg p-5" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
-            <h2 className="text-[14px] font-bold mb-3" style={{ color: TEXT }}>AI Appraisal Insight</h2>
-            <div className="space-y-2.5 overflow-y-auto" style={{ maxHeight: 220 }}>
-              {Object.entries(aiInsight).map(([key, val]) => (
-                <div key={key}>
-                  <p className="text-[11px] font-bold" style={{ color: PURPLE }}>{key}</p>
-                  <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{val}</p>
-                </div>
-              ))}
-            </div>
+            <div className="flex items-center justify-between mb-3"><h2 className="text-[14px] font-bold" style={{ color: TEXT }}>AI Appraisal Insight</h2><button onClick={() => setShowAiInsight(true)} className="px-2.5 py-1 rounded text-[11px] font-semibold" style={{ color: PURPLE, backgroundColor: "#F5F3FF" }}>Generate AI Insight</button></div>
+            {showAiInsight ? <div className="space-y-2.5 overflow-y-auto" style={{ maxHeight: 220 }}><p className="text-[10px]" style={{ color: MUTED }}>Advisory only — HR remains responsible for the final decision.</p>{Object.entries(aiInsight).map(([key, val]) => <div key={key}><p className="text-[11px] font-bold" style={{ color: PURPLE }}>{key}</p><p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{val}</p></div>)}</div> : <p className="text-[12px]" style={{ color: MUTED }}>Generate an advisory summary from the appraisal record when needed.</p>}
           </div>
         </div>
 
@@ -815,7 +767,7 @@ export function HrAppraisals() {
                     <p className="text-[14px] font-bold" style={{ color: TEXT }}>Approve</p>
                   </div>
                   <p className="text-[12px] leading-relaxed mb-2" style={{ color: MUTED }}>
-                    Accept the Manager Recommendation as submitted. The appraisal will be finalised with the manager's decision and score.
+                    Accept the Superior Recommendation as submitted. The appraisal will be finalised with the Superior's decision and score.
                   </p>
                   <p className="text-[11px] font-semibold" style={{ color: GREEN }}>Action: Approve</p>
                 </div>
@@ -887,7 +839,7 @@ export function HrAppraisals() {
                     <p className="text-[14px] font-bold" style={{ color: TEXT }}>Return for Revision</p>
                   </div>
                   <p className="text-[12px] leading-relaxed mb-2" style={{ color: MUTED }}>
-                    Send the appraisal back to the Manager with a reason. The manager will be required to revise and resubmit.
+                    Send the appraisal back to the Superior with a reason. The Superior will be required to revise and resubmit.
                   </p>
                   <p className="text-[11px] font-semibold" style={{ color: RED }}>Requires Return Reason · Action: Return for Revision</p>
                 </div>

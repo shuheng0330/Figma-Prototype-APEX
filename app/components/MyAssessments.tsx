@@ -42,7 +42,7 @@ const SCORE_META: Record<
 
 type KpiLevel = "Company" | "Department" | "Individual";
 type CheckpointStatus =
-  "Reviewed" | "Draft" | "Upcoming" | "Submitted" | "Returned";
+  "Reviewed" | "Draft" | "Upcoming" | "Pending Review" | "Returned";
 type CheckpointId = "jan" | "feb" | "mar";
 
 interface ScoreDef {
@@ -71,6 +71,7 @@ interface CheckpointData {
   evidence: Record<string, EvidenceFile | null>;
   returnReason?: string;
   returnDate?: string;
+  overdue?: boolean;
 }
 interface CheckpointMeta {
   id: CheckpointId;
@@ -104,7 +105,7 @@ const CP_STATUS_STYLE: Record<
   Reviewed: { color: TEAL, bg: "#ECFDF9", label: "Reviewed" },
   Draft: { color: AMBER, bg: "#FEF9EC", label: "Draft" },
   Upcoming: { color: MUTED, bg: "#F2F4F7", label: "Upcoming" },
-  Submitted: { color: TEAL, bg: "#ECFDF9", label: "Submitted" },
+  "Pending Review": { color: TEAL, bg: "#ECFDF9", label: "Pending Review" },
   Returned: {
     color: RED,
     bg: "#FEF3F2",
@@ -139,7 +140,6 @@ const SCORE_KEYS: (keyof ScoreDef)[] = [
   "s3",
   "s2",
   "s1",
-  "s0",
 ];
 
 const KPI_ROWS: KpiRow[] = [
@@ -260,7 +260,7 @@ const INIT_CHECKPOINT_STATES: Record<
     },
   },
   feb: {
-    status: "Draft",
+    status: "Draft", overdue: true,
     scores: Object.fromEntries(
       KPI_ROWS.map((k) => [k.id, null]),
     ),
@@ -342,7 +342,7 @@ function ScoreSelector({
   value,
   onChange,
   readOnly,
-  minScore = 0,
+  minScore = 1,
 }: {
   value: number | null;
   onChange?: (v: number) => void;
@@ -427,7 +427,7 @@ function ScoringCriteriaDrawer({
             >
               Each KPI may use different achievement thresholds.
               Review these criteria before selecting your
-              Self-Assessment Score.
+              Self-Assessment Point.
             </p>
           </div>
           <button onClick={onClose} className="ml-3 shrink-0">
@@ -794,7 +794,7 @@ function KpiSubmitDialog({
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
             You are submitting your KPI Self-Assessment for{" "}
-            <strong>{checkpoint.label}</strong> to your Manager.
+            <strong>{checkpoint.label}</strong> to your Superior.
             After submission, you will not be able to edit it
             unless it is returned for revision.
           </p>
@@ -819,7 +819,7 @@ function KpiSubmitDialog({
                   ? `${evidenceCount} file${evidenceCount > 1 ? "s" : ""}`
                   : "None",
               ],
-              ["Submitting to", "Sales Manager"],
+              ["Submitting to", "Sales Manager (Superior)"],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -852,7 +852,7 @@ function KpiSubmitDialog({
             className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
             style={{ backgroundColor: TEAL }}
           >
-            Submit to Manager
+            Submit to Superior
           </button>
         </div>
       </div>
@@ -892,7 +892,7 @@ function AttitudeSubmitDialog({
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
             Your Annual Attitude Self-Assessment will be
-            submitted to your Manager for review. After
+            submitted to your Superior for review. After
             submission, you will not be able to edit it.
           </p>
           <div
@@ -910,7 +910,7 @@ function AttitudeSubmitDialog({
                 `${INIT_ATTITUDE.length} / ${INIT_ATTITUDE.length}`,
               ],
               ["Deadline", "20 Dec 2027"],
-              ["Submitting to", "Sales Manager"],
+              ["Submitting to", "Sales Manager (Superior)"],
             ].map(([label, value]) => (
               <div
                 key={label}
@@ -962,7 +962,7 @@ export function MyAssessments() {
   >(INIT_CHECKPOINT_STATES);
   const [attitudeRows, setAttitudeRows] =
     useState<AttitudeRow[]>(INIT_ATTITUDE);
-  const [attSubmitted, setAttSubmitted] = useState(false);
+  const [attStatus, setAttStatus] = useState<"Draft" | "Pending Review" | "Reviewed">("Draft");
   const [showKpiDialog, setShowKpiDialog] = useState(false);
   const [showAttDialog, setShowAttDialog] = useState(false);
   const [criteriaKpiId, setCriteriaId] = useState<
@@ -976,7 +976,7 @@ export function MyAssessments() {
   const currentState = cpStates[selectedCpId];
   const isReadOnly =
     currentState.status === "Reviewed" ||
-    currentState.status === "Submitted";
+    currentState.status === "Pending Review";
   const isUpcoming = currentState.status === "Upcoming";
   const isEditable =
     currentState.status === "Draft" ||
@@ -1058,12 +1058,12 @@ export function MyAssessments() {
   }
 
   function handleKpiSubmit() {
-    updateCpStatus("Submitted");
+    updateCpStatus("Pending Review");
     setShowKpiDialog(false);
   }
 
   function handleAttSubmit() {
-    setAttSubmitted(true);
+    setAttStatus("Pending Review");
     setShowAttDialog(false);
   }
 
@@ -1076,7 +1076,7 @@ export function MyAssessments() {
   }
 
   function handleResubmit() {
-    updateCpStatus("Submitted", {
+    updateCpStatus("Pending Review", {
       returnReason: undefined,
       returnDate: undefined,
     });
@@ -1166,8 +1166,8 @@ export function MyAssessments() {
                     }}
                   >
                     {CHECKPOINTS.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
+                      <option key={c.id} value={c.id} disabled={cpStates[c.id].status === "Upcoming"}>
+                        {c.label}{cpStates[c.id].status === "Upcoming" ? " — unavailable" : ""}
                       </option>
                     ))}
                   </select>
@@ -1193,6 +1193,7 @@ export function MyAssessments() {
                   </span>
                   <span>Checkpoint: {currentCp.date}</span>
                   <span>Deadline: {currentCp.deadline}</span>
+                  {currentState.overdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}
                   <span>KPIs: {KPI_ROWS.length}</span>
                 </div>
               </div>
@@ -1238,7 +1239,7 @@ export function MyAssessments() {
                   size={13}
                   style={{ color: AMBER }}
                 />
-                Complete the Self-Assessment Score for all KPIs
+                Complete the Self-Assessment Point for all KPIs
                 before submitting.
               </p>
             )}
@@ -1298,7 +1299,7 @@ export function MyAssessments() {
             )}
 
             {/* Submitted success banner */}
-            {currentState.status === "Submitted" && (
+            {currentState.status === "Pending Review" && (
               <div className="space-y-2">
                 <div
                   className="flex items-start gap-3 p-4 rounded-lg"
@@ -1365,7 +1366,7 @@ export function MyAssessments() {
                     className="text-[12px] mt-0.5"
                     style={{ color: MUTED }}
                   >
-                    Select a Self-Assessment Score from 0–5
+                    Select a Self-Assessment Point from 1–5
                     based on the scoring criteria defined for
                     each KPI. Add a supporting comment or
                     evidence where appropriate.
@@ -1386,7 +1387,7 @@ export function MyAssessments() {
                         "KPI Name",
                         "Target",
                         "Scoring Definition",
-                        "Self-Assessment Score",
+                        "Self-Assessment Point",
                         "Comment / Evidence",
                       ].map((h) => (
                         <th
@@ -1460,7 +1461,7 @@ export function MyAssessments() {
                               </button>
                             )}
                           </td>
-                          {/* Self-Assessment Score */}
+                          {/* Self-Assessment Point */}
                           <td
                             className="px-4 py-4"
                             style={{ minWidth: 200 }}
@@ -1599,17 +1600,17 @@ export function MyAssessments() {
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{
-                    color: attSubmitted ? TEAL : AMBER,
-                    backgroundColor: attSubmitted
+                    color: attStatus === "Draft" ? AMBER : TEAL,
+                    backgroundColor: attStatus === "Draft"
                       ? "#ECFDF9"
                       : "#FEF9EC",
                   }}
                 >
-                  {attSubmitted ? "Submitted" : "Draft"}
+                  {attStatus}
                 </span>
                 <span>Deadline: 20 Dec 2027</span>
               </div>
-              {!attSubmitted && (
+              {attStatus === "Draft" && (
                 <div className="flex gap-2">
                   <button
                     className="px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
@@ -1642,7 +1643,7 @@ export function MyAssessments() {
             </p>
 
             {/* Attitude submit block reason */}
-            {!attSubmitted && !attAllScored && (
+            {attStatus === "Draft" && !attAllScored && (
               <p
                 className="text-[12px] flex items-center gap-1.5"
                 style={{ color: MUTED }}
@@ -1651,13 +1652,13 @@ export function MyAssessments() {
                   size={13}
                   style={{ color: AMBER }}
                 />
-                Complete the Self-Assessment Score for all
+                Complete the Self-Assessment Point for all
                 criteria before submitting.
               </p>
             )}
 
             {/* Submitted banner */}
-            {attSubmitted && (
+            {attStatus === "Pending Review" && (
               <div
                 className="flex items-start gap-3 p-4 rounded-lg"
                 style={{
@@ -1745,7 +1746,7 @@ export function MyAssessments() {
                         </p>
                       </div>
                       <div className="shrink-0">
-                        {attSubmitted ? (
+                        {attStatus !== "Draft" ? (
                           <div className="text-right">
                             {r.score !== null ? (
                               <>
@@ -1793,7 +1794,7 @@ export function MyAssessments() {
                         )}
                       </div>
                     </div>
-                    {!attSubmitted && (
+                    {attStatus === "Draft" && (
                       <textarea
                         value={r.comment}
                         onChange={(e) =>
@@ -1817,7 +1818,7 @@ export function MyAssessments() {
                         }}
                       />
                     )}
-                    {attSubmitted && r.comment && (
+                    {attStatus !== "Draft" && r.comment && (
                       <p
                         className="mt-2 text-[12px]"
                         style={{ color: MUTED }}

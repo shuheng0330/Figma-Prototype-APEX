@@ -22,7 +22,9 @@ const LIVE_PERIOD = "2027 Annual KPI Review";
 type ConfigStatus    = "Draft" | "Published";
 type CriterionStatus = "Active" | "Inactive";
 type EvalFormat      = "Manager" | "Sales" | "Others / Non-Sales";
-type CriterionType   = "Shared Core Value" | "Manager-Specific Criterion";
+type CriterionType   = "Shared Core Value" | "Manager-Specific Criterion" | "Sales-Specific Criterion" | "Non-Sales-Specific Criterion";
+type CriterionSection = "shared" | "manager" | "sales" | "nonSales";
+type CriterionConfigKey = "sharedCriteria" | "managerCriteria" | "salesCriteria" | "nonSalesCriteria";
 type PeriodStatus    = "Upcoming" | "Open" | "Closed";
 
 interface RatingLevel {
@@ -40,6 +42,8 @@ interface PeriodConfig {
   ratingScale: RatingLevel[];
   sharedCriteria: Criterion[];
   managerCriteria: Criterion[];
+  salesCriteria: Criterion[];
+  nonSalesCriteria: Criterion[];
   roleAssignments: RoleRow[];
 }
 
@@ -91,6 +95,11 @@ const BASE_MANAGER: Criterion[] = [
   { id:"mc6", order:6, name:"Win-Win Mentality",             description:"Pursues outcomes that benefit both the organisation and its key stakeholders.",          type:"Manager-Specific Criterion", required:true, status:"Active" },
 ];
 
+// These begin empty so prototype users can validate the separate Sales and
+// Non-Sales criterion workflows without introducing assumed business criteria.
+const BASE_SALES: Criterion[] = [];
+const BASE_NON_SALES: Criterion[] = [];
+
 const BASE_ROLES: RoleRow[] = [
   { id:"r1", department:"Retail Banking", role:"Branch Manager",          format:"Manager",            status:"Active" },
   { id:"r2", department:"Retail Banking", role:"Head of Department",      format:"Manager",            status:"Active" },
@@ -105,6 +114,8 @@ function makeConfig(configStatus: ConfigStatus, lastUpdated: string): PeriodConf
     ratingScale:     BASE_RATING.map(r => ({ ...r })),
     sharedCriteria:  BASE_SHARED.map(c => ({ ...c })),
     managerCriteria: BASE_MANAGER.map(c => ({ ...c })),
+    salesCriteria:   BASE_SALES.map(c => ({ ...c })),
+    nonSalesCriteria: BASE_NON_SALES.map(c => ({ ...c })),
     roleAssignments: BASE_ROLES.map(r => ({ ...r })),
   };
 }
@@ -118,6 +129,41 @@ const INITIAL_CONFIGS: Record<string, PeriodConfig> = {
 
 const FORMAT_LABELS: EvalFormat[] = ["Manager", "Sales", "Others / Non-Sales"];
 const EVAL_FORMATS: EvalFormat[]  = ["Manager", "Sales", "Others / Non-Sales"];
+
+const SECTION_CONFIG_KEY: Record<CriterionSection, CriterionConfigKey> = {
+  shared: "sharedCriteria",
+  manager: "managerCriteria",
+  sales: "salesCriteria",
+  nonSales: "nonSalesCriteria",
+};
+const SECTION_TYPE: Record<CriterionSection, CriterionType> = {
+  shared: "Shared Core Value",
+  manager: "Manager-Specific Criterion",
+  sales: "Sales-Specific Criterion",
+  nonSales: "Non-Sales-Specific Criterion",
+};
+const SECTION_GROUP_LABEL: Record<CriterionSection, string> = {
+  shared: "Shared Core Values",
+  manager: "Additional Manager Criteria",
+  sales: "Additional Sales Criteria",
+  nonSales: "Additional Non-Sales Criteria",
+};
+const SECTION_APPLIES_TO: Record<CriterionSection, string> = {
+  shared: "Manager, Sales, Others / Non-Sales",
+  manager: "Manager only",
+  sales: "Sales only",
+  nonSales: "Others / Non-Sales only",
+};
+
+function additionalCriteriaForFormat(config: PeriodConfig, format: EvalFormat) {
+  if (format === "Manager") return config.managerCriteria;
+  if (format === "Sales") return config.salesCriteria;
+  return config.nonSalesCriteria;
+}
+
+function criteriaForFormat(config: PeriodConfig, format: EvalFormat) {
+  return [...config.sharedCriteria, ...additionalCriteriaForFormat(config, format)];
+}
 
 // ── Small shared UI ───────────────────────────────────────────────────────────
 function Pill({ label, color, bg }: { label: string; color: string; bg: string }) {
@@ -151,7 +197,7 @@ function SectionHeader({ title, helper, children }: { title: string; helper?: st
 // ── Criterion Drawer ──────────────────────────────────────────────────────────
 interface DrawerState {
   mode: "view" | "edit" | "create";
-  section: "shared" | "manager";
+  section: CriterionSection;
   criterion: Criterion | null;
 }
 interface CriterionForm {
@@ -170,7 +216,7 @@ function CriterionDrawer({
   const isCreate  = state.mode === "create";
   const isReadOnly = state.mode === "view" || !isEditable;
 
-  const defaultType: CriterionType = state.section === "manager" ? "Manager-Specific Criterion" : "Shared Core Value";
+  const defaultType = SECTION_TYPE[state.section];
 
   const [form, setForm] = useState<CriterionForm>({
     name:        state.criterion?.name        ?? "",
@@ -181,9 +227,8 @@ function CriterionDrawer({
     status:      state.criterion?.status      ?? "Active",
   });
 
-  const appliesTo = form.type === "Shared Core Value"
-    ? "Manager, Sales, Others / Non-Sales"
-    : "Manager";
+  const groupLabel = SECTION_GROUP_LABEL[state.section];
+  const appliesTo = SECTION_APPLIES_TO[state.section];
 
   const title = isCreate ? "Add Criterion" : isReadOnly ? "View Criterion" : "Edit Criterion";
 
@@ -196,7 +241,7 @@ function CriterionDrawer({
           <div>
             <h3 className="text-[15px] font-bold" style={{ color: TEXT }}>{title}</h3>
             <p className="text-[11px] mt-0.5" style={{ color: MUTED }}>
-              {form.type === "Shared Core Value" ? "Shared across all three evaluation formats" : "Applies to the Manager format only"}
+              {groupLabel} · {appliesTo}
             </p>
           </div>
           <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
@@ -227,21 +272,13 @@ function CriterionDrawer({
             }
           </div>
 
-          {/* Criterion Type */}
+          {/* Criteria Group */}
           <div>
-            <label className="block text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>Criterion Type</label>
-            {!isCreate || isReadOnly
-              ? <Pill label={form.type} color={form.type === "Shared Core Value" ? TEAL : BLUE} bg={form.type === "Shared Core Value" ? "#ECFDF9" : "#EEF3FC"} />
-              : (
-                <select value={form.type}
-                  onChange={e => setForm(f => ({ ...f, type: e.target.value as CriterionType }))}
-                  className="w-full px-3 py-2 rounded-md text-[13px] outline-none border"
-                  style={{ borderColor: BORDER, color: TEXT }}>
-                  <option>Shared Core Value</option>
-                  <option>Manager-Specific Criterion</option>
-                </select>
-              )
-            }
+            <label className="block text-[12px] font-semibold mb-1.5" style={{ color: TEXT }}>Criteria Group</label>
+            <Pill label={groupLabel} color={state.section === "shared" ? TEAL : BLUE} bg={state.section === "shared" ? "#ECFDF9" : "#EEF3FC"} />
+            <p className="text-[11px] mt-1.5" style={{ color: MUTED }}>
+              This group is fixed by where the criterion is added, so it cannot appear in another format.
+            </p>
           </div>
 
           {/* Applies To (read-only) */}
@@ -376,12 +413,14 @@ function PreviewDrawer({ config, onClose }: { config: PeriodConfig; onClose: () 
   const [perspective, setPerspective] = useState<"Employee Self-Assessment" | "Superior Evaluation">("Employee Self-Assessment");
   const [scores, setScores] = useState<Record<string, number>>({});
 
-  const sharedActive  = config.sharedCriteria.filter(c => c.status === "Active");
-  const managerActive = config.managerCriteria.filter(c => c.status === "Active");
-  const criteria = format === "Manager" ? [...sharedActive, ...managerActive] : sharedActive;
-  const sections: { label: string; items: Criterion[] }[] = format === "Manager"
-    ? [{ label: "Shared Core Values", items: sharedActive }, { label: "Additional Manager Criteria", items: managerActive }]
-    : [{ label: "Shared Core Values", items: sharedActive }];
+  const sharedActive = config.sharedCriteria.filter(c => c.status === "Active");
+  const additionalActive = additionalCriteriaForFormat(config, format).filter(c => c.status === "Active");
+  const additionalSection = format === "Manager" ? "manager" : format === "Sales" ? "sales" : "nonSales";
+  const criteria = [...sharedActive, ...additionalActive];
+  const sections: { label: string; items: Criterion[] }[] = [
+    { label: "Shared Core Values", items: sharedActive },
+    { label: SECTION_GROUP_LABEL[additionalSection], items: additionalActive },
+  ].filter(section => section.items.length > 0);
 
   function ScoreBtn({ cId, val }: { cId: string; val: number }) {
     const sel = scores[cId] === val;
@@ -696,7 +735,7 @@ export function AttitudeSetup() {
   }
 
   // Criteria helpers
-  function reorder(section: "sharedCriteria" | "managerCriteria", id: string, dir: "up" | "down") {
+  function reorder(section: CriterionConfigKey, id: string, dir: "up" | "down") {
     mutatePeriod(p => {
       const list = [...p[section]].sort((a, b) => a.order - b.order);
       const idx  = list.findIndex(c => c.id === id);
@@ -709,7 +748,7 @@ export function AttitudeSetup() {
     });
   }
 
-  function toggleStatus(section: "sharedCriteria" | "managerCriteria", id: string) {
+  function toggleStatus(section: CriterionConfigKey, id: string) {
     mutatePeriod(p => ({
       ...p,
       [section]: p[section].map(c =>
@@ -718,15 +757,15 @@ export function AttitudeSetup() {
     }));
   }
 
-  function saveCriterion(section: "sharedCriteria" | "managerCriteria", form: CriterionForm) {
+  function saveCriterion(section: CriterionConfigKey, form: CriterionForm) {
     if (!drawerState) return;
     mutatePeriod(p => {
       if (drawerState.mode === "create") {
         const maxOrder = Math.max(0, ...p[section].map(c => c.order));
         const newC: Criterion = {
-          id: `${section === "sharedCriteria" ? "sc" : "mc"}${Date.now()}`,
+          id: `${({ sharedCriteria: "sc", managerCriteria: "mc", salesCriteria: "slc", nonSalesCriteria: "nsc" } as const)[section]}${Date.now()}`,
           order: maxOrder + 1, name: form.name, description: form.description,
-          type: form.type, required: form.required, status: form.status,
+          type: SECTION_TYPE[drawerState.section], required: form.required, status: form.status,
         };
         return { ...p, [section]: [...p[section], newC] };
       } else {
@@ -751,7 +790,7 @@ export function AttitudeSetup() {
     }));
   }
 
-  const sectionKey = drawerState?.section === "manager" ? "managerCriteria" : "sharedCriteria";
+  const sectionKey = drawerState ? SECTION_CONFIG_KEY[drawerState.section] : "sharedCriteria";
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -766,46 +805,11 @@ export function AttitudeSetup() {
               <div>
                 <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Attitude Evaluation Setup</h1>
                 <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-                  Configure attitude evaluation forms, criteria and role assignments.
+                  Configure the reusable attitude evaluation criteria, rating scale, evaluation formats, and role assignments.
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap shrink-0">
-                {/* Period selector */}
-                <div ref={periodRef} className="relative">
-                  <button onClick={() => setShowPeriodDd(o => !o)}
-                    className="flex items-center gap-2 px-3 py-2 bg-white rounded-md text-[13px]"
-                    style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-                    <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Period</span>
-                    <span className="font-semibold" style={{ color: BLUE }}>{period.split(" ")[0]}</span>
-                    <span style={{ color: MUTED }}>Annual KPI Review</span>
-                    <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
-                    <ChevronDown size={13} style={{ color: MUTED }} />
-                  </button>
-                  {showPeriodDd && (
-                    <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
-                      style={{ minWidth: 260, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                      {PERIOD_OPTIONS.map(p => {
-                        const ps = PERIOD_STATUS[p] ?? "Closed";
-                        const pss = PERIOD_STATUS_STYLE[ps];
-                        return (
-                          <button key={p} onClick={() => { setPeriod(p); setShowPeriodDd(false); setEditingRating(null); }}
-                            className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] flex items-center justify-between"
-                            style={{ color: period === p ? BLUE : TEXT, fontWeight: period === p ? 600 : 400 }}>
-                            {p}
-                            <Pill label={ps} color={pss.color} bg={pss.bg} />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
                 {/* Action buttons */}
-                <button onClick={() => setShowPreview(true)}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
-                  style={{ color: TEXT, borderColor: BORDER }}>
-                  <Eye size={14} /> Preview Forms
-                </button>
                 {isEditable && (
                   <>
                     <button onClick={handleSaveDraft}
@@ -829,10 +833,6 @@ export function AttitudeSetup() {
                 Configuration:
                 <Pill label={cfg.configStatus} color={cssSty.color} bg={cssSty.bg} />
               </div>
-              <div className="flex items-center gap-2 text-[12px]" style={{ color: MUTED }}>
-                Review Period:
-                <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
-              </div>
               <div className="text-[12px]" style={{ color: MUTED }}>
                 Last Updated: <span className="font-medium" style={{ color: TEXT }}>{cfg.lastUpdated}</span>
               </div>
@@ -847,28 +847,9 @@ export function AttitudeSetup() {
             )}
 
             {/* Info / lock banners */}
-            {isEditable && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                <Info size={13} className="mt-0.5 shrink-0" />
-                Changes apply to this Annual KPI Review Period only. Once the Review Period opens,
-                this configuration becomes read-only.
-              </div>
-            )}
-            {pStatus === "Open" && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#F2F4F7", color: MUTED }}>
-                <Lock size={13} className="mt-0.5 shrink-0" />
-                This configuration is locked because the Annual KPI Review Period has opened.
-              </div>
-            )}
-            {pStatus === "Closed" && (
-              <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]"
-                style={{ backgroundColor: "#F2F4F7", color: MUTED }}>
-                <Lock size={13} className="mt-0.5 shrink-0" />
-                This is a historical read-only view of the configuration used for this closed period.
-              </div>
-            )}
+            <div className="flex items-start gap-2 mt-3 p-3 rounded-md text-[12px]" style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
+              <Info size={13} className="mt-0.5 shrink-0" /> Published configurations are saved for each Review Period, so future changes will not affect existing evaluations.
+            </div>
           </div>
         </SectionCard>
 
@@ -876,14 +857,14 @@ export function AttitudeSetup() {
         <SectionCard>
           <SectionHeader
             title="Rating Scale"
-            helper="This rating scale is shared across all Attitude Evaluation formats. Numeric scores are fixed — you may edit labels and descriptions."
+            helper="This rating scale is shared across all Attitude Evaluation formats. Numeric points are fixed — you may edit labels and descriptions."
           />
           <div className="p-5">
             <div className="rounded-lg overflow-hidden border" style={{ borderColor: BORDER }}>
               <table className="w-full text-[12px]">
                 <thead>
                   <tr style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
-                    {["Score", "Label", "Description", ...(isEditable ? ["Edit"] : [])].map(h => (
+                    {["Point", "Label", "Description", ...(isEditable ? ["Edit"] : [])].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide"
                         style={{ color: MUTED }}>{h}</th>
                     ))}
@@ -943,7 +924,7 @@ export function AttitudeSetup() {
             </div>
             <p className="text-[11px] mt-3 flex items-start gap-1.5" style={{ color: AMBER }}>
               <Info size={11} className="mt-0.5 shrink-0" />
-              Attitude Evaluation Score calculation is To Be Confirmed with TBM.
+              The official Attitude Evaluation Score is calculated from the Superior's assessment points.
             </p>
           </div>
         </SectionCard>
@@ -952,7 +933,7 @@ export function AttitudeSetup() {
         <SectionCard>
           <SectionHeader
             title="Evaluation Formats"
-            helper="Each format specifies which criteria are used when evaluating employees in that group."
+            helper="Each format includes Shared Core Values plus only the additional criteria assigned to that employee group."
           />
           <div className="px-5 pt-4">
             {/* Format Tabs */}
@@ -964,18 +945,10 @@ export function AttitudeSetup() {
                     ? { color: BLUE, borderColor: BLUE }
                     : { color: MUTED, borderColor: "transparent" }}>
                   {tab}
-                  {tab === "Manager" && (
-                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                      {cfg.sharedCriteria.filter(c => c.status === "Active").length + cfg.managerCriteria.filter(c => c.status === "Active").length}
-                    </span>
-                  )}
-                  {tab !== "Manager" && (
-                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold"
-                      style={{ backgroundColor: "#F2F4F7", color: MUTED }}>
-                      {cfg.sharedCriteria.filter(c => c.status === "Active").length}
-                    </span>
-                  )}
+                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full font-bold"
+                    style={tab === "Manager" ? { backgroundColor: "#EEF3FC", color: BLUE } : { backgroundColor: "#F2F4F7", color: MUTED }}>
+                    {criteriaForFormat(cfg, tab).filter(c => c.status === "Active").length}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1010,13 +983,34 @@ export function AttitudeSetup() {
                 />
               )}
 
-              {(formatTab === "Sales" || formatTab === "Others / Non-Sales") && (
-                <div className="py-4 px-4 rounded-lg text-center" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                  <p className="text-[12px]" style={{ color: MUTED }}>
-                    The <span className="font-semibold" style={{ color: TEXT }}>{formatTab}</span> format uses the 10 Shared Core Values above.
-                    No additional criteria apply.
-                  </p>
-                </div>
+              {formatTab === "Sales" && (
+                <CriteriaTable
+                  title="Additional Sales Criteria"
+                  helper="These criteria apply only to employees assigned to the Sales format."
+                  criteria={cfg.salesCriteria}
+                  isEditable={isEditable}
+                  addLabel="Add Sales Criterion"
+                  onView={c => setDrawerState({ mode: "view", section: "sales", criterion: c })}
+                  onEdit={c => setDrawerState({ mode: "edit", section: "sales", criterion: c })}
+                  onReorder={(id, dir) => reorder("salesCriteria", id, dir)}
+                  onToggleStatus={id => toggleStatus("salesCriteria", id)}
+                  onAdd={() => setDrawerState({ mode: "create", section: "sales", criterion: null })}
+                />
+              )}
+
+              {formatTab === "Others / Non-Sales" && (
+                <CriteriaTable
+                  title="Additional Non-Sales Criteria"
+                  helper="These criteria apply only to employees assigned to the Others / Non-Sales format."
+                  criteria={cfg.nonSalesCriteria}
+                  isEditable={isEditable}
+                  addLabel="Add Non-Sales Criterion"
+                  onView={c => setDrawerState({ mode: "view", section: "nonSales", criterion: c })}
+                  onEdit={c => setDrawerState({ mode: "edit", section: "nonSales", criterion: c })}
+                  onReorder={(id, dir) => reorder("nonSalesCriteria", id, dir)}
+                  onToggleStatus={id => toggleStatus("nonSalesCriteria", id)}
+                  onAdd={() => setDrawerState({ mode: "create", section: "nonSales", criterion: null })}
+                />
               )}
             </div>
           </div>
@@ -1103,9 +1097,6 @@ export function AttitudeSetup() {
       )}
       {showPublish && (
         <PublishDialog period={period} onClose={() => setShowPublish(false)} onConfirm={handlePublish} />
-      )}
-      {showPreview && (
-        <PreviewDrawer config={cfg} onClose={() => setShowPreview(false)} />
       )}
     </div>
   );

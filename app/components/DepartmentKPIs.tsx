@@ -21,7 +21,19 @@ type DeptKpiStatus = "Draft" | "Published";
 type PeriodStatus  = "Upcoming" | "Open" | "Closed";
 
 interface ScoreDef {
-  s5: string; s4: string; s3: string; s2: string; s1: string; s0: string;
+  s5: string; s4: string; s3: string; s2: string; s1: string;
+}
+interface KpiVersion {
+  version: number;
+  revisedOn?: string;
+  revisedBy?: string;
+  perspective: string;
+  kra: string;
+  name: string;
+  target: string;
+  weightage: number;
+  scoreDef: ScoreDef;
+  revisionReason?: string;
 }
 interface DeptKpiRow {
   id: string;
@@ -32,10 +44,17 @@ interface DeptKpiRow {
   weightage: number;
   status: DeptKpiStatus;
   scoreDef: ScoreDef;
+  publishedOn?: string;
+  overdue?: boolean;
+  version?: number;
+  revisedOn?: string;
+  revisedBy?: string;
+  revisionReason?: string;
+  previousVersions?: KpiVersion[];
 }
 
-const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "", s0: "" };
-const SCORE_KEYS: (keyof ScoreDef)[] = ["s5", "s4", "s3", "s2", "s1", "s0"];
+const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "" };
+const SCORE_KEYS: (keyof ScoreDef)[] = ["s5", "s4", "s3", "s2", "s1"];
 
 const KPI_STATUS_STYLE: Record<DeptKpiStatus, { color: string; bg: string }> = {
   "Draft":     { color: "#374151", bg: "#F3F4F6" },
@@ -49,11 +68,11 @@ const PERIOD_STATUS_STYLE: Record<PeriodStatus, { color: string; bg: string; lab
 };
 
 // ── Per-period configuration ──────────────────────────────────────────────────
-const PERIOD_CONFIG: Record<string, { status: PeriodStatus; maxAllocation: number }> = {
-  "2027 Annual KPI Review": { status: "Upcoming", maxAllocation: 25 },
-  "2026 Annual KPI Review": { status: "Open",     maxAllocation: 25 },
-  "2025 Annual KPI Review": { status: "Closed",   maxAllocation: 20 },
-  "2024 Annual KPI Review": { status: "Closed",   maxAllocation: 20 },
+const PERIOD_CONFIG: Record<string, { status: PeriodStatus; maxAllocation: number; kpiSetupDeadline: string }> = {
+  "2027 Annual KPI Review": { status: "Upcoming", maxAllocation: 25, kpiSetupDeadline: "2027-01-15" },
+  "2026 Annual KPI Review": { status: "Open",     maxAllocation: 25, kpiSetupDeadline: "2026-01-15" },
+  "2025 Annual KPI Review": { status: "Closed",   maxAllocation: 20, kpiSetupDeadline: "2025-01-15" },
+  "2024 Annual KPI Review": { status: "Closed",   maxAllocation: 20, kpiSetupDeadline: "2024-01-15" },
 };
 
 const PERSPECTIVES = ["Financial", "Customer", "Internal Process", "Learning & Growth"];
@@ -76,7 +95,6 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Achieves RM 85,000–RM 89,999 per month",
         s2: "Achieves RM 70,000–RM 84,999 per month",
         s1: "Achieves RM 55,000–RM 69,999 per month",
-        s0: "Achieves less than RM 55,000 per month",
       },
     },
     {
@@ -88,33 +106,30 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Average satisfaction score 4.2–4.49",
         s2: "Average satisfaction score 3.8–4.19",
         s1: "Average satisfaction score 3.2–3.79",
-        s0: "Average satisfaction score below 3.2",
       },
     },
   ],
   "2026 Annual KPI Review": [
     {
       id: "d26-1", perspective: "Financial", kra: "Sales Performance",
-      name: "Monthly Sales Achievement", target: "RM 80,000 / month", weightage: 15, status: "Published",
+      name: "Monthly Sales Achievement", target: "RM 80,000 / month", weightage: 15, status: "Published", publishedOn: "2026-01-17", overdue: true, version: 1,
       scoreDef: {
         s5: "Achieves RM 90,000 or more per month",
         s4: "Achieves RM 85,000–RM 89,999 per month",
         s3: "Achieves RM 80,000–RM 84,999 per month",
         s2: "Achieves RM 65,000–RM 79,999 per month",
         s1: "Achieves RM 50,000–RM 64,999 per month",
-        s0: "Achieves less than RM 50,000 per month",
       },
     },
     {
       id: "d26-2", perspective: "Financial", kra: "Sales Performance",
-      name: "Product Coverage Rate", target: "≥ 80% product range", weightage: 10, status: "Published",
+      name: "Product Coverage Rate", target: "≥ 80% product range", weightage: 10, status: "Published", publishedOn: "2026-01-14", overdue: false, version: 1,
       scoreDef: {
         s5: "Covers 95% or more of the product range",
         s4: "Covers 90%–94% of the product range",
         s3: "Covers 80%–89% of the product range",
         s2: "Covers 70%–79% of the product range",
         s1: "Covers 50%–69% of the product range",
-        s0: "Covers less than 50% of the product range",
       },
     },
   ],
@@ -128,7 +143,6 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Achieves RM 75,000–RM 79,999 per month",
         s2: "Achieves RM 60,000–RM 74,999 per month",
         s1: "Achieves RM 45,000–RM 59,999 per month",
-        s0: "Achieves less than RM 45,000 per month",
       },
     },
     {
@@ -140,7 +154,6 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Average satisfaction score 4.0–4.29",
         s2: "Average satisfaction score 3.5–3.99",
         s1: "Average satisfaction score 3.0–3.49",
-        s0: "Average satisfaction score below 3.0",
       },
     },
   ],
@@ -154,7 +167,6 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Achieves RM 70,000–RM 74,999 per month",
         s2: "Achieves RM 58,000–RM 69,999 per month",
         s1: "Achieves RM 45,000–RM 57,999 per month",
-        s0: "Achieves less than RM 45,000 per month",
       },
     },
     {
@@ -166,7 +178,6 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
         s3: "Cross-sell rate 25%–29%",
         s2: "Cross-sell rate 18%–24%",
         s1: "Cross-sell rate 10%–17%",
-        s0: "Cross-sell rate below 10%",
       },
     },
   ],
@@ -222,7 +233,6 @@ function ScoringGuideModal({ onClose }: { onClose: () => void }) {
     { score: "3", label: "Meets Expectations",            desc: "Performance fully met the defined target." },
     { score: "2", label: "Partially Meets Expectations",  desc: "Performance partially met the target; improvement is needed." },
     { score: "1", label: "Needs Significant Improvement", desc: "Performance fell significantly short of the target." },
-    { score: "0", label: "Not Achieved",                  desc: "Target was not achieved." },
   ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
@@ -257,16 +267,66 @@ function ScoringGuideModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Version History ───────────────────────────────────────────────────────────
+function VersionHistoryModal({ kpi, onClose }: { kpi: DeptKpiRow; onClose: () => void }) {
+  const versions = kpi.previousVersions ?? [];
+  const [selectedIndex, setSelectedIndex] = useState(versions.length - 1);
+  const selected = versions[selectedIndex];
+  const [showAll, setShowAll] = useState(false);
+  const current: KpiVersion = {
+    version: kpi.version ?? 1, perspective: kpi.perspective, kra: kpi.kra, name: kpi.name,
+    target: kpi.target, weightage: kpi.weightage, scoreDef: kpi.scoreDef,
+    revisedOn: kpi.revisedOn, revisedBy: kpi.revisedBy, revisionReason: kpi.revisionReason,
+  };
+  const fields = [
+    ["Perspective", selected?.perspective, current.perspective], ["KRA", selected?.kra, current.kra],
+    ["KPI Name", selected?.name, current.name], ["Target", selected?.target, current.target],
+    ["Weightage", selected ? `${selected.weightage}%` : "", `${current.weightage}%`],
+    ...SCORE_KEYS.map((key, i) => [`Point ${5 - i}`, selected?.scoreDef[key], current.scoreDef[key]]),
+  ] as [string, string | undefined, string][];
+  const visibleFields = showAll ? fields : fields.filter(([, before, after]) => before !== after);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-6" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: BORDER }}>
+          <div><h2 className="text-[16px] font-bold" style={{ color: TEXT }}>Version History</h2><p className="text-[11px]" style={{ color: MUTED }}>Department KPI revision audit</p></div>
+          <button onClick={onClose}><X size={18} style={{ color: MUTED }} /></button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          <div className="rounded-lg p-4" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
+            <p className="text-[13px] font-bold" style={{ color: TEXT }}>Version {current.version} — Current</p>
+            <p className="text-[12px] mt-1" style={{ color: MUTED }}>Revised on: {current.revisedOn ?? "—"} · Revised by: {current.revisedBy ?? "Manager / HOD"}</p>
+            <p className="text-[12px] mt-2"><span className="font-semibold" style={{ color: TEXT }}>Revision Reason: </span><span style={{ color: MUTED }}>{current.revisionReason ?? "—"}</span></p>
+          </div>
+          {selected && <>
+            <div className="flex items-center justify-between gap-3"><p className="text-[12px] font-semibold" style={{ color: TEXT }}>Comparing Version {selected.version} with Version {current.version}</p><button onClick={() => setShowAll(value => !value)} className="text-[12px] font-semibold" style={{ color: BLUE }}>{showAll ? "Show changed fields" : "Show all fields"}</button></div>
+            <div className="border rounded-lg overflow-hidden" style={{ borderColor: BORDER }}>
+              <table className="w-full text-[12px]"><thead><tr style={{ backgroundColor: "#F8FAFC" }}><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Field</th><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Version {selected.version}</th><th className="px-3 py-2 text-left" style={{ color: MUTED }}>Version {current.version}</th></tr></thead><tbody>{visibleFields.map(([label, before, after]) => { const changed = before !== after; return <tr key={label} style={{ borderTop: `1px solid ${BORDER}` }}><td className="px-3 py-2 font-medium" style={{ color: TEXT }}>{label}</td><td className="px-3 py-2" style={{ color: changed ? MUTED : TEXT }}>{before || "—"}</td><td className="px-3 py-2 font-semibold" style={{ color: changed ? BLUE : MUTED, backgroundColor: changed ? "#EEF3FC" : undefined }}>{after || "—"}</td></tr>; })}</tbody></table>
+            </div>
+          </>}
+          <div><p className="text-[11px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Version History</p><div className="flex flex-wrap gap-2"><button className="px-3 py-2 rounded-md text-[12px] font-semibold" style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>Version {current.version} — Current version</button>{versions.map((version, index) => <button key={version.version} onClick={() => { setSelectedIndex(index); setShowAll(false); }} className="px-3 py-2 rounded-md text-[12px] font-medium border" style={{ color: selectedIndex === index ? BLUE : TEXT, borderColor: selectedIndex === index ? "#93B4E8" : BORDER }}>Version {version.version} — {version.revisionReason ? "Previous version" : "Original published version"}</button>)}</div></div>
+        </div>
+        <div className="flex justify-end px-6 py-4 border-t" style={{ borderColor: BORDER }}><button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Close</button></div>
+      </div>
+    </div>
+  );
+}
+
 // ── View Drawer ───────────────────────────────────────────────────────────────
-function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit }: {
+function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit, onRevise }: {
   kpi: DeptKpiRow;
   period: string;
   periodStatus: PeriodStatus;
   onClose: () => void;
   onEdit: () => void;
+  onRevise: () => void;
 }) {
   const ss = KPI_STATUS_STYLE[kpi.status];
   const canEdit = periodStatus === "Upcoming";
+  const canRevise = kpi.status === "Published" && periodStatus !== "Closed";
+  const [showHistory, setShowHistory] = useState(false);
+  const previous = kpi.previousVersions?.[kpi.previousVersions.length - 1];
 
   function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
@@ -305,8 +365,12 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit }: {
             <DetailRow label="Weightage">{kpi.weightage}%</DetailRow>
             <DetailRow label="Review Period">{period}</DetailRow>
             <DetailRow label="Status">
-              <Pill label={kpi.status} color={ss.color} bg={ss.bg} />
+              <span className="flex items-center gap-1.5"><Pill label={kpi.status} color={ss.color} bg={ss.bg} />{kpi.overdue && <Pill label="Overdue" color={RED} bg="#FEF3F2" />}</span>
             </DetailRow>
+            {kpi.status === "Published" && <DetailRow label="Overdue">{kpi.overdue ? "Yes" : "No"}</DetailRow>}
+            {kpi.status === "Published" && <DetailRow label="Version">
+              <span className="flex items-center gap-2 flex-wrap">Version {kpi.version ?? 1}{kpi.revisedOn && <>· Revised on {kpi.revisedOn}</>}{previous && <button onClick={() => setShowHistory(true)} className="text-[12px] font-semibold" style={{ color: BLUE }}>View Version History</button>}</span>
+            </DetailRow>}
             <DetailRow label="Applies To">
               <span className="flex items-center gap-1.5">
                 <Globe size={13} style={{ color: MUTED }} />
@@ -324,30 +388,39 @@ function ViewDrawer({ kpi, period, periodStatus, onClose, onEdit }: {
             </div>
           )}
 
+
           <div>
             <h4 className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: MUTED }}>
               Scoring Definition
             </h4>
             <div className="space-y-2">
               {SCORE_KEYS.map((key, i) => (
-                <ScoreRow key={key} label={`Score ${5 - i}`} value={kpi.scoreDef[key]} readOnly />
+                <ScoreRow key={key} label={`Point ${5 - i}`} value={kpi.scoreDef[key]} readOnly />
               ))}
             </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t shrink-0" style={{ borderColor: BORDER }}>
-          {canEdit && (
+          {kpi.status === "Draft" && canEdit && (
             <button onClick={onEdit}
               className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-semibold text-white"
               style={{ backgroundColor: BLUE }}>
               <Pencil size={13} /> Edit KPI
             </button>
           )}
+          {canRevise && (
+            <button onClick={onRevise}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-semibold text-white"
+              style={{ backgroundColor: BLUE }}>
+              <Pencil size={13} /> Revise KPI
+            </button>
+          )}
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
             style={{ color: TEXT, borderColor: BORDER }}>Close</button>
         </div>
       </div>
+      {showHistory && <VersionHistoryModal kpi={kpi} onClose={() => setShowHistory(false)} />}
     </>
   );
 }
@@ -429,20 +502,22 @@ function PublishDialog({ kpiName, period, onClose, onConfirm }: {
 // ── Create / Edit Drawer ──────────────────────────────────────────────────────
 interface EditFormData {
   perspective: string; kra: string; name: string;
-  target: string; weightage: number; scoreDef: ScoreDef;
+  target: string; weightage: number; scoreDef: ScoreDef; revisionReason?: string;
 }
 
 function EditDrawer({
-  editKpi, isCreate, maxAllocation, publishedWeightageExcludingThis,
-  onClose, onSaveAsDraft, onPublishAttempt,
+  editKpi, isCreate, isRevision, maxAllocation, publishedWeightageExcludingThis,
+  onClose, onSaveAsDraft, onPublishAttempt, onCreateRevision,
 }: {
   editKpi: DeptKpiRow | null;
   isCreate: boolean;
+  isRevision: boolean;
   maxAllocation: number;
   publishedWeightageExcludingThis: number;
   onClose: () => void;
   onSaveAsDraft: (data: EditFormData) => void;
   onPublishAttempt: (data: EditFormData) => void;
+  onCreateRevision: (data: EditFormData) => void;
 }) {
   const [perspective, setPerspective] = useState(editKpi?.perspective ?? "Financial");
   const [kra, setKra]                 = useState(editKpi?.kra ?? "Sales Performance");
@@ -450,6 +525,7 @@ function EditDrawer({
   const [target, setTarget]           = useState(editKpi?.target ?? "");
   const [weightage, setWeightage]     = useState(editKpi?.weightage ?? 10);
   const [scoreDef, setScoreDef]       = useState<ScoreDef>(editKpi?.scoreDef ?? { ...EMPTY_SCORE });
+  const [revisionReason, setRevisionReason] = useState("");
   const [attempted, setAttempted]     = useState(false);
 
   const kraOptions = KRA_BY_PERSPECTIVE[perspective] ?? [];
@@ -466,23 +542,25 @@ function EditDrawer({
 
   const nameOk   = name.trim() !== "";
   const targetOk = target.trim() !== "";
+  const revisionReasonOk = !isRevision || revisionReason.trim() !== "";
   const publishedAfter = publishedWeightageExcludingThis + weightage;
   const exceedsAllocation = publishedAfter > maxAllocation;
 
   function collectData(): EditFormData {
-    return { perspective, kra, name, target, weightage, scoreDef };
+    return { perspective, kra, name, target, weightage, scoreDef, revisionReason };
   }
 
   function handleSaveAsDraft() {
     setAttempted(true);
-    if (!nameOk || !targetOk) return;
+    if (!nameOk || !targetOk || !revisionReasonOk) return;
     onSaveAsDraft(collectData());
   }
 
   function handlePublish() {
     setAttempted(true);
-    if (!nameOk || !targetOk || exceedsAllocation) return;
-    onPublishAttempt(collectData());
+    if (!nameOk || !targetOk || !revisionReasonOk || exceedsAllocation) return;
+    if (isRevision) onCreateRevision(collectData());
+    else onPublishAttempt(collectData());
   }
 
   return (
@@ -493,7 +571,7 @@ function EditDrawer({
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: BORDER }}>
           <div>
             <h3 className="text-[15px] font-bold" style={{ color: TEXT }}>
-              {isCreate ? "Create Department KPI" : "Edit Department KPI"}
+              {isCreate ? "Create Department KPI" : isRevision ? "Revise Department KPI" : "Edit Department KPI"}
             </h3>
             <p className="text-[11px] mt-0.5" style={{ color: MUTED }}>
               Department-Level · Retail Sales · No approval required
@@ -628,30 +706,41 @@ function EditDrawer({
             <h4 className="text-[10px] font-bold uppercase tracking-wider pb-2 mb-4 border-b"
               style={{ color: MUTED, borderColor: BORDER }}>2 — Scoring Definition</h4>
             <p className="text-[12px] mb-3" style={{ color: MUTED }}>
-              Define the achievement criteria for each score level. These apply to all eligible employees in the department.
+              Define the achievement criteria for each point level. These apply to all eligible employees in the department.
             </p>
             <div className="space-y-3">
               {SCORE_KEYS.map((key, i) => (
-                <ScoreRow key={key} label={`Score ${5 - i}`} value={scoreDef[key]}
+                <ScoreRow key={key} label={`Point ${5 - i}`} value={scoreDef[key]}
                   onChange={v => setScore(key, v)} />
               ))}
             </div>
           </div>
+          {isRevision && (
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-wider pb-2 mb-4 border-b" style={{ color: MUTED, borderColor: BORDER }}>3 — Revision Reason</h4>
+              <textarea value={revisionReason} onChange={e => setRevisionReason(e.target.value)} rows={3}
+                placeholder="Explain why this KPI is being revised"
+                className="w-full px-3 py-2 rounded-md text-[13px] outline-none resize-none"
+                style={{ border: `1px solid ${attempted && !revisionReasonOk ? RED : BORDER}`, color: TEXT }} />
+              {attempted && !revisionReasonOk && <p className="text-[11px] mt-1 flex items-center gap-1" style={{ color: RED }}><AlertTriangle size={10} /> Revision Reason is required.</p>}
+              <p className="text-[10px] mt-1.5" style={{ color: MUTED }}>The current version is preserved. Effective-version behaviour after a Review Period opens remains to be confirmed.</p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="flex gap-2 px-6 py-4 border-t shrink-0" style={{ borderColor: BORDER }}>
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border"
             style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
-          <button onClick={handleSaveAsDraft}
+          {!isRevision && <button onClick={handleSaveAsDraft}
             className="px-4 py-2 rounded-md text-[13px] font-semibold border transition-colors hover:bg-gray-50"
             style={{ color: BLUE, borderColor: "#93B4E8" }}>
             Save as Draft
-          </button>
+          </button>}
           <button onClick={handlePublish} disabled={exceedsAllocation}
             className="flex-1 py-2 rounded-md text-[13px] font-semibold text-white transition-opacity"
             style={{ backgroundColor: exceedsAllocation ? "#9CA3AF" : GREEN }}>
-            Publish KPI
+            {isRevision ? "Create New Version" : "Publish KPI"}
           </button>
         </div>
       </div>
@@ -668,8 +757,10 @@ export function DepartmentKPIs() {
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
   const [viewId, setViewId]             = useState<string | null>(null);
+  const [historyId, setHistoryId]       = useState<string | null>(null);
   const [editId, setEditId]             = useState<string | null>(null);
   const [editIsCreate, setEditIsCreate] = useState(false);
+  const [editIsRevision, setEditIsRevision] = useState(false);
 
   const [deleteId, setDeleteId]         = useState<string | null>(null);
   const [publishConfirm, setPublishConfirm] = useState<{ data: EditFormData; isFromTable: boolean; id?: string } | null>(null);
@@ -685,7 +776,7 @@ export function DepartmentKPIs() {
   }, []);
 
   const kpis         = kpisByPeriod[selectedPeriod] ?? [];
-  const config       = PERIOD_CONFIG[selectedPeriod] ?? { status: "Closed" as PeriodStatus, maxAllocation: 20 };
+  const config       = PERIOD_CONFIG[selectedPeriod] ?? { status: "Closed" as PeriodStatus, maxAllocation: 20, kpiSetupDeadline: "" };
   const periodStatus = config.status;
   const maxAlloc     = config.maxAllocation;
 
@@ -697,6 +788,7 @@ export function DepartmentKPIs() {
   const remaining = maxAlloc - publishedWeight;
 
   const viewKpi  = viewId ? (kpis.find(k => k.id === viewId) ?? null) : null;
+  const historyKpi = historyId ? (kpis.find(k => k.id === historyId) ?? null) : null;
   const editKpi  = editId ? (kpis.find(k => k.id === editId) ?? null) : null;
 
   // Published weight excluding current edit target
@@ -718,13 +810,15 @@ export function DepartmentKPIs() {
     setViewId(null);
     setEditId(null);
     setEditIsCreate(false);
+    setEditIsRevision(false);
     setDeleteId(null);
     setPublishConfirm(null);
   }
 
-  function openCreate() { setEditId(null); setEditIsCreate(true); setViewId(null); }
-  function openEdit(id: string) { setEditId(id); setEditIsCreate(false); setViewId(null); }
-  function closeEdit() { setEditId(null); setEditIsCreate(false); }
+  function openCreate() { setEditId(null); setEditIsCreate(true); setEditIsRevision(false); setViewId(null); }
+  function openEdit(id: string) { setEditId(id); setEditIsCreate(false); setEditIsRevision(false); setViewId(null); }
+  function openRevision(id: string) { setEditId(id); setEditIsCreate(false); setEditIsRevision(true); setViewId(null); }
+  function closeEdit() { setEditId(null); setEditIsCreate(false); setEditIsRevision(false); }
 
   function handleSaveAsDraft(data: EditFormData) {
     if (editIsCreate) {
@@ -740,6 +834,32 @@ export function DepartmentKPIs() {
     setPublishConfirm({ data, isFromTable: false });
   }
 
+  function createRevision(data: EditFormData) {
+    if (!editId) return;
+    const revisedOn = "15 Sep 2026";
+    mutatePeriod(prev => prev.map(kpi => {
+      if (kpi.id !== editId) return kpi;
+      const previous: KpiVersion = {
+        version: kpi.version ?? 1,
+        revisedOn: kpi.revisedOn,
+        revisedBy: kpi.revisedBy,
+        perspective: kpi.perspective,
+        kra: kpi.kra,
+        name: kpi.name,
+        target: kpi.target,
+        weightage: kpi.weightage,
+        scoreDef: kpi.scoreDef,
+        revisionReason: kpi.revisionReason,
+      };
+      return {
+        ...kpi, ...data, status: "Published", version: (kpi.version ?? 1) + 1,
+        revisedOn, revisedBy: "Manager A", revisionReason: data.revisionReason,
+        previousVersions: [...(kpi.previousVersions ?? []), previous],
+      };
+    }));
+    closeEdit();
+  }
+
   function handlePublishFromTable(id: string) {
     const kpi = kpis.find(k => k.id === id);
     if (!kpi) return;
@@ -748,14 +868,21 @@ export function DepartmentKPIs() {
 
   function confirmPublish() {
     if (!publishConfirm) return;
+    const publishedOn = new Date().toISOString().slice(0, 10);
+    const publication = {
+      status: "Published" as DeptKpiStatus,
+      publishedOn,
+      overdue: Boolean(config.kpiSetupDeadline && publishedOn > config.kpiSetupDeadline),
+      version: 1,
+    };
     if (publishConfirm.isFromTable && publishConfirm.id) {
-      mutatePeriod(prev => prev.map(k => k.id === publishConfirm.id ? { ...k, status: "Published" } : k));
+      mutatePeriod(prev => prev.map(k => k.id === publishConfirm.id ? { ...k, ...publication } : k));
     } else if (editIsCreate) {
-      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...publishConfirm.data, status: "Published" };
+      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...publishConfirm.data, ...publication };
       mutatePeriod(prev => [...prev, newKpi]);
       closeEdit();
     } else if (editId) {
-      mutatePeriod(prev => prev.map(k => k.id === editId ? { ...k, ...publishConfirm.data, status: "Published" } : k));
+      mutatePeriod(prev => prev.map(k => k.id === editId ? { ...k, ...publishConfirm.data, ...publication } : k));
       closeEdit();
     }
     setPublishConfirm(null);
@@ -925,7 +1052,7 @@ export function DepartmentKPIs() {
                 )}
                 {kpis.map((kpi, i) => {
                   const ss = KPI_STATUS_STYLE[kpi.status];
-                  const canEditRow   = periodStatus === "Upcoming";
+                  const canEditRow   = periodStatus === "Upcoming" && kpi.status === "Draft";
                   const canDeleteRow = periodStatus === "Upcoming" && kpi.status === "Draft";
                   const canPublishRow = periodStatus === "Upcoming" && kpi.status === "Draft"
                     && (publishedWeight + kpi.weightage) <= maxAlloc;
@@ -943,7 +1070,10 @@ export function DepartmentKPIs() {
                         {kpi.weightage}%
                       </td>
                       <td className="px-4 py-3">
-                        <Pill label={kpi.status} color={ss.color} bg={ss.bg} />
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Pill label={kpi.status} color={ss.color} bg={ss.bg} />
+                          {kpi.overdue && <Pill label="Overdue" color={RED} bg="#FEF3F2" />}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -953,12 +1083,20 @@ export function DepartmentKPIs() {
                             style={{ color: MUTED, borderColor: BORDER }}>
                             <Eye size={11} /> View
                           </button>
+                          {kpi.previousVersions?.length ? <button onClick={() => setHistoryId(kpi.id)} className="px-2.5 py-1.5 rounded text-[11px] font-medium border" style={{ color: BLUE, borderColor: "#93B4E8" }}>View Version History</button> : null}
                           {/* Edit */}
                           {canEditRow && (
                             <button onClick={() => openEdit(kpi.id)}
                               className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-blue-50"
                               style={{ color: BLUE, borderColor: "#93B4E8" }}>
                               <Pencil size={11} /> Edit
+                            </button>
+                          )}
+                          {kpi.status === "Published" && periodStatus !== "Closed" && (
+                            <button onClick={() => openRevision(kpi.id)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-blue-50"
+                              style={{ color: BLUE, borderColor: "#93B4E8" }}>
+                              <Pencil size={11} /> Revise KPI
                             </button>
                           )}
                           {/* Delete */}
@@ -1006,17 +1144,20 @@ export function DepartmentKPIs() {
       {viewKpi && (
         <ViewDrawer
           kpi={viewKpi} period={selectedPeriod} periodStatus={periodStatus}
-          onClose={() => setViewId(null)} onEdit={() => openEdit(viewKpi.id)} />
+          onClose={() => setViewId(null)} onEdit={() => openEdit(viewKpi.id)} onRevise={() => openRevision(viewKpi.id)} />
       )}
+      {historyKpi && <VersionHistoryModal kpi={historyKpi} onClose={() => setHistoryId(null)} />}
       {(editIsCreate || editId) && (
         <EditDrawer
           editKpi={editIsCreate ? null : editKpi}
           isCreate={editIsCreate}
+          isRevision={editIsRevision}
           maxAllocation={maxAlloc}
           publishedWeightageExcludingThis={publishedExcludingEdit}
           onClose={closeEdit}
           onSaveAsDraft={handleSaveAsDraft}
-          onPublishAttempt={handlePublishAttempt} />
+          onPublishAttempt={handlePublishAttempt}
+          onCreateRevision={createRevision} />
       )}
       {publishConfirm && (
         <PublishDialog

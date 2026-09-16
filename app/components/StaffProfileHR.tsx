@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useSearchParams } from "react-router";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer,
@@ -58,6 +58,18 @@ interface KpiItem {
   finalScore: number;
   checkpoints: KpiCheckpoint[];
 }
+
+const businessKpiLevel = (level: string) => (
+  level === "Level 1" ? "Company" : level === "Level 2" ? "Department" : "Individual"
+);
+
+const kpiWeightage = (kpi: KpiItem) => (
+  kpi.level === "Level 3" ? 20 : kpi.level === "Level 2" ? 15 : 20
+);
+
+const annualKpiPoint = (kpi: KpiItem) => kpi.finalScore / 20;
+const weightedKpiScore = (kpi: KpiItem) => annualKpiPoint(kpi) / 5 * kpiWeightage(kpi);
+const asPoint = (score: number) => (score / 20).toFixed(1);
 
 const KPI_DATA: Record<string, KpiItem[]> = {
   amir: [
@@ -317,9 +329,9 @@ function HistoryDrawer({ period, data, onClose }: {
             <p className="text-[10px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>Performance Scores</p>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { label: "KPI Score",      value: data.kpiScore,   color: BLUE   },
-                { label: "Attitude Score", value: data.attScore,   color: TEAL   },
-                { label: "Final Score",    value: data.finalScore, color: PURPLE },
+                { label: "KPI Performance Score",      value: data.kpiScore,   color: BLUE   },
+                { label: "Attitude Evaluation Score", value: data.attScore,   color: TEAL   },
+                { label: "Final Appraisal Score",    value: data.finalScore, color: PURPLE },
               ].map(s => (
                 <div key={s.label} className="rounded-lg p-3 text-center"
                   style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
@@ -330,7 +342,7 @@ function HistoryDrawer({ period, data, onClose }: {
             </div>
           </div>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Manager Recommendation</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Superior Recommendation</p>
             <div className="inline-flex items-center px-3 py-1.5 rounded-md text-[13px] font-semibold mb-3"
               style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
               {data.managerDecision ?? "—"}
@@ -350,7 +362,7 @@ function HistoryDrawer({ period, data, onClose }: {
             <p className="text-[10px] font-bold uppercase tracking-wide mb-3" style={{ color: MUTED }}>HR Decision</p>
             {isOverride && (
               <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Manager Recommendation</p>
+                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>Original Superior Recommendation</p>
                 <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{data.managerDecision}</p>
               </div>
             )}
@@ -388,70 +400,10 @@ function HistoryDrawer({ period, data, onClose }: {
   );
 }
 
-// ── KPI Plan Modal ─────────────────────────────────────────────────────────────
-function KpiPlanModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
-      <div className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
-        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
-        <div className="flex items-center justify-between px-6 py-4 shrink-0"
-          style={{ borderBottom: `1px solid ${BORDER}` }}>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Read-Only</p>
-            <h2 className="text-[16px] font-bold" style={{ color: TEXT }}>Full KPI Plan</h2>
-            <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>{LIVE_PERIOD}</p>
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100 transition-colors">
-            <X size={18} style={{ color: MUTED }} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr style={{ backgroundColor: "#F8FAFC" }}>
-                {["KPI Name", "KPI Level", "Target", "Frequency", "Final Score"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
-                    style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {kpis.map((kpi, i) => (
-                <tr key={kpi.id} className="hover:bg-[#F8FAFC] transition-colors"
-                  style={{ borderBottom: i < kpis.length - 1 ? `1px solid ${BORDER}` : "none" }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: TEXT }}>{kpi.name}</td>
-                  <td className="px-4 py-3">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold"
-                      style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                      {kpi.level}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3" style={{ color: MUTED }}>{kpi.target}</td>
-                  <td className="px-4 py-3" style={{ color: MUTED }}>{kpi.frequency}</td>
-                  <td className="px-4 py-3">
-                    <span className="font-bold"
-                      style={{ color: kpi.finalScore >= 80 ? GREEN : kpi.finalScore >= 70 ? AMBER : RED }}>
-                      {kpi.finalScore.toFixed(1)}
-                    </span>
-                    <span className="ml-1" style={{ color: MUTED }}>/100</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Assessment History Modal ───────────────────────────────────────────────────
 interface SelectedCheckpoint { kpi: KpiItem; checkpoint: KpiCheckpoint; }
 
-function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: () => void }) {
+function AssessmentHistoryModal({ kpis, period, onClose }: { kpis: KpiItem[]; period: string; onClose: () => void }) {
   const [selected, setSelected] = useState<SelectedCheckpoint | null>(null);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6"
@@ -473,7 +425,7 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
                 {selected ? "Checkpoint Detail" : "KPI Assessment History"}
               </p>
               <h2 className="text-[15px] font-bold" style={{ color: TEXT }}>
-                {selected ? selected.checkpoint.label : LIVE_PERIOD}
+                {selected ? selected.checkpoint.label : period}
               </h2>
               {selected && (
                 <p className="text-[11px] mt-0.5" style={{ color: MUTED }}>{selected.kpi.name}</p>
@@ -495,7 +447,7 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
                       <p className="text-[12px] font-bold" style={{ color: TEXT }}>{kpi.name}</p>
                       <span className="px-2 py-0.5 text-[10px] font-semibold rounded"
                         style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                        {kpi.level}
+                        {businessKpiLevel(kpi.level)}
                       </span>
                       <span className="text-[11px]" style={{ color: MUTED }}>· {kpi.frequency}</span>
                     </div>
@@ -503,7 +455,7 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
                   <table className="w-full text-[12px]">
                     <thead>
                       <tr style={{ backgroundColor: "#FAFBFC" }}>
-                        {["Review Checkpoint", "Status", "Self-Assessment", "Superior Assessment", ""].map(h => (
+                        {["Review Checkpoint", "Status", "Self-Assessment Point", "Superior Assessment Point", ""].map(h => (
                           <th key={h} className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wide"
                             style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
                             {h}
@@ -530,12 +482,12 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
                           </td>
                           <td className="px-4 py-3" style={{ color: TEXT }}>
                             {cp.selfScore != null
-                              ? <><span className="font-bold">{cp.selfScore}</span><span style={{ color: MUTED }}>/100</span></>
+                              ? <><span className="font-bold">{asPoint(cp.selfScore)}</span><span style={{ color: MUTED }}>/5</span></>
                               : <span style={{ color: MUTED }}>—</span>}
                           </td>
                           <td className="px-4 py-3" style={{ color: TEXT }}>
                             {cp.superiorScore != null
-                              ? <><span className="font-bold">{cp.superiorScore}</span><span style={{ color: MUTED }}>/100</span></>
+                              ? <><span className="font-bold">{asPoint(cp.superiorScore)}</span><span style={{ color: MUTED }}>/5</span></>
                               : <span style={{ color: MUTED }}>—</span>}
                           </td>
                           <td className="px-4 py-3">
@@ -567,17 +519,17 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 rounded-lg" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Self-Assessment Score</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Self-Assessment Point</p>
                   <p className="text-[26px] font-bold" style={{ color: BLUE }}>
-                    {selected.checkpoint.selfScore}
-                    <span className="text-[13px]" style={{ color: MUTED }}>/100</span>
+                    {asPoint(selected.checkpoint.selfScore ?? 0)}
+                    <span className="text-[13px]" style={{ color: MUTED }}>/5</span>
                   </p>
                 </div>
                 <div className="p-4 rounded-lg" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Superior Assessment Score</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Superior Assessment Point</p>
                   <p className="text-[26px] font-bold" style={{ color: TEAL }}>
-                    {selected.checkpoint.superiorScore}
-                    <span className="text-[13px]" style={{ color: MUTED }}>/100</span>
+                    {asPoint(selected.checkpoint.superiorScore ?? 0)}
+                    <span className="text-[13px]" style={{ color: MUTED }}>/5</span>
                   </p>
                 </div>
               </div>
@@ -588,7 +540,7 @@ function AssessmentHistoryModal({ kpis, onClose }: { kpis: KpiItem[]; onClose: (
                 </p>
               </div>
               <div className="p-4 rounded-lg" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Superior Assessment / Manager Comment</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Superior Assessment Comment</p>
                 <p className="text-[13px] leading-relaxed" style={{ color: TEXT }}>
                   {selected.checkpoint.superiorComment || "—"}
                 </p>
@@ -627,7 +579,7 @@ function AttitudeDrawer({ attitude, onClose }: { attitude: AttitudeData; onClose
               <p className="text-[12px] font-bold mt-0.5" style={{ color: TEXT }}>{attitude.form}</p>
             </div>
             <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-              <p className="text-[10px]" style={{ color: MUTED }}>Superior Score</p>
+              <p className="text-[10px]" style={{ color: MUTED }}>Attitude Evaluation Score</p>
               <p className="text-[22px] font-bold leading-snug" style={{ color: TEAL }}>
                 {attitude.superiorScore.toFixed(1)}
               </p>
@@ -642,16 +594,16 @@ function AttitudeDrawer({ attitude, onClose }: { attitude: AttitudeData; onClose
           <div className="grid grid-cols-4 py-2 px-1 text-[10px] font-bold uppercase tracking-wide"
             style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
             <div className="col-span-2">Criterion</div>
-            <div className="text-center">Self</div>
-            <div className="text-center">Superior</div>
+            <div className="text-center">Self Point</div>
+            <div className="text-center">Superior Point</div>
           </div>
           <div className="space-y-3">
             {attitude.criteria.map((c, i) => (
               <div key={i} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
                 <div className="grid grid-cols-4 px-4 py-2.5 items-center" style={{ backgroundColor: "#F8FAFC" }}>
                   <p className="col-span-2 text-[12px] font-semibold" style={{ color: TEXT }}>{c.criterion}</p>
-                  <p className="text-center text-[13px] font-bold" style={{ color: BLUE }}>{c.selfScore}</p>
-                  <p className="text-center text-[13px] font-bold" style={{ color: TEAL }}>{c.superiorScore}</p>
+                  <p className="text-center text-[13px] font-bold" style={{ color: BLUE }}>{asPoint(c.selfScore)} <span className="text-[10px] font-medium">/5</span></p>
+                  <p className="text-center text-[13px] font-bold" style={{ color: TEAL }}>{asPoint(c.superiorScore)} <span className="text-[10px] font-medium">/5</span></p>
                 </div>
                 <div className="px-4 py-3 space-y-2">
                   {c.selfComment && (
@@ -665,7 +617,7 @@ function AttitudeDrawer({ attitude, onClose }: { attitude: AttitudeData; onClose
                   {c.managerComment && (
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-wide mb-0.5" style={{ color: MUTED }}>
-                        Manager Comment
+                        Superior Comment
                       </p>
                       <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{c.managerComment}</p>
                     </div>
@@ -684,27 +636,33 @@ function AttitudeDrawer({ attitude, onClose }: { attitude: AttitudeData; onClose
 export function StaffProfileHR() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnContext = searchParams.get("returnTo");
+  const returnToAppraisals = returnContext === "hr-appraisals" || returnContext === "team-appraisals";
+  const returnToTeamPerformance = returnContext === "team-performance";
+  const returnPeriod = searchParams.get("period") ?? LIVE_PERIOD;
 
   const empId    = id ?? "amir";
   const emp      = EMPLOYEES[empId] ?? EMPLOYEES.amir;
   const meta     = EMP_META[empId] ?? { dept: "Retail Banking", avatarColor: BLUE };
-  const pd       = resolvePeriodData(empId, LIVE_PERIOD);
   const kpis     = KPI_DATA[empId] ?? [];
   const attitude = ATTITUDE_DATA[empId] ?? null;
 
+  const [selectedPeriod, setSelectedPeriod] = useState(returnPeriod);
   const [chartYears,     setChartYears]     = useState<3 | 5>(5);
   const [prevOpen,       setPrevOpen]       = useState(false);
   const [histDrawer,     setHistDrawer]     = useState<{ period: string; data: PeriodAppraisal } | null>(null);
-  const [showKpiPlan,    setShowKpiPlan]    = useState(false);
   const [showAssessment, setShowAssessment] = useState(false);
   const [showAttitude,   setShowAttitude]   = useState(false);
+
+  const pd = resolvePeriodData(empId, selectedPeriod);
 
   const chartData = useMemo(
     () => chartYears === 3 ? emp.trendData.slice(-3) : emp.trendData,
     [chartYears, emp.trendData]
   );
 
-  const selectedYear   = parseInt(LIVE_PERIOD.split(" ")[0]);
+  const selectedYear   = parseInt(selectedPeriod.split(" ")[0]);
   const prevAppraisals = PERIOD_OPTIONS
     .filter(p => parseInt(p.split(" ")[0]) < selectedYear && emp.periods[p])
     .map(p => ({ period: p, data: emp.periods[p] }));
@@ -715,11 +673,16 @@ export function StaffProfileHR() {
 
         {/* ── 1. Header ── */}
         <div>
-          <button onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 text-[12px] mb-3 hover:opacity-70 transition-opacity"
-            style={{ color: BLUE }}>
-            <ArrowLeft size={14} /> Back
-          </button>
+          {(returnToAppraisals || returnToTeamPerformance) && (
+            <button onClick={() => navigate(returnToTeamPerformance
+              ? `/dashboard?period=${encodeURIComponent(returnPeriod)}`
+              : returnContext === "team-appraisals"
+                ? `/performance/final-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`
+                : `/performance/hr-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+              <ArrowLeft size={14} /> {returnToTeamPerformance ? "Back to Team Performance" : returnContext === "team-appraisals" ? "Back to Team Appraisals" : "Back to Appraisal Reviews"}
+            </button>
+          )}
           <div className="bg-white rounded-lg p-5 flex items-center gap-4"
             style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-[18px] font-bold shrink-0"
@@ -727,6 +690,7 @@ export function StaffProfileHR() {
               {emp.initials}
             </div>
             <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>My Performance</p>
               <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>{emp.name}</h1>
               <div className="flex items-center gap-2 mt-1 flex-wrap text-[12px]" style={{ color: MUTED }}>
                 <span className="font-semibold" style={{ color: TEXT }}>{emp.staffId}</span>
@@ -735,15 +699,19 @@ export function StaffProfileHR() {
                 <span>·</span>
                 <span>{meta.dept}</span>
               </div>
-              <p className="text-[11px] mt-1" style={{ color: MUTED }}>
-                Review Period:{" "}
-                <span className="font-semibold" style={{ color: BLUE }}>{LIVE_PERIOD}</span>
-              </p>
             </div>
+            <label className="shrink-0">
+              <span className="block text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Annual KPI Review Period</span>
+              <select value={selectedPeriod} onChange={event => setSelectedPeriod(event.target.value)}
+                className="min-w-[215px] rounded-md px-3 py-2 text-[12px] font-semibold outline-none"
+                style={{ color: TEXT, border: `1px solid ${BORDER}`, backgroundColor: "white" }}>
+                {PERIOD_OPTIONS.map(period => <option key={period} value={period}>{period}</option>)}
+              </select>
+            </label>
           </div>
         </div>
 
-        {/* ── 2. Current Performance Score Cards ── */}
+        {/* ── 2. Performance Summary ── */}
         {pd && (
           <div className="grid grid-cols-3 gap-4">
             {[
@@ -773,7 +741,7 @@ export function StaffProfileHR() {
         <div className="bg-white rounded-lg p-5"
           style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Historical Performance Trend</h2>
+            <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Performance Trend</h2>
             <div className="flex items-center gap-0.5 rounded-md p-0.5" style={{ border: `1px solid ${BORDER}` }}>
               {([3, 5] as const).map(y => (
                 <button key={y} onClick={() => setChartYears(y)}
@@ -788,7 +756,7 @@ export function StaffProfileHR() {
             </div>
           </div>
           <p className="text-[12px] mb-4" style={{ color: MUTED }}>
-            {chartYears}-year view of KPI, Attitude and Final scores for {emp.name}.
+            {chartYears}-year view of KPI Performance, Attitude Evaluation and Final Appraisal results for {emp.name}.
           </p>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={chartData} margin={{ top: 8, right: 24, bottom: 0, left: -10 }}>
@@ -796,16 +764,16 @@ export function StaffProfileHR() {
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: MUTED }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: MUTED }} axisLine={false} tickLine={false} domain={[60, 100]} />
               <ReTooltip contentStyle={{ fontSize: 12, border: `1px solid ${BORDER}`, borderRadius: 8 }} />
-              <Line type="monotone" dataKey="kpi"      name="KPI Score"     stroke={BLUE}   strokeWidth={2}   dot={{ r: 4, fill: BLUE }}   activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="attitude" name="Attitude Score" stroke={TEAL}   strokeWidth={2}   dot={{ r: 4, fill: TEAL }}   activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="final"    name="Final Score"   stroke={PURPLE} strokeWidth={2.5} dot={{ r: 5, fill: PURPLE }} activeDot={{ r: 7 }} strokeDasharray="5 3" />
+              <Line type="monotone" dataKey="kpi"      name="KPI Performance Score"     stroke={BLUE}   strokeWidth={2}   dot={{ r: 4, fill: BLUE }}   activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="attitude" name="Attitude Evaluation Score" stroke={TEAL}   strokeWidth={2}   dot={{ r: 4, fill: TEAL }}   activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="final"    name="Final Appraisal Score"   stroke={PURPLE} strokeWidth={2.5} dot={{ r: 5, fill: PURPLE }} activeDot={{ r: 7 }} strokeDasharray="5 3" />
             </LineChart>
           </ResponsiveContainer>
           <div className="flex items-center justify-center gap-5 mt-2">
             {[
-              { label: "KPI Score",     color: BLUE   },
-              { label: "Attitude Score",color: TEAL   },
-              { label: "Final Score",   color: PURPLE },
+              { label: "KPI Performance Score",     color: BLUE   },
+              { label: "Attitude Evaluation Score",color: TEAL   },
+              { label: "Final Appraisal Score",   color: PURPLE },
             ].map(({ label, color }) => (
               <div key={label} className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
@@ -815,22 +783,19 @@ export function StaffProfileHR() {
           </div>
         </div>
 
-        {/* ── 4. KPI Performance ── */}
+        {/* ── 4. KPI Performance Breakdown ── */}
         {kpis.length > 0 && (
           <div className="bg-white rounded-lg overflow-hidden"
             style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="flex items-center justify-between px-5 py-4"
               style={{ borderBottom: `1px solid ${BORDER}` }}>
               <div>
-                <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>KPI Performance</h2>
-                <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>{LIVE_PERIOD}</p>
+                <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>KPI Performance Breakdown</h2>
+                <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>
+                  {selectedPeriod} · Annual KPI Point is consolidated before the weighted KPI Score is calculated.
+                </p>
               </div>
               <div className="flex items-center gap-4">
-                <button onClick={() => setShowKpiPlan(true)}
-                  className="text-[12px] font-semibold hover:underline"
-                  style={{ color: BLUE }}>
-                  View Full KPI Plan →
-                </button>
                 <button onClick={() => setShowAssessment(true)}
                   className="text-[12px] font-semibold hover:underline"
                   style={{ color: TEAL }}>
@@ -841,7 +806,7 @@ export function StaffProfileHR() {
             <table className="w-full text-[12px]">
               <thead>
                 <tr style={{ backgroundColor: "#F8FAFC" }}>
-                  {["KPI Name", "KPI Level", "Target", "Annual Superior Assessment Score"].map(h => (
+                  {["KPI Name", "KPI Level", "Target", "Weightage", "KPI Score"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide"
                       style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
                       {h}
@@ -857,16 +822,22 @@ export function StaffProfileHR() {
                     <td className="px-4 py-3">
                       <span className="px-2 py-0.5 rounded text-[10px] font-semibold"
                         style={{ backgroundColor: "#EEF3FC", color: BLUE }}>
-                        {kpi.level}
+                        {businessKpiLevel(kpi.level)}
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ color: MUTED }}>{kpi.target}</td>
                     <td className="px-4 py-3">
+                      <span className="font-semibold" style={{ color: TEXT }}>{kpiWeightage(kpi)}%</span>
+                    </td>
+                    <td className="px-4 py-3">
                       <span className="font-bold"
                         style={{ color: kpi.finalScore >= 80 ? GREEN : kpi.finalScore >= 70 ? AMBER : RED }}>
-                        {kpi.finalScore.toFixed(1)}
+                        {weightedKpiScore(kpi).toFixed(1)}
                       </span>
-                      <span className="ml-1" style={{ color: MUTED }}>/100</span>
+                      <span className="ml-1" style={{ color: MUTED }}>/ {kpiWeightage(kpi)}</span>
+                      <p className="text-[10px] mt-0.5" style={{ color: MUTED }}>
+                        Annual KPI Point {annualKpiPoint(kpi).toFixed(1)} / 5
+                      </p>
                     </td>
                   </tr>
                 ))}
@@ -882,7 +853,7 @@ export function StaffProfileHR() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Attitude Evaluation</h2>
-                <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>{LIVE_PERIOD}</p>
+                <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>{selectedPeriod}</p>
               </div>
               <button onClick={() => setShowAttitude(true)}
                 className="text-[12px] font-semibold hover:underline"
@@ -896,7 +867,7 @@ export function StaffProfileHR() {
                 <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{attitude.form}</p>
               </div>
               <div className="p-4 rounded-lg" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Superior Evaluation Score</p>
+                <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Attitude Evaluation Score</p>
                 <div className="flex items-end gap-1">
                   <span className="text-[22px] font-bold" style={{ color: TEAL }}>{attitude.superiorScore.toFixed(1)}</span>
                   <span className="text-[12px] mb-0.5" style={{ color: MUTED }}>/100</span>
@@ -923,7 +894,7 @@ export function StaffProfileHR() {
                   ? <ChevronDown  size={15} style={{ color: MUTED }} />
                   : <ChevronRight size={15} style={{ color: MUTED }} />
                 }
-                <p className="text-[13px] font-semibold" style={{ color: TEXT }}>Previous Appraisals</p>
+                <p className="text-[13px] font-semibold" style={{ color: TEXT }}>Previous Appraisal History</p>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold"
                   style={{ backgroundColor: "#F3F4F6", color: MUTED }}>
                   {prevAppraisals.length}
@@ -938,7 +909,7 @@ export function StaffProfileHR() {
                 <table className="w-full text-[12px]">
                   <thead>
                     <tr style={{ backgroundColor: "#F8FAFC" }}>
-                      {["Review Period", "Final Score", "Manager Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
+                      {["Annual KPI Review Period", "Final Appraisal Score", "Superior Recommendation", "Appraisal Status", "HR Final Decision", "Action"].map(h => (
                         <th key={h}
                           className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
                           style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
@@ -991,8 +962,7 @@ export function StaffProfileHR() {
       </div>
 
       {/* ── Overlays ── */}
-      {showKpiPlan    && <KpiPlanModal kpis={kpis} onClose={() => setShowKpiPlan(false)} />}
-      {showAssessment && <AssessmentHistoryModal kpis={kpis} onClose={() => setShowAssessment(false)} />}
+      {showAssessment && <AssessmentHistoryModal kpis={kpis} period={selectedPeriod} onClose={() => setShowAssessment(false)} />}
       {showAttitude   && attitude && <AttitudeDrawer attitude={attitude} onClose={() => setShowAttitude(false)} />}
       {histDrawer     && (
         <HistoryDrawer period={histDrawer.period} data={histDrawer.data} onClose={() => setHistDrawer(null)} />

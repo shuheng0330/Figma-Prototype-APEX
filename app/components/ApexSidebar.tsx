@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router";
 import {
-  BarChart3, Globe, BookOpen, FileCheck, Upload, LogOut,
+  BarChart3, Globe, BookOpen, FileCheck, Upload, Settings, LogOut,
   CalendarDays, CalendarRange, User, ClipboardCheck, ClipboardList,
   HelpCircle, UserPlus, Users, Target, Award, ShieldCheck,
   ChevronLeft, ChevronRight, Layers, Building2, SlidersHorizontal,
@@ -50,8 +50,26 @@ const ORGANISATION: Section = { title: "ORGANISATION", items: [
   { id: "org-eval", label: "Organisation Performance", path: "/org-eval", icon: Globe },
 ] };
 
+const MY_LEARNING: Section = { title: "MY LEARNING", items: [
+  { id: "my-learning", label: "Learning Portal", path: "/portal", icon: BookOpen },
+  { id: "calendar", label: "Training Calendar", path: "/calendar", icon: CalendarDays },
+  { id: "my-profile", label: "My Profile", path: "/profile", icon: User },
+] };
+
+const TRAINING_MANAGEMENT: Section = { title: "TRAINING MANAGEMENT", items: [
+  { id: "upload-sop", label: "Upload SOP", path: "/upload", icon: Upload },
+  { id: "training-review", label: "Review Materials", path: "/review", icon: FileCheck },
+  { id: "quiz-review", label: "Review Quizzes", path: "/quiz-review", icon: HelpCircle },
+  { id: "assign-training", label: "Assign Training", path: "/assign-training", icon: UserPlus },
+  { id: "training-score", label: "Training Scoreboard", path: "/training-score", icon: ClipboardCheck },
+] };
+
+const ADMINISTRATION: Section = { title: "ADMINISTRATION", items: [
+  { id: "admin-users", label: "User Management", path: "/users", icon: Settings },
+] };
+
 const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
-  employee: [MY_PERFORMANCE],
+  employee: [MY_PERFORMANCE, MY_LEARNING],
   manager_hod: [MY_PERFORMANCE, {
     title: "KPI MANAGEMENT", items: [
       { id: "dept-kpis", label: "Department KPIs", path: "/performance/department-kpis", icon: Layers },
@@ -62,30 +80,16 @@ const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
       { id: "team-eval", label: "Team Performance", path: "/dashboard", icon: BarChart3 },
       { id: "final-appraisals", label: "Team Appraisals", path: "/performance/final-appraisals", icon: Award },
     ],
-  }],
-  hr: [MY_PERFORMANCE, APPRAISAL_MANAGEMENT, ORGANISATION],
+  }, MY_LEARNING],
+  hr: [MY_PERFORMANCE, APPRAISAL_MANAGEMENT, ORGANISATION, MY_LEARNING],
   super_admin: [{
     title: "KPI ADMINISTRATION", items: [
       { id: "review-periods", label: "Review Period", path: "/performance/review-periods", icon: CalendarRange },
       { id: "company-kpis", label: "Company KPIs", path: "/performance/company-kpis", icon: Building2 },
       { id: "attitude-setup", label: "Attitude Setup", path: "/performance/attitude-setup", icon: SlidersHorizontal },
     ],
-  }, ORGANISATION, APPRAISAL_MANAGEMENT],
-  trainer: [{
-    title: "TRAINING MANAGEMENT", items: [
-      { id: "upload-sop", label: "Upload SOP", path: "/upload", icon: Upload },
-      { id: "training-review", label: "Review Materials", path: "/review", icon: FileCheck },
-      { id: "quiz-review", label: "Review Quizzes", path: "/quiz-review", icon: HelpCircle },
-      { id: "assign-training", label: "Assign Training", path: "/assign-training", icon: UserPlus },
-      { id: "training-score", label: "Training Scoreboard", path: "/training-score", icon: ClipboardCheck },
-    ],
-  }, {
-    title: "MY LEARNING", items: [
-      { id: "my-learning", label: "Learning Portal", path: "/portal", icon: BookOpen },
-      { id: "calendar", label: "Training Calendar", path: "/calendar", icon: CalendarDays },
-      { id: "my-profile", label: "My Profile", path: "/profile", icon: User },
-    ],
-  }],
+  }, ORGANISATION, TRAINING_MANAGEMENT, ADMINISTRATION],
+  trainer: [TRAINING_MANAGEMENT, MY_LEARNING],
 };
 
 interface Props { collapsed: boolean; onToggle: () => void; }
