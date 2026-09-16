@@ -469,19 +469,6 @@ export function HrAppraisals() {
               {pd.submittedDate ? ` · Submitted ${pd.submittedDate}` : ""}
             </p>
           </div>
-          <div className="relative">
-            <select
-              value={selectedPeriod}
-              onChange={e => navigate(`/performance/hr-appraisals/${empId}?period=${encodeURIComponent(e.target.value)}`)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-md text-[13px] font-semibold outline-none bg-white"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            >
-              {PERIOD_OPTIONS.filter(p => emp.periods[p] || p === LIVE_PERIOD).map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
-          </div>
         </div>
 
         {/* Status banners */}

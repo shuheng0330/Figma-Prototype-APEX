@@ -351,7 +351,7 @@ export function FinalAppraisals() {
               Superior view · {emp.name} ({emp.staffId}) · {selectedPeriod}
             </p>
             <button
-              onClick={() => navigate(`/staff-profile/${empId}`)}
+              onClick={() => navigate(`/staff-profile/${empId}?returnTo=team-appraisals&period=${encodeURIComponent(selectedPeriod)}`)}
               className="text-[12px] font-semibold mt-1.5 hover:opacity-70 transition-opacity"
               style={{ color: BLUE }}
             >
