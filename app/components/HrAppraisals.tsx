@@ -103,7 +103,7 @@ function HistoryDrawer({ period, data, onClose }: {
               {[
                 { label: "KPI Score",      value: data.kpiScore,   color: BLUE   },
                 { label: "Attitude Score", value: data.attScore,   color: TEAL   },
-                { label: "Final Score",    value: data.hrFinalScore ?? data.finalScore, color: PURPLE },
+                { label: "Final Score",    value: data.finalScore, color: PURPLE },
               ].map(s => (
                 <div
                   key={s.label}
@@ -175,13 +175,6 @@ function HistoryDrawer({ period, data, onClose }: {
               </div>
             )}
 
-            {data.hrRemarks && (
-              <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{data.hrRemarks}</p>
-              </div>
-            )}
-
             {data.finalDate && (
               <p className="text-[12px] mt-1" style={{ color: MUTED }}>
                 Finalised on: <span className="font-semibold" style={{ color: TEXT }}>{data.finalDate}</span>
@@ -198,9 +191,8 @@ function HistoryDrawer({ period, data, onClose }: {
 // Approve modal
 function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
   empName: string; decision: Decision | null; finalScore: number;
-  onConfirm: (remarks: string) => void; onClose: () => void;
+  onConfirm: () => void; onClose: () => void;
 }) {
-  const [remarks, setRemarks] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
       <div className="bg-white rounded-xl shadow-2xl w-[480px] overflow-hidden">
@@ -213,22 +205,13 @@ function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
             You are approving <strong>{empName}</strong>'s appraisal with the Superior's recommendation of{" "}
             <strong>{decision ?? "—"}</strong> and a Final Score of <strong>{finalScore.toFixed(1)}</strong>.
           </p>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>HR Remarks (optional)</label>
-            <textarea
-              value={remarks} onChange={e => setRemarks(e.target.value)} rows={3}
-              placeholder="Add any remarks to the appraisal record…"
-              className="w-full px-3 py-2 rounded-md text-[13px] outline-none resize-none"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            />
-          </div>
           <p className="text-[12px] p-3 rounded-md" style={{ backgroundColor: "#F8FAFC", color: MUTED }}>
             <strong>Important:</strong> Approving this record confirms the appraisal outcome. It does not automatically execute any promotion or salary increment — separate HR processes apply.
           </p>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: BORDER }}>
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
-          <button onClick={() => onConfirm(remarks)} className="px-4 py-2 rounded-md text-[13px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-md text-[13px] font-semibold text-white" style={{ backgroundColor: GREEN }}>
             Approve
           </button>
         </div>
@@ -240,13 +223,13 @@ function ApproveModal({ empName, decision, finalScore, onConfirm, onClose }: {
 // Override and Approve modal
 function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
   empName: string; decision: Decision | null; finalScore: number;
-  onConfirm: (hrDecision: Decision, hrFinalScore: number, reason: string, remarks: string) => void;
+  onConfirm: (hrDecision: Decision, reason: string) => void;
   onClose: () => void;
 }) {
-  const [overrideScore,    setOverrideScore]    = useState(finalScore.toFixed(1));
-  const [overrideDecision, setOverrideDecision] = useState<Decision>(decision ?? "Salary Increment");
-  const [overrideReason,   setOverrideReason]   = useState("");
-  const [remarks,          setRemarks]          = useState("");
+  const alternativeDecisions = (["Promotion", "Salary Increment", "Both", "No Recommendation"] as Decision[])
+    .filter(option => option !== decision);
+  const [overrideDecision, setOverrideDecision] = useState<Decision>(alternativeDecisions[0] ?? "Salary Increment");
+  const [overrideReason, setOverrideReason] = useState("");
   const canSubmit = overrideReason.trim().length > 10;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.4)" }}>
@@ -257,17 +240,14 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
         </div>
         <div className="px-6 py-5 space-y-4">
           <p className="text-[13px]" style={{ color: TEXT }}>
-            The original Superior recommendation (<strong>{decision ?? "—"}</strong>, score <strong>{finalScore.toFixed(1)}</strong>) will be preserved in the record alongside the HR override.
+            The Superior recommendation (<strong>{decision ?? "—"}</strong>) will be preserved. HR may select a different final decision, but cannot change the Final Appraisal Score.
           </p>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Override Final Score</label>
-              <input
-                type="number" step="0.1" min={0} max={100}
-                value={overrideScore} onChange={e => setOverrideScore(e.target.value)}
-                className="w-full px-3 py-2 rounded-md text-[13px] outline-none"
-                style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-              />
+              <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Final Appraisal Score</label>
+              <p className="px-3 py-2 rounded-md text-[13px] font-semibold" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}`, color: TEXT }}>
+                {finalScore.toFixed(1)} / 100
+              </p>
             </div>
             <div>
               <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>Final Decision</label>
@@ -278,7 +258,7 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
                   className="w-full appearance-none px-3 pr-8 py-2 rounded-md text-[13px] outline-none"
                   style={{ border: `1px solid ${BORDER}`, color: TEXT }}
                 >
-                  {(["Promotion", "Salary Increment", "Both", "No Recommendation"] as Decision[]).map(o => (
+                  {alternativeDecisions.map(o => (
                     <option key={o} value={o}>{o}</option>
                   ))}
                 </select>
@@ -295,20 +275,11 @@ function OverrideModal({ empName, decision, finalScore, onConfirm, onClose }: {
               style={{ border: `1px solid ${BORDER}`, color: TEXT }}
             />
           </div>
-          <div>
-            <label className="block text-[12px] font-semibold mb-1" style={{ color: TEXT }}>HR Remarks (optional)</label>
-            <textarea
-              value={remarks} onChange={e => setRemarks(e.target.value)} rows={2}
-              placeholder="Additional remarks for the record…"
-              className="w-full px-3 py-2 rounded-md text-[13px] outline-none resize-none"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            />
-          </div>
         </div>
         <div className="flex justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: BORDER }}>
           <button onClick={onClose} className="px-4 py-2 rounded-md text-[13px] font-medium border" style={{ color: TEXT, borderColor: BORDER }}>Cancel</button>
           <button
-            onClick={() => canSubmit && onConfirm(overrideDecision, parseFloat(overrideScore), overrideReason, remarks)}
+            onClick={() => canSubmit && onConfirm(overrideDecision, overrideReason)}
             disabled={!canSubmit}
             className="px-4 py-2 rounded-md text-[13px] font-semibold text-white"
             style={{ backgroundColor: canSubmit ? AMBER : "#9CA3AF", cursor: canSubmit ? "pointer" : "not-allowed" }}
@@ -400,7 +371,7 @@ export function HrAppraisals() {
   const meta = EMP_META[empId] ?? { department: "—", manager: "—" };
   const status = pd.status;
   const isActionable = isLivePeriod && status === "Pending Review";
-  const displayedFinalScore = pd.hrFinalScore ?? pd.finalScore;
+  const displayedFinalScore = pd.finalScore;
   const ss = STATUS_STYLE[status];
 
   function patch(updates: Partial<PeriodAppraisal>) {
@@ -408,23 +379,21 @@ export function HrAppraisals() {
     setRefreshKey(k => k + 1);
   }
 
-  function handleApprove(remarks: string) {
+  function handleApprove() {
     patch({
       status: "Approve",
       hrDecision: pd!.managerDecision,
-      hrRemarks: remarks,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     });
     setShowApproveModal(false);
   }
 
-  function handleOverride(hrDecision: Decision, hrFinalScore: number, reason: string, remarks: string) {
+  function handleOverride(hrDecision: Decision, reason: string) {
+    if (hrDecision === pd!.managerDecision) return;
     patch({
       status: "Override and Approve",
       hrDecision,
-      hrFinalScore,
       hrOverrideReason: reason,
-      hrRemarks: remarks,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     });
     setShowOverrideModal(false);
@@ -481,7 +450,6 @@ export function HrAppraisals() {
                 HR decision: <strong>{pd.hrDecision ?? "—"}</strong>. Final Score: <strong>{displayedFinalScore.toFixed(1)}</strong>.
                 {pd.finalDate ? ` Finalised ${pd.finalDate}.` : ""}
               </p>
-              {pd.hrRemarks && <p className="text-[12px] mt-1.5" style={{ color: TEXT }}>{pd.hrRemarks}</p>}
               {!isLivePeriod && <p className="text-[11px] mt-2" style={{ color: MUTED }}>Historical record — read only.</p>}
             </div>
           </div>
@@ -493,13 +461,12 @@ export function HrAppraisals() {
             <div>
               <p className="text-[14px] font-bold" style={{ color: AMBER }}>HR Override Applied</p>
               <p className="text-[13px] mt-0.5" style={{ color: TEXT }}>
-                Final Score adjusted to <strong>{displayedFinalScore.toFixed(1)}</strong>. HR decision: <strong>{pd.hrDecision ?? "—"}</strong>.
+                Final Score remains <strong>{displayedFinalScore.toFixed(1)}</strong>. HR decision: <strong>{pd.hrDecision ?? "—"}</strong>.
                 {pd.finalDate ? ` Finalised ${pd.finalDate}.` : ""}
               </p>
               {pd.hrOverrideReason && (
                 <p className="text-[12px] mt-1.5" style={{ color: TEXT }}><strong>Override reason:</strong> {pd.hrOverrideReason}</p>
               )}
-              {pd.hrRemarks && <p className="text-[12px] mt-1" style={{ color: TEXT }}>{pd.hrRemarks}</p>}
               <p className="text-[12px] mt-1.5" style={{ color: MUTED }}>
                 Manager's original recommendation (<strong>{pd.managerDecision ?? "—"}</strong>, score <strong>{pd.finalScore.toFixed(1)}</strong>) is preserved in the record.
               </p>
@@ -674,7 +641,7 @@ export function HrAppraisals() {
                           </td>
                           <td className="px-4 py-3">
                             <span className="font-bold" style={{ color: PURPLE }}>
-                              {(d.hrFinalScore ?? d.finalScore).toFixed(1)}
+                              {d.finalScore.toFixed(1)}
                             </span>
                             <span className="ml-1" style={{ color: MUTED }}>/100</span>
                           </td>

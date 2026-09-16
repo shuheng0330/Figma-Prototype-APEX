@@ -493,7 +493,7 @@ export function CompetencyDashboard() {
               </div>
             ))}
           </div>
-          <button onClick={() => navigate("/performance/team-reviews")}
+          <button onClick={() => navigate(`/performance/team-reviews?from=team-performance&period=${encodeURIComponent(selectedPeriod)}`)}
             className="flex items-center gap-1 text-[12px] font-semibold shrink-0 hover:underline"
             style={{ color: BLUE }}>
             View Pending Reviews

@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   X, ChevronDown, CheckCircle, RotateCcw, ArrowUp, ArrowDown, FileText,
+  ArrowLeft,
 } from "lucide-react";
 
 const BLUE   = "#2457A6";
@@ -338,6 +340,10 @@ function CompletionDialog({ item, summaryRows, onClose, onConfirm }: {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function TeamReviews() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnToTeamPerformance = searchParams.get("from") === "team-performance";
+  const returnPeriod = searchParams.get("period");
   const [queue, setQueue]               = useState<ReviewItem[]>(INIT_QUEUE);
   const [filterType, setFilterType]     = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -491,6 +497,12 @@ export function TeamReviews() {
 
         {/* ── Header ── */}
         <div>
+          {returnToTeamPerformance && (
+            <button onClick={() => navigate(`/dashboard${returnPeriod ? `?period=${encodeURIComponent(returnPeriod)}` : ""}`)}
+              className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+              <ArrowLeft size={14} /> Back to Team Performance
+            </button>
+          )}
           <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Review Workspace</h1>
           <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Superior view · 2027 Annual KPI Review · Retail Sales Department</p>
           <p className="text-[13px] mt-1" style={{ color: MUTED }}>
