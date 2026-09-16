@@ -28,13 +28,13 @@ const MANAGER_PATHS = [
 ];
 
 const HR_PATHS = [
-  ...EMPLOYEE_PATHS, "/org-eval", "/staff-profile", "/performance/hr-appraisals",
+  ...EMPLOYEE_PATHS, "/org-eval", "/dashboard", "/staff-profile", "/performance/hr-appraisals",
 ];
 
 const SUPER_ADMIN_PATHS = [
   "/upload", "/review", "/quiz-review", "/assign-training", "/training-score",
   "/performance/review-periods", "/performance/company-kpis",
-  "/performance/attitude-setup", "/org-eval", "/staff-profile",
+  "/performance/attitude-setup", "/org-eval", "/dashboard", "/staff-profile",
   "/users",
 ];
 

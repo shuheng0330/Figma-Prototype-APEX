@@ -1,5 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip as ReTooltip, ResponsiveContainer,
@@ -7,7 +9,7 @@ import {
 import {
   Users, TrendingUp, TrendingDown, ChevronDown,
   ArrowUp, ArrowDown, ArrowUpDown, Plus, Minus,
-  BarChart2, Target, Star,
+  BarChart2, Target, Star, Download,
 } from "lucide-react";
 import { PERIOD_OPTIONS } from "./appraisalData";
 
@@ -16,6 +18,7 @@ const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
 const AMBER  = "#D99000";
 const GREEN  = "#059669";
+const RED    = "#D14343";
 const PURPLE = "#8B5CF6";
 const TEXT   = "#172033";
 const MUTED  = "#667085";
@@ -159,6 +162,25 @@ interface DeptRow {
   dept: string; total: number; withResults: number;
   kpiScore: number; attScore: number; finalScore: number; yoyChange: number;
 }
+
+interface DeptAssessmentProgress {
+  dept: string;
+  total: number;
+  pendingSelf: number;
+  pendingSuperior: number;
+  pendingHr: number;
+}
+
+const DEPT_ASSESSMENT_PROGRESS: Record<string, DeptAssessmentProgress[]> = {
+  "2027 Annual KPI Review": [
+    { dept: "Human Resources", total: 22, pendingSelf: 2, pendingSuperior: 4, pendingHr: 6 },
+    { dept: "IT & Digital", total: 35, pendingSelf: 3, pendingSuperior: 7, pendingHr: 8 },
+    { dept: "Retail Banking", total: 42, pendingSelf: 5, pendingSuperior: 9, pendingHr: 10 },
+    { dept: "Finance", total: 28, pendingSelf: 2, pendingSuperior: 5, pendingHr: 7 },
+    { dept: "Retail Sales", total: 38, pendingSelf: 4, pendingSuperior: 6, pendingHr: 8 },
+    { dept: "Operations", total: 45, pendingSelf: 6, pendingSuperior: 10, pendingHr: 12 },
+  ],
+};
 const DEPT_PERF: Record<string, DeptRow[]> = {
   "2027 Annual KPI Review": [
     { dept: "Human Resources", total: 22, withResults: 20, kpiScore: 82.1, attScore: 85.2, finalScore: 83.5, yoyChange: +1.1 },
@@ -239,7 +261,7 @@ function MetricTabs({ value, onChange }: { value: Metric; onChange: (m: Metric) 
           style={value === m
             ? { backgroundColor: "white", color: TEXT, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }
             : { color: MUTED }}>
-          {m === "final" ? "Final" : m === "kpi" ? "KPI" : "Attitude"}
+          {m === "final" ? "Final Appraisal" : m === "kpi" ? "KPI Performance" : "Attitude Evaluation"}
         </button>
       ))}
     </div>
@@ -316,11 +338,190 @@ function DistTip({ active, payload }: any) {
   );
 }
 
+// ── PDF report helpers ────────────────────────────────────────────────────────
+type PdfRgb = [number, number, number];
+
+const PDF_COLORS = {
+  blue: [36, 87, 166] as PdfRgb,
+  teal: [15, 159, 143] as PdfRgb,
+  amber: [217, 144, 0] as PdfRgb,
+  green: [5, 150, 105] as PdfRgb,
+  purple: [139, 92, 246] as PdfRgb,
+  red: [209, 67, 67] as PdfRgb,
+  text: [23, 32, 51] as PdfRgb,
+  muted: [102, 112, 133] as PdfRgb,
+  border: [220, 227, 236] as PdfRgb,
+  pale: [248, 250, 252] as PdfRgb,
+};
+
+function pdfSectionTitle(pdf: jsPDF, title: string, y: number) {
+  pdf.setFillColor(...PDF_COLORS.blue);
+  pdf.roundedRect(14, y - 4.5, 3, 7, 1, 1, "F");
+  pdf.setTextColor(...PDF_COLORS.text);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(11);
+  pdf.text(title, 21, y);
+}
+
+function drawPdfLineChart(
+  pdf: jsPDF,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rows: Array<{ year: string; [key: string]: string | number }>,
+  series: Array<{ key: string; label: string; color: PdfRgb }>,
+) {
+  const legendColumns = series.length > 4 ? 3 : series.length;
+  const legendRows = Math.ceil(series.length / Math.max(1, legendColumns));
+  const legendHeight = 5 + legendRows * 5;
+  const plotX = x + 12;
+  const plotY = y + legendHeight;
+  const plotW = width - 16;
+  const plotH = height - legendHeight - 10;
+  const values = rows.flatMap(row => series.map(item => Number(row[item.key])).filter(Number.isFinite));
+  if (!rows.length || !values.length) return;
+  const min = Math.floor((Math.min(...values) - 4) / 5) * 5;
+  const max = Math.ceil((Math.max(...values) + 4) / 5) * 5;
+  const range = Math.max(1, max - min);
+
+  pdf.setFontSize(7);
+  pdf.setFont("helvetica", "normal");
+  series.forEach((item, index) => {
+    const legendX = x + (index % legendColumns) * (width / legendColumns);
+    const legendY = y + 2 + Math.floor(index / legendColumns) * 5;
+    pdf.setDrawColor(...item.color);
+    pdf.setLineWidth(1.2);
+    pdf.line(legendX, legendY, legendX + 8, legendY);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.text(item.label, legendX + 10, legendY + 1.2);
+  });
+
+  for (let grid = 0; grid <= 4; grid += 1) {
+    const gridY = plotY + (plotH / 4) * grid;
+    const gridValue = max - (range / 4) * grid;
+    pdf.setDrawColor(234, 238, 244);
+    pdf.setLineWidth(0.25);
+    pdf.line(plotX, gridY, plotX + plotW, gridY);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.setFontSize(6.5);
+    pdf.text(gridValue.toFixed(0), plotX - 2, gridY + 1.5, { align: "right" });
+  }
+
+  rows.forEach((row, index) => {
+    const pointX = plotX + (rows.length === 1 ? plotW / 2 : (plotW / (rows.length - 1)) * index);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.setFontSize(6.5);
+    pdf.text(row.year, pointX, plotY + plotH + 5, { align: "center" });
+  });
+
+  series.forEach(item => {
+    const points = rows.map((row, index) => ({
+      x: plotX + (rows.length === 1 ? plotW / 2 : (plotW / (rows.length - 1)) * index),
+      y: plotY + plotH - ((Number(row[item.key]) - min) / range) * plotH,
+    }));
+    pdf.setDrawColor(...item.color);
+    pdf.setFillColor(...item.color);
+    pdf.setLineWidth(0.8);
+    points.forEach((point, index) => {
+      if (index > 0) pdf.line(points[index - 1].x, points[index - 1].y, point.x, point.y);
+      pdf.circle(point.x, point.y, 1.1, "F");
+    });
+  });
+}
+
+function drawPdfDistribution(
+  pdf: jsPDF,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  title: string,
+  rows: DistBucket[],
+  color: PdfRgb,
+) {
+  pdf.setFillColor(...PDF_COLORS.pale);
+  pdf.setDrawColor(...PDF_COLORS.border);
+  pdf.roundedRect(x, y, width, height, 2, 2, "FD");
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(7.5);
+  pdf.setTextColor(...PDF_COLORS.text);
+  pdf.text(title, x + 4, y + 6);
+  const maxCount = Math.max(1, ...rows.map(row => row.count));
+  const barAreaHeight = height - 15;
+  const barWidth = (width - 12) / rows.length;
+  rows.forEach((row, index) => {
+    const heightRatio = row.count / maxCount;
+    const barH = Math.max(1, barAreaHeight * heightRatio);
+    const barX = x + 6 + index * barWidth;
+    const barY = y + height - 7 - barH;
+    pdf.setFillColor(...color);
+    pdf.roundedRect(barX + 1, barY, barWidth - 3, barH, 0.7, 0.7, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(...PDF_COLORS.text);
+    pdf.text(String(row.count), barX + (barWidth - 1) / 2, barY - 1.5, { align: "center" });
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(5.5);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.text(row.range.replace("–", "-"), barX + (barWidth - 1) / 2, y + height - 2.5, { align: "center" });
+  });
+}
+
+function drawPdfRecommendationBars(
+  pdf: jsPDF,
+  x: number,
+  y: number,
+  width: number,
+  title: string,
+  rows: RecItem[],
+) {
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...PDF_COLORS.text);
+  pdf.text(title, x, y);
+  const maxCount = Math.max(1, ...rows.map(row => row.count));
+  rows.forEach((row, index) => {
+    const rowY = y + 8 + index * 11;
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.text(row.label, x, rowY);
+    pdf.setFillColor(238, 242, 247);
+    pdf.roundedRect(x + 38, rowY - 3.5, width - 58, 4.5, 1, 1, "F");
+    pdf.setFillColor(...PDF_COLORS.blue);
+    pdf.roundedRect(x + 38, rowY - 3.5, Math.max(2, ((width - 58) * row.count) / maxCount), 4.5, 1, 1, "F");
+    pdf.setFont("helvetica", "bold");
+    pdf.setTextColor(...PDF_COLORS.text);
+    pdf.text(`${row.count} (${row.pct}%)`, x + width, rowY, { align: "right" });
+  });
+}
+
+function addPdfPageChrome(pdf: jsPDF, period: string) {
+  const pages = pdf.getNumberOfPages();
+  for (let page = 1; page <= pages; page += 1) {
+    pdf.setPage(page);
+    pdf.setDrawColor(...PDF_COLORS.border);
+    pdf.setLineWidth(0.3);
+    pdf.line(14, 198, 283, 198);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.text(`Confidential | ${period}`, 14, 203);
+    pdf.text(`Page ${page} of ${pages}`, 283, 203, { align: "right" });
+  }
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export function OrgWideEvaluation() {
   const navigate = useNavigate();
-  const [period,      setPeriod]      = useState(LIVE_PERIOD);
+  const [searchParams] = useSearchParams();
+  const requestedPeriod = searchParams.get("period");
+  const [period,      setPeriod]      = useState(
+    requestedPeriod && PERIOD_OPTIONS.includes(requestedPeriod) ? requestedPeriod : LIVE_PERIOD
+  );
   const [showPeriodDd, setShowPeriodDd] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
 
   // Chart state
@@ -397,9 +598,166 @@ export function OrgWideEvaluation() {
     });
   }, [period, sortCol, sortDir]);
 
+  const assessmentProgressRows = useMemo(() => {
+    const configured = DEPT_ASSESSMENT_PROGRESS[period];
+    if (configured) return configured;
+    return (DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD]).map(row => {
+      const outstanding = Math.max(0, row.total - row.withResults);
+      return {
+        dept: row.dept,
+        total: row.total,
+        pendingSelf: Math.max(1, Math.ceil(outstanding / 2)),
+        pendingSuperior: Math.max(1, outstanding + 2),
+        pendingHr: Math.max(1, outstanding + 4),
+      };
+    });
+  }, [period]);
+
   // ── Rec Data ───────────────────────────────────────────────────────────────
   const recItems   = (APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD])[recTab];
   const maxRecCount = Math.max(...recItems.map(r => r.count));
+
+  async function exportSummaryPdf() {
+    setIsExporting(true);
+    try {
+      const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const reportDeptRows = DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD];
+      const recommendations = APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD];
+      const historyYears = Object.keys(ORG_YEAR_DATA)
+        .map(Number)
+        .filter(year => year <= periodYear)
+        .sort((a, b) => a - b)
+        .slice(-5)
+        .map(String);
+      const organisationHistory = historyYears.map(year => ({
+        year,
+        kpi: ORG_YEAR_DATA[year].kpi,
+        attitude: ORG_YEAR_DATA[year].attitude,
+        final: ORG_YEAR_DATA[year].final,
+      }));
+      const departmentHistory = historyYears.map(year => {
+        const row: { year: string; [key: string]: string | number } = { year };
+        DEPARTMENTS.forEach(department => {
+          row[department] = DEPT_YEAR_DATA[department]?.[year]?.final ?? 0;
+        });
+        return row;
+      });
+
+      // Page 1 - executive summary and organisation-level analytics.
+      pdf.setFillColor(...PDF_COLORS.blue);
+      pdf.rect(0, 0, 297, 30, "F");
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(18);
+      pdf.text("TBM", 14, 13);
+      pdf.setFontSize(15);
+      pdf.text("Organisation Performance Summary", 38, 12);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8);
+      pdf.text(`${period} | ${pStatus}`, 38, 19);
+      pdf.text(`Generated ${new Intl.DateTimeFormat("en-MY", { dateStyle: "medium" }).format(new Date())}`, 283, 19, { align: "right" });
+
+      const cards = [
+        { label: "Employees with Results", value: `${summary.withResults} / ${summary.total}`, color: PDF_COLORS.blue },
+        { label: "KPI Performance Score", value: summary.kpiScore.toFixed(1), color: PDF_COLORS.teal },
+        { label: "Attitude Evaluation Score", value: summary.attScore.toFixed(1), color: PDF_COLORS.purple },
+        { label: "Final Appraisal Score", value: summary.finalScore.toFixed(1), color: PDF_COLORS.green },
+      ];
+      cards.forEach((card, index) => {
+        const x = 14 + index * 68.5;
+        pdf.setFillColor(...PDF_COLORS.pale);
+        pdf.setDrawColor(...PDF_COLORS.border);
+        pdf.roundedRect(x, 37, 63.5, 24, 2, 2, "FD");
+        pdf.setFillColor(...card.color);
+        pdf.roundedRect(x, 37, 3, 24, 1, 1, "F");
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(7.5);
+        pdf.setTextColor(...PDF_COLORS.muted);
+        pdf.text(card.label.toUpperCase(), x + 7, 44);
+        pdf.setFontSize(17);
+        pdf.setTextColor(...card.color);
+        pdf.text(card.value, x + 7, 55);
+      });
+
+      pdfSectionTitle(pdf, "Five-Year Organisation Performance Trend", 73);
+      drawPdfLineChart(pdf, 14, 78, 269, 53, organisationHistory, [
+        { key: "kpi", label: "KPI Performance", color: PDF_COLORS.blue },
+        { key: "attitude", label: "Attitude Evaluation", color: PDF_COLORS.teal },
+        { key: "final", label: "Final Appraisal", color: PDF_COLORS.purple },
+      ]);
+
+      pdfSectionTitle(pdf, "Score Distribution", 141);
+      const distribution = SCORE_DIST[period] ?? SCORE_DIST[LIVE_PERIOD];
+      drawPdfDistribution(pdf, 14, 147, 84, 43, "KPI Performance", distribution.kpi, PDF_COLORS.blue);
+      drawPdfDistribution(pdf, 106.5, 147, 84, 43, "Attitude Evaluation", distribution.attitude, PDF_COLORS.teal);
+      drawPdfDistribution(pdf, 199, 147, 84, 43, "Final Appraisal", distribution.final, PDF_COLORS.purple);
+
+      // Page 2+ - department tables. AutoTable adds pages as the dataset grows.
+      pdf.addPage("a4", "landscape");
+      pdfSectionTitle(pdf, "Department Assessment Progress", 18);
+      autoTable(pdf, {
+        startY: 24,
+        margin: { left: 14, right: 14, top: 18, bottom: 18 },
+        head: [["Department", "Total Employees", "Pending Self-Assessment", "Pending Superior Assessment", "Pending HR Review"]],
+        body: assessmentProgressRows.map(row => [row.dept, row.total, row.pendingSelf, row.pendingSuperior, row.pendingHr]),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 8, cellPadding: 3, textColor: PDF_COLORS.text, lineColor: PDF_COLORS.border, lineWidth: 0.2 },
+        headStyles: { fillColor: PDF_COLORS.blue, textColor: [255, 255, 255], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: PDF_COLORS.pale },
+        columnStyles: { 0: { cellWidth: 58 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center" } },
+      });
+      const firstTableEnd = (pdf as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+      let departmentTableY = firstTableEnd + 13;
+      if (departmentTableY > 122) {
+        pdf.addPage("a4", "landscape");
+        departmentTableY = 18;
+      }
+      pdfSectionTitle(pdf, "Department Performance", departmentTableY);
+      autoTable(pdf, {
+        startY: departmentTableY + 6,
+        margin: { left: 14, right: 14, top: 18, bottom: 18 },
+        head: [["Department", "Employees with Results", "KPI Performance", "Attitude Evaluation", "Final Appraisal", "YoY Change"]],
+        body: reportDeptRows.map(row => [
+          row.dept,
+          `${row.withResults} / ${row.total}`,
+          row.kpiScore.toFixed(1),
+          row.attScore.toFixed(1),
+          row.finalScore.toFixed(1),
+          `${row.yoyChange >= 0 ? "+" : ""}${row.yoyChange.toFixed(1)}`,
+        ]),
+        theme: "grid",
+        styles: { font: "helvetica", fontSize: 8, cellPadding: 3, textColor: PDF_COLORS.text, lineColor: PDF_COLORS.border, lineWidth: 0.2 },
+        headStyles: { fillColor: PDF_COLORS.teal, textColor: [255, 255, 255], fontStyle: "bold" },
+        alternateRowStyles: { fillColor: PDF_COLORS.pale },
+        columnStyles: { 0: { cellWidth: 54 }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontStyle: "bold" }, 5: { halign: "center" } },
+      });
+
+      // Final page - complete department history and both decision distributions.
+      pdf.addPage("a4", "landscape");
+      pdfSectionTitle(pdf, "Five-Year Final Appraisal Trend by Department", 18);
+      drawPdfLineChart(pdf, 14, 24, 269, 76, departmentHistory, DEPARTMENTS.map(department => ({
+        key: department,
+        label: department,
+        color: department === "Retail Banking" ? PDF_COLORS.blue
+          : department === "Retail Sales" ? PDF_COLORS.teal
+            : department === "Operations" ? PDF_COLORS.amber
+              : department === "Finance" ? [59, 130, 246] as PdfRgb
+                : department === "Human Resources" ? PDF_COLORS.purple
+                  : [14, 165, 233] as PdfRgb,
+      })));
+      pdfSectionTitle(pdf, "Appraisal Recommendation Distribution", 116);
+      drawPdfRecommendationBars(pdf, 14, 124, 126, "Superior Recommendations", recommendations.manager);
+      drawPdfRecommendationBars(pdf, 157, 124, 126, "HR Final Decisions", recommendations.hr);
+
+      addPdfPageChrome(pdf, period);
+      pdf.save(`organisation-performance-summary-${periodYear}.pdf`);
+    } catch (error) {
+      console.error("Unable to export Organisation Performance PDF", error);
+      window.alert("The PDF could not be generated. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -423,34 +781,42 @@ export function OrgWideEvaluation() {
             </p>
           </div>
 
-          {/* Period Selector */}
-          <div ref={periodRef} className="relative shrink-0">
-            <button onClick={() => setShowPeriodDd(o => !o)}
-              className="flex items-center gap-2 px-3 py-2 bg-white rounded-md text-[13px]"
-              style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
-              <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Period</span>
-              <span className="font-semibold" style={{ color: BLUE }}>{period.split(" ")[0]}</span>
-              <span style={{ color: MUTED }}>Annual KPI Review</span>
-              <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
-              <ChevronDown size={13} style={{ color: MUTED }} />
+          <div className="flex items-start gap-2 shrink-0">
+            <button onClick={exportSummaryPdf} disabled={isExporting}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white rounded-md text-[12px] font-semibold transition-colors hover:bg-[#F8FAFC] disabled:cursor-wait disabled:opacity-60"
+              style={{ color: BLUE, border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+              <Download size={14} /> {isExporting ? "Preparing PDF..." : "Export PDF"}
             </button>
-            {showPeriodDd && (
-              <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
-                style={{ minWidth: 260, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                {PERIOD_OPTIONS.map(p => {
-                  const ps = PERIOD_STATUS[p] ?? "Closed";
-                  const ps_sty = PERIOD_STATUS_STYLE[ps];
-                  return (
-                    <button key={p} onClick={() => { setPeriod(p); setShowPeriodDd(false); }}
-                      className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors flex items-center justify-between"
-                      style={{ color: period === p ? BLUE : TEXT, fontWeight: period === p ? 600 : 400 }}>
-                      {p}
-                      <Pill label={ps} color={ps_sty.color} bg={ps_sty.bg} />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+
+            {/* Period Selector */}
+            <div ref={periodRef} className="relative">
+              <button onClick={() => setShowPeriodDd(o => !o)}
+                className="flex items-center gap-2 px-3 py-2 bg-white rounded-md text-[13px]"
+                style={{ border: `1px solid ${BORDER}`, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>
+                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Period</span>
+                <span className="font-semibold" style={{ color: BLUE }}>{period.split(" ")[0]}</span>
+                <span style={{ color: MUTED }}>Annual KPI Review</span>
+                <Pill label={pStatus} color={pStatusSty.color} bg={pStatusSty.bg} />
+                <ChevronDown size={13} style={{ color: MUTED }} />
+              </button>
+              {showPeriodDd && (
+                <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
+                  style={{ minWidth: 260, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
+                  {PERIOD_OPTIONS.map(p => {
+                    const ps = PERIOD_STATUS[p] ?? "Closed";
+                    const ps_sty = PERIOD_STATUS_STYLE[ps];
+                    return (
+                      <button key={p} onClick={() => { setPeriod(p); setShowPeriodDd(false); }}
+                        className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors flex items-center justify-between"
+                        style={{ color: period === p ? BLUE : TEXT, fontWeight: period === p ? 600 : 400 }}>
+                        {p}
+                        <Pill label={ps} color={ps_sty.color} bg={ps_sty.bg} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -477,7 +843,7 @@ export function OrgWideEvaluation() {
           {/* KPI Performance */}
           <div className="bg-white rounded-lg p-5" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="flex items-start justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Organisation KPI Performance</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>KPI Performance Score</p>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ml-2" style={{ backgroundColor: "#ECFDF9" }}>
                 <Target size={14} style={{ color: TEAL }} />
               </div>
@@ -486,10 +852,10 @@ export function OrgWideEvaluation() {
             <p className="text-[11px]" style={{ color: MUTED }}>Based on {summary.withResults} employees with available results</p>
           </div>
 
-          {/* Attitude Score */}
+          {/* Attitude Evaluation Score */}
           <div className="bg-white rounded-lg p-5" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="flex items-start justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Organisation Attitude Score</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Attitude Evaluation Score</p>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ml-2" style={{ backgroundColor: "#F5F3FF" }}>
                 <Star size={14} style={{ color: PURPLE }} />
               </div>
@@ -501,7 +867,7 @@ export function OrgWideEvaluation() {
           {/* Final Appraisal Score */}
           <div className="bg-white rounded-lg p-5" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="flex items-start justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Organisation Final Appraisal Score</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: MUTED }}>Final Appraisal Score</p>
               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ml-2" style={{ backgroundColor: "#ECFDF5" }}>
                 <BarChart2 size={14} style={{ color: GREEN }} />
               </div>
@@ -511,7 +877,43 @@ export function OrgWideEvaluation() {
           </div>
         </div>
 
-        {/* 3 — HISTORICAL ANALYTICS ROW ─────────────────────────────────── */}
+        {/* 3 — DEPARTMENT ASSESSMENT PROGRESS ───────────────────────────── */}
+        <div className="bg-white rounded-lg overflow-hidden" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
+          <div className="px-5 py-4" style={{ borderBottom: `1px solid ${BORDER}` }}>
+            <h2 className="text-[14px] font-bold" style={{ color: TEXT }}>Department Assessment Progress</h2>
+            <p className="text-[11px] mt-0.5" style={{ color: MUTED }}>
+              Outstanding employee, Superior, and HR assessment work for {period}.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr style={{ backgroundColor: "#F8FAFC" }}>
+                  {["Department", "Total Employees", "Pending Self-Assessment", "Pending Superior Assessment", "Pending HR Review"].map(label => (
+                    <th key={label} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                      style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
+                      {label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {assessmentProgressRows.map((row, index) => (
+                  <tr key={row.dept} className="hover:bg-[#F8FAFC] transition-colors"
+                    style={{ borderBottom: index < assessmentProgressRows.length - 1 ? `1px solid ${BORDER}` : "none" }}>
+                    <td className="px-4 py-3 font-semibold" style={{ color: TEXT }}>{row.dept}</td>
+                    <td className="px-4 py-3 font-medium" style={{ color: TEXT }}>{row.total}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: AMBER }}>{row.pendingSelf}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: AMBER }}>{row.pendingSuperior}</td>
+                    <td className="px-4 py-3 font-semibold" style={{ color: row.pendingHr > 0 ? RED : GREEN }}>{row.pendingHr}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* 4 — HISTORICAL ANALYTICS ROW ─────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-5">
 
           {/* LEFT — Organisation Performance Trend */}
@@ -660,15 +1062,15 @@ export function OrgWideEvaluation() {
                   <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap" style={{ color: MUTED }}>Employees with Results</th>
                   <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide cursor-pointer whitespace-nowrap" style={{ color: MUTED }}
                     onClick={() => toggleSort("kpiScore")}>
-                    <span className="flex items-center gap-1">KPI Score <SortIcon col="kpiScore" sortCol={sortCol} sortDir={sortDir} /></span>
+                    <span className="flex items-center gap-1">KPI Performance Score <SortIcon col="kpiScore" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide cursor-pointer whitespace-nowrap" style={{ color: MUTED }}
                     onClick={() => toggleSort("attScore")}>
-                    <span className="flex items-center gap-1">Attitude Score <SortIcon col="attScore" sortCol={sortCol} sortDir={sortDir} /></span>
+                    <span className="flex items-center gap-1">Attitude Evaluation Score <SortIcon col="attScore" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide cursor-pointer whitespace-nowrap" style={{ color: MUTED }}
                     onClick={() => toggleSort("finalScore")}>
-                    <span className="flex items-center gap-1">Final Score <SortIcon col="finalScore" sortCol={sortCol} sortDir={sortDir} /></span>
+                    <span className="flex items-center gap-1">Final Appraisal Score <SortIcon col="finalScore" sortCol={sortCol} sortDir={sortDir} /></span>
                   </th>
                   <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide cursor-pointer whitespace-nowrap" style={{ color: MUTED }}
                     onClick={() => toggleSort("yoyChange")}>
@@ -702,7 +1104,7 @@ export function OrgWideEvaluation() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => navigate("/dashboard")}
+                      <button onClick={() => navigate(`/dashboard?returnTo=organisation-performance&period=${encodeURIComponent(period)}&department=${encodeURIComponent(row.dept)}`)}
                         className="text-[11px] font-semibold whitespace-nowrap px-2.5 py-1.5 rounded-md transition-all"
                         style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>
                         View Team →
@@ -731,7 +1133,7 @@ export function OrgWideEvaluation() {
                 style={recTab === "manager"
                   ? { backgroundColor: "white", color: TEXT, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }
                   : { color: MUTED }}>
-                Manager Recommendation
+                Superior Recommendation
               </button>
               <button onClick={() => setRecTab("hr")}
                 className="px-3 py-1.5 rounded text-[11px] font-semibold transition-all"
@@ -771,7 +1173,7 @@ export function OrgWideEvaluation() {
 
           <p className="text-[11px] mt-4" style={{ color: MUTED }}>
             {recTab === "manager"
-              ? "Manager Recommendation — based on manager submissions for this review period."
+              ? "Superior Recommendation — based on Superior submissions for this review period."
               : "HR Final Decision — based on completed HR appraisal reviews for this period."}
           </p>
         </div>

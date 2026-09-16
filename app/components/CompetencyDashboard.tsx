@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   ChevronDown, TrendingUp, TrendingDown, Users,
-  ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, ChevronRight, Search,
+  ArrowUp, ArrowDown, ArrowUpDown, AlertCircle, ChevronRight, Search, ArrowLeft,
 } from "lucide-react";
 import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus,
@@ -240,6 +240,8 @@ export function CompetencyDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedPeriod = searchParams.get("period");
+  const returnToOrganisation = searchParams.get("returnTo") === "organisation-performance";
+  const requestedDepartment = searchParams.get("department");
 
   const [selectedPeriod, setSelectedPeriod] = useState(
     requestedPeriod && PERIOD_OPTIONS.includes(requestedPeriod) ? requestedPeriod : LIVE_PERIOD
@@ -375,9 +377,15 @@ export function CompetencyDashboard() {
         {/* ── 1. Header ─────────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
+            {returnToOrganisation && (
+              <button onClick={() => navigate(`/org-eval?period=${encodeURIComponent(selectedPeriod)}`)}
+                className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
+                <ArrowLeft size={14} /> Back to Organisation Performance
+              </button>
+            )}
             <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Performance</h1>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-              Retail Sales Department · Performance overview
+              {requestedDepartment ?? "Retail Sales"} Department · Performance overview
             </p>
           </div>
           <div ref={periodRef} className="relative">
