@@ -639,6 +639,7 @@ export function StaffProfileHR() {
   const [searchParams] = useSearchParams();
   const returnContext = searchParams.get("returnTo");
   const returnToAppraisals = returnContext === "hr-appraisals" || returnContext === "team-appraisals";
+  const returnToTeamPerformance = returnContext === "team-performance";
   const returnPeriod = searchParams.get("period") ?? LIVE_PERIOD;
 
   const empId    = id ?? "amir";
@@ -647,7 +648,7 @@ export function StaffProfileHR() {
   const kpis     = KPI_DATA[empId] ?? [];
   const attitude = ATTITUDE_DATA[empId] ?? null;
 
-  const [selectedPeriod, setSelectedPeriod] = useState(LIVE_PERIOD);
+  const [selectedPeriod, setSelectedPeriod] = useState(returnPeriod);
   const [chartYears,     setChartYears]     = useState<3 | 5>(5);
   const [prevOpen,       setPrevOpen]       = useState(false);
   const [histDrawer,     setHistDrawer]     = useState<{ period: string; data: PeriodAppraisal } | null>(null);
@@ -672,12 +673,14 @@ export function StaffProfileHR() {
 
         {/* ── 1. Header ── */}
         <div>
-          {returnToAppraisals && (
-            <button onClick={() => navigate(returnContext === "team-appraisals"
-              ? `/performance/final-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`
-              : `/performance/hr-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`)}
+          {(returnToAppraisals || returnToTeamPerformance) && (
+            <button onClick={() => navigate(returnToTeamPerformance
+              ? `/dashboard?period=${encodeURIComponent(returnPeriod)}`
+              : returnContext === "team-appraisals"
+                ? `/performance/final-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`
+                : `/performance/hr-appraisals/${empId}?period=${encodeURIComponent(returnPeriod)}`)}
               className="flex items-center gap-1.5 text-[12px] font-semibold mb-3" style={{ color: BLUE }}>
-              <ArrowLeft size={14} /> {returnContext === "team-appraisals" ? "Back to Team Appraisals" : "Back to Appraisal Reviews"}
+              <ArrowLeft size={14} /> {returnToTeamPerformance ? "Back to Team Performance" : returnContext === "team-appraisals" ? "Back to Team Appraisals" : "Back to Appraisal Reviews"}
             </button>
           )}
           <div className="bg-white rounded-lg p-5 flex items-center gap-4"
