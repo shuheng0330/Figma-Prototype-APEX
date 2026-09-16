@@ -4,6 +4,7 @@ import {
   Pencil, Trash2, CheckCircle, Info, Building2,
 } from "lucide-react";
 import { PERIOD_OPTIONS, LIVE_PERIOD } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -749,10 +750,14 @@ function EditDrawer({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function CompanyKPIs() {
+  const performanceStore = usePerformanceStore();
+  const sharedPeriods = performanceStore.periods;
+  const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
+  const defaultPeriodName = sharedPeriods.find(period => period.id === defaultPeriodId)?.name ?? LIVE_PERIOD;
   const [kpisByPeriod, setKpisByPeriod] = useState<Record<string, KpiRow[]>>(() =>
     Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]]))
   );
-  const [selectedPeriod, setSelectedPeriod] = useState(LIVE_PERIOD);
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
   const [viewId, setViewId]             = useState<string | null>(null);
@@ -777,7 +782,10 @@ export function CompanyKPIs() {
   }, []);
 
   const kpis         = kpisByPeriod[selectedPeriod] ?? [];
-  const config       = PERIOD_CONFIG[selectedPeriod] ?? { status: "Closed" as PeriodStatus, maxAllocation: 10, kpiSetupDeadline: "" };
+  const sharedPeriod = sharedPeriods.find(period => period.name === selectedPeriod);
+  const config       = sharedPeriod
+    ? { status: sharedPeriod.status as PeriodStatus, maxAllocation: sharedPeriod.allocations.company, kpiSetupDeadline: sharedPeriod.deadlines.kpiSetup }
+    : { status: "Closed" as PeriodStatus, maxAllocation: 10, kpiSetupDeadline: "" };
   const periodStatus = config.status;
   const maxAlloc     = config.maxAllocation;
 
@@ -834,7 +842,7 @@ export function CompanyKPIs() {
 
   function confirmPublish() {
     if (!publishConfirm) return;
-    const publishedOn = new Date().toISOString().slice(0, 10);
+    const publishedOn = performanceStore.state.effectiveDate;
     const publication = {
       status: "Published" as KpiStatus,
       publishedOn,
@@ -862,7 +870,7 @@ export function CompanyKPIs() {
 
   function createRevision(data: EditFormData) {
     if (!editId) return;
-    const revisedOn = "15 Sep 2026";
+    const revisedOn = performanceStore.state.effectiveDate;
     mutatePeriod(prev => prev.map(kpi => {
       if (kpi.id !== editId) return kpi;
       const previous: KpiVersion = {
@@ -908,9 +916,9 @@ export function CompanyKPIs() {
               {showPeriodDd && (
                 <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
                   style={{ minWidth: 240, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                  {PERIOD_OPTIONS.map(p => {
-                    const cfg = PERIOD_CONFIG[p];
-                    const ps  = cfg ? PERIOD_STATUS_STYLE[cfg.status] : PERIOD_STATUS_STYLE["Closed"];
+                  {sharedPeriods.map(shared => {
+                    const p = shared.name;
+                    const ps = PERIOD_STATUS_STYLE[(shared.status === "Draft" ? "Upcoming" : shared.status) as PeriodStatus] ?? PERIOD_STATUS_STYLE["Closed"];
                     return (
                       <button key={p} onClick={() => changePeriod(p)}
                         className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors flex items-center justify-between"
@@ -923,6 +931,13 @@ export function CompanyKPIs() {
                 </div>
               )}
             </div>
+
+            {periodStatus === "Open" && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-md text-[11px]" style={{ backgroundColor:"#FEF9EC", color:AMBER, border:"1px solid #F5D98A" }}>
+                <AlertTriangle size={12} className="mt-0.5 shrink-0"/>
+                Open-period revision effective-version behaviour is TBC. Version history is preserved, but assessment propagation and recalculation are not modelled.
+              </div>
+            )}
 
             <button onClick={() => setShowGuide(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"

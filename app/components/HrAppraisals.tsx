@@ -21,12 +21,10 @@ const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 const EMP_META: Record<string, { department: string; manager: string }> = {
@@ -66,7 +64,7 @@ function HistoryDrawer({ period, data, onClose }: {
   period: string; data: PeriodAppraisal; onClose: () => void;
 }) {
   const ss = STATUS_STYLE[data.status];
-  const isOverride = data.status === "Override and Approve";
+  const isOverride = data.hrApprovalMethod === "Overridden Recommendation";
 
   return (
     <>
@@ -381,7 +379,8 @@ export function HrAppraisals() {
 
   function handleApprove() {
     patch({
-      status: "Approve",
+      status: "Approved",
+      hrApprovalMethod: "Accepted Superior Recommendation",
       hrDecision: pd!.managerDecision,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     });
@@ -391,7 +390,8 @@ export function HrAppraisals() {
   function handleOverride(hrDecision: Decision, reason: string) {
     if (hrDecision === pd!.managerDecision) return;
     patch({
-      status: "Override and Approve",
+      status: "Approved",
+      hrApprovalMethod: "Overridden Recommendation",
       hrDecision,
       hrOverrideReason: reason,
       finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
@@ -400,7 +400,7 @@ export function HrAppraisals() {
   }
 
   function handleReturn(reason: string) {
-    patch({ status: "Return for Revision", hrReturnReason: reason });
+    patch({ status: "Returned", hrReturnReason: reason, hrApprovalMethod: null });
     setShowReturnModal(false);
   }
 
@@ -434,14 +434,14 @@ export function HrAppraisals() {
               </span>
             </div>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
-              HR / Super Admin view · {emp.name} ({emp.staffId}) · {selectedPeriod}
+              HR view · {emp.name} ({emp.staffId}) · {selectedPeriod}
               {pd.submittedDate ? ` · Submitted ${pd.submittedDate}` : ""}
             </p>
           </div>
         </div>
 
         {/* Status banners */}
-        {status === "Approve" && (
+        {status === "Approved" && pd.hrApprovalMethod !== "Overridden Recommendation" && (
           <div className="p-4 rounded-lg flex items-start gap-3" style={{ backgroundColor: "#ECFDF5", border: `1px solid ${GREEN}` }}>
             <CheckCircle size={18} style={{ color: GREEN }} className="mt-0.5 shrink-0" />
             <div>
@@ -455,7 +455,7 @@ export function HrAppraisals() {
           </div>
         )}
 
-        {status === "Override and Approve" && (
+        {status === "Approved" && pd.hrApprovalMethod === "Overridden Recommendation" && (
           <div className="p-4 rounded-lg flex items-start gap-3" style={{ backgroundColor: "#FFFBEB", border: `1px solid #FDE68A` }}>
             <AlertCircle size={18} style={{ color: AMBER }} className="mt-0.5 shrink-0" />
             <div>
@@ -468,13 +468,13 @@ export function HrAppraisals() {
                 <p className="text-[12px] mt-1.5" style={{ color: TEXT }}><strong>Override reason:</strong> {pd.hrOverrideReason}</p>
               )}
               <p className="text-[12px] mt-1.5" style={{ color: MUTED }}>
-                Manager's original recommendation (<strong>{pd.managerDecision ?? "—"}</strong>, score <strong>{pd.finalScore.toFixed(1)}</strong>) is preserved in the record.
+                Superior's original recommendation (<strong>{pd.managerDecision ?? "—"}</strong>) is preserved in the record.
               </p>
             </div>
           </div>
         )}
 
-        {status === "Return for Revision" && (
+        {status === "Returned" && (
           <div className="p-4 rounded-lg flex items-start gap-3" style={{ backgroundColor: "#FEF3F2", border: `1px solid #FCA5A5` }}>
             <RotateCcw size={18} style={{ color: RED }} className="mt-0.5 shrink-0" />
             <div>
@@ -504,9 +504,9 @@ export function HrAppraisals() {
             </div>
             <div className="space-y-1.5">
               {[
-                { label: "Manager",                  value: meta.manager },
+                { label: "Superior",                 value: meta.manager },
                 { label: "Annual KPI Review Period",  value: selectedPeriod },
-                { label: "Mgr Recommendation",        value: pd.managerDecision ?? "—" },
+                { label: "Superior Recommendation",   value: pd.managerDecision ?? "—" },
               ].map(f => (
                 <div key={f.label} className="flex justify-between text-[12px]">
                   <span style={{ color: MUTED }}>{f.label}</span>
@@ -548,11 +548,11 @@ export function HrAppraisals() {
             <div className="flex items-end gap-2 mt-1">
               <span className="text-[36px] font-bold" style={{ color: PURPLE }}>{displayedFinalScore.toFixed(1)}</span>
               <span className="text-[14px] mb-1.5" style={{ color: MUTED }}>/100</span>
-              {status === "Override and Approve" && (
+              {status === "Approved" && pd.hrApprovalMethod === "Overridden Recommendation" && (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full mb-1.5" style={{ color: AMBER, backgroundColor: "#FEF9EC" }}>HR Override</span>
               )}
             </div>
-            <p className="text-[11px]" style={{ color: MUTED }}>50% KPI + 50% Attitude — Example formula, to be confirmed</p>
+            <p className="text-[11px]" style={{ color: MUTED }}>Calculated using the Review Period's configured KPI and Attitude allocations.</p>
           </div>
           <div className="flex-1 h-3 rounded-full bg-gray-100 overflow-hidden">
             <div className="h-full rounded-full" style={{ width: `${Math.min(displayedFinalScore, 100)}%`, backgroundColor: PURPLE }} />

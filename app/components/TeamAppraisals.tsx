@@ -14,34 +14,27 @@ const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 const ACTION_LABEL: Record<AppStatus, string> = {
-  "Ready for Appraisal":  "Start Appraisal",
   "Draft":                "Continue Appraisal",
   "Pending Review":       "View Submission",
-  "Return for Revision":  "Revise Appraisal",
-  "Approve":              "View Appraisal",
-  "Override and Approve": "View Appraisal",
+  "Returned":             "Revise Appraisal",
+  "Approved":             "View Appraisal",
 };
 const STATUS_LABEL: Record<AppStatus, string> = {
-  "Ready for Appraisal": "Ready for Appraisal",
   "Draft": "Draft",
   "Pending Review": "Pending Review",
-  "Return for Revision": "Returned",
-  "Approve": "Approved",
-  "Override and Approve": "Approved",
+  "Returned": "Returned",
+  "Approved": "Approved",
 };
 
 const ALL_STATUSES: AppStatus[] = [
-  "Ready for Appraisal", "Draft", "Pending Review",
-  "Return for Revision", "Approve", "Override and Approve",
+  "Draft", "Pending Review", "Returned", "Approved",
 ];
 
 type SortField = "kpiScore" | "attScore" | "finalScore";
@@ -55,6 +48,7 @@ interface RowEmployee {
   attScore: number;
   finalScore: number;
   status: AppStatus;
+  readyForAppraisal: boolean;
 }
 
 function buildRows(period: string): RowEmployee[] {
@@ -64,7 +58,7 @@ function buildRows(period: string): RowEmployee[] {
     return [{
       id, name: emp.name, initials: emp.initials, role: emp.role,
       kpiScore: pd.kpiScore, attScore: pd.attScore, finalScore: pd.finalScore,
-      status: pd.status,
+      status: pd.status, readyForAppraisal: Boolean(pd.readyForAppraisal),
     }];
   });
 }
@@ -108,7 +102,8 @@ export function TeamAppraisals() {
 
   const displayed = useMemo(() => {
     let list = rows.filter(e =>
-      (filterStatus === "All" || e.status === filterStatus) &&
+      (filterStatus === "All" ||
+        (filterStatus === "Ready for Appraisal" ? e.readyForAppraisal && e.status === "Draft" : e.status === filterStatus)) &&
       (filterEmployee === "All" || e.name === filterEmployee)
     );
     if (sortField) {
@@ -121,18 +116,18 @@ export function TeamAppraisals() {
   }, [rows, filterStatus, filterEmployee, sortField, sortDir]);
 
   const counts = useMemo(() => ({
-    "Ready for Appraisal": rows.filter(e => e.status === "Ready for Appraisal").length,
+    "Ready for Appraisal": rows.filter(e => e.readyForAppraisal && e.status === "Draft").length,
     "Draft":               rows.filter(e => e.status === "Draft").length,
     "Pending Review":      rows.filter(e => e.status === "Pending Review").length,
-    "Return for Revision": rows.filter(e => e.status === "Return for Revision").length,
-    "Approved":            rows.filter(e => e.status === "Approve" || e.status === "Override and Approve").length,
+    "Returned":            rows.filter(e => e.status === "Returned").length,
+    "Approved":            rows.filter(e => e.status === "Approved").length,
   }), [rows]);
 
   const SUMMARY_CARDS = [
     { label: "Ready for Appraisal", key: "Ready for Appraisal", color: BLUE,  bg: "#EEF3FC" },
     { label: "Draft",               key: "Draft",               color: AMBER, bg: "#FEF9EC" },
     { label: "Pending Review",      key: "Pending Review",      color: TEAL,  bg: "#ECFDF9" },
-    { label: "Returned",            key: "Return for Revision", color: RED,   bg: "#FEF3F2" },
+    { label: "Returned",            key: "Returned",            color: RED,   bg: "#FEF3F2" },
     { label: "Approved",            key: "Approved",            color: GREEN, bg: "#ECFDF5" },
   ] as const;
 
@@ -193,6 +188,7 @@ export function TeamAppraisals() {
               style={{ border: `1px solid ${BORDER}`, color: TEXT }}
             >
               <option value="All">Status: All</option>
+              <option value="Ready for Appraisal">Ready for Appraisal</option>
               {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
             </select>
             <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
@@ -282,7 +278,8 @@ export function TeamAppraisals() {
             </thead>
             <tbody>
               {displayed.map((emp, i) => {
-                const ss = STATUS_STYLE[emp.status];
+                const isReady = emp.readyForAppraisal && emp.status === "Draft";
+                const ss = isReady ? { color: BLUE, bg: "#EEF3FC" } : STATUS_STYLE[emp.status];
                 return (
                   <tr
                     key={emp.id}
@@ -318,7 +315,7 @@ export function TeamAppraisals() {
                         className="px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
                         style={{ color: ss.color, backgroundColor: ss.bg }}
                       >
-                        {STATUS_LABEL[emp.status]}
+                        {isReady ? "Ready for Appraisal" : STATUS_LABEL[emp.status]}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -327,7 +324,7 @@ export function TeamAppraisals() {
                         className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[12px] font-semibold whitespace-nowrap transition-colors hover:opacity-80"
                         style={{ color: BLUE, backgroundColor: "#EEF3FC" }}
                       >
-                        {ACTION_LABEL[emp.status]}
+                        {isReady ? "Start Appraisal" : ACTION_LABEL[emp.status]}
                         <ArrowRight size={12} />
                       </button>
                     </td>

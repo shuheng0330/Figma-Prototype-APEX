@@ -21,7 +21,6 @@ const SCORE_META: Record<number, { label: string; color: string }> = {
   3: { label: "Meets Expectations",            color: BLUE      },
   2: { label: "Partially Meets Expectations",  color: AMBER     },
   1: { label: "Needs Significant Improvement", color: "#E06B3A" },
-  0: { label: "Not Achieved",                  color: RED       },
 };
 
 const SCORE_KEYS = ["s5","s4","s3","s2","s1"] as const;
@@ -31,7 +30,7 @@ type ReviewStatus      = "Pending Review" | "Pending Approval" | "Reviewed" | "A
 type ReviewType        = "Individual KPI Approval" | "KPI Assessment" | "Attitude Evaluation";
 type KpiApprovalStatus = "Pending" | "Approved" | "Returned";
 
-interface ScoreDef { s5: string; s4: string; s3: string; s2: string; s1: string; s0: string; }
+interface ScoreDef { s5: string; s4: string; s3: string; s2: string; s1: string; }
 interface KpiRow {
   id: string; level: KpiLevel; perspective: string; kra: string;
   name: string; target: string; weightage: number; scoreDef: ScoreDef;
@@ -74,7 +73,6 @@ const IND_KPIS: KpiRow[] = [
       s3: "Acquires 10 new customers per month",
       s2: "Acquires 8–9 new customers per month",
       s1: "Acquires 5–7 new customers per month",
-      s0: "Acquires fewer than 5 new customers per month",
     },
   },
   {
@@ -86,7 +84,6 @@ const IND_KPIS: KpiRow[] = [
       s3: "Cross-sell rate 20%–21%",
       s2: "Cross-sell rate 15%–19%",
       s1: "Cross-sell rate 10%–14%",
-      s0: "Cross-sell rate below 10%",
     },
   },
 ];
@@ -96,37 +93,37 @@ const ALL_KPIS: KpiRow[] = [
   {
     id: "c1", level: "Company", perspective: "Financial", kra: "Revenue Management",
     name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 10,
-    scoreDef: { s5: "Revenue grows 10% or more above target YoY", s4: "Revenue grows 8%–9.9% YoY", s3: "Revenue grows 5%–7.9% YoY", s2: "Revenue grows 2%–4.9% YoY", s1: "Revenue grows 0%–1.9% YoY", s0: "Revenue declines year-on-year" },
+    scoreDef: { s5: "Revenue grows 10% or more above target YoY", s4: "Revenue grows 8%–9.9% YoY", s3: "Revenue grows 5%–7.9% YoY", s2: "Revenue grows 2%–4.9% YoY", s1: "Revenue grows 0%–1.9% YoY" },
   },
   {
     id: "c2", level: "Company", perspective: "Customer", kra: "Customer Experience",
     name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 10,
-    scoreDef: { s5: "CSI score 95% or above", s4: "CSI score 90%–94%", s3: "CSI score 85%–89%", s2: "CSI score 75%–84%", s1: "CSI score 60%–74%", s0: "CSI score below 60%" },
+    scoreDef: { s5: "CSI score 95% or above", s4: "CSI score 90%–94%", s3: "CSI score 85%–89%", s2: "CSI score 75%–84%", s1: "CSI score 60%–74%" },
   },
   {
     id: "c3", level: "Company", perspective: "Internal Process", kra: "Operational Excellence",
     name: "Branch Operations Score", target: "≥ 90%", weightage: 10,
-    scoreDef: { s5: "Operations score 98% or above", s4: "Operations score 93%–97%", s3: "Operations score 90%–92%", s2: "Operations score 80%–89%", s1: "Operations score 70%–79%", s0: "Operations score below 70%" },
+    scoreDef: { s5: "Operations score 98% or above", s4: "Operations score 93%–97%", s3: "Operations score 90%–92%", s2: "Operations score 80%–89%", s1: "Operations score 70%–79%" },
   },
   {
     id: "d1", level: "Department", perspective: "Financial", kra: "Sales Performance",
     name: "Monthly Sales Achievement", target: "RM 80,000/month", weightage: 30,
-    scoreDef: { s5: "Achieves 110% or more of monthly sales target", s4: "Achieves 100%–109% of monthly sales target", s3: "Achieves 90%–99% of monthly sales target", s2: "Achieves 75%–89% of monthly sales target", s1: "Achieves 50%–74% of monthly sales target", s0: "Achieves less than 50% of monthly sales target" },
+    scoreDef: { s5: "Achieves 110% or more of monthly sales target", s4: "Achieves 100%–109% of monthly sales target", s3: "Achieves 90%–99% of monthly sales target", s2: "Achieves 75%–89% of monthly sales target", s1: "Achieves 50%–74% of monthly sales target" },
   },
   {
     id: "d2", level: "Department", perspective: "Customer", kra: "Product Distribution",
     name: "Product Coverage", target: "≥ 80% product range", weightage: 15,
-    scoreDef: { s5: "Covers 95% or more of the product range", s4: "Covers 90%–94% of the product range", s3: "Covers 80%–89% of the product range", s2: "Covers 70%–79% of the product range", s1: "Covers 50%–69% of the product range", s0: "Covers less than 50% of the product range" },
+    scoreDef: { s5: "Covers 95% or more of the product range", s4: "Covers 90%–94% of the product range", s3: "Covers 80%–89% of the product range", s2: "Covers 70%–79% of the product range", s1: "Covers 50%–69% of the product range" },
   },
   {
     id: "i1", level: "Individual", perspective: "Customer", kra: "Customer Growth",
     name: "New Customer Acquisition", target: "10 new customers/month", weightage: 15,
-    scoreDef: { s5: "Acquires 13 or more new customers per month", s4: "Acquires 11–12 new customers per month", s3: "Acquires 10 new customers per month", s2: "Acquires 8–9 new customers per month", s1: "Acquires 5–7 new customers per month", s0: "Acquires fewer than 5 new customers per month" },
+    scoreDef: { s5: "Acquires 13 or more new customers per month", s4: "Acquires 11–12 new customers per month", s3: "Acquires 10 new customers per month", s2: "Acquires 8–9 new customers per month", s1: "Acquires 5–7 new customers per month" },
   },
   {
     id: "i2", level: "Individual", perspective: "Customer", kra: "Revenue per Customer",
     name: "Cross-Sell Rate", target: "≥ 20%", weightage: 10,
-    scoreDef: { s5: "Cross-sell rate 25% or above", s4: "Cross-sell rate 22%–24%", s3: "Cross-sell rate 20%–21%", s2: "Cross-sell rate 15%–19%", s1: "Cross-sell rate 10%–14%", s0: "Cross-sell rate below 10%" },
+    scoreDef: { s5: "Cross-sell rate 25% or above", s4: "Cross-sell rate 22%–24%", s3: "Cross-sell rate 20%–21%", s2: "Cross-sell rate 15%–19%", s1: "Cross-sell rate 10%–14%" },
   },
 ];
 
@@ -815,12 +812,6 @@ export function TeamReviews() {
                       </p>
                     </div>
                   )}
-                  {!isReadOnly && (
-                    <p className="text-[12px] mb-5 p-3 rounded-md" style={{ color: MUTED, backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                      A score difference alone does not require returning an assessment. Use Return for Revision only when the submission contains incorrect information or insufficient supporting details.
-                    </p>
-                  )}
-
                   <div className="space-y-4 pb-6">
                     {ALL_KPIS.map(kpi => {
                       const ls = LEVEL_STYLE[kpi.level];
@@ -1085,7 +1076,7 @@ export function TeamReviews() {
       {scoringDefKpi && (
         <ScoringDefModal
           kpi={scoringDefKpi}
-          helperText="Use these criteria when selecting the Superior Assessment Score."
+          helperText="Use these criteria when selecting the Superior Assessment Point."
           onClose={() => setScoringDefKpi(null)}
         />
       )}

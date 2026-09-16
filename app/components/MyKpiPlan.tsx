@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Plus, X, CheckCircle, Info, Eye, BookOpen, Send, AlertTriangle, Pencil, Trash2 } from "lucide-react";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -18,7 +19,7 @@ type ApprovalStatus =
   | "Approved"
   | "Pending Approval"
   | "Draft"
-  | "Returned for Revision";
+  | "Returned";
 
 type KpiLevel = "Company" | "Department" | "Individual";
 
@@ -52,7 +53,7 @@ const STATUS_STYLE: Record<ApprovalStatus, { color: string; bg: string }> = {
   "Approved":                 { color: TEAL,   bg: "#ECFDF9" },
   "Pending Approval":         { color: AMBER,  bg: "#FEF9EC" },
   "Draft":                    { color: "#374151", bg: "#F3F4F6" },
-  "Returned for Revision":    { color: RED,    bg: "#FEF3F2" },
+  "Returned":                 { color: RED,    bg: "#FEF3F2" },
 };
 
 const LEVEL_STYLE: Record<KpiLevel, { color: string; bg: string }> = {
@@ -143,7 +144,7 @@ const INIT_KPIS: KpiRow[] = [
   {
     id: "i2", level: "Individual", perspective: "Financial", kra: "Sales Performance",
     name: "Cross-Sell Rate", target: "≥ 20%", weightage: 30,
-    status: "Returned for Revision", overdue: true,
+    status: "Returned", overdue: true,
     returnReason: "Target is unclear. Please clarify whether this is measured as a percentage of transactions or percentage of customers served. Update the scoring definition and resubmit.",
     scoreDef: {
       s5: "Cross-sell rate 25% or above",
@@ -261,7 +262,7 @@ function ViewDrawer({ kpi, period, readOnly, onClose, onEdit, onRevise }: {
   const ls = LEVEL_STYLE[kpi.level];
   const ss = STATUS_STYLE[kpi.status];
   const canEdit = kpi.level === "Individual"
-    && !readOnly && (kpi.status === "Draft" || kpi.status === "Returned for Revision");
+    && !readOnly && (kpi.status === "Draft" || kpi.status === "Returned");
   const canRevise = kpi.level === "Individual" && !readOnly && kpi.status === "Approved";
   const [showHistory, setShowHistory] = useState(false);
 
@@ -308,7 +309,7 @@ function ViewDrawer({ kpi, period, readOnly, onClose, onEdit, onRevise }: {
           </div>
 
           {/* Contextual messages */}
-          {kpi.status === "Returned for Revision" && kpi.returnReason && (
+          {kpi.status === "Returned" && kpi.returnReason && (
             <div className="p-3 rounded-md" style={{ backgroundColor: "#FEF3F2", border: `1px solid #FECACA` }}>
               <p className="text-[11px] font-bold mb-1.5" style={{ color: RED }}>Superior Return Reason</p>
               <p className="text-[12px]" style={{ color: RED }}>{kpi.returnReason}</p>
@@ -419,7 +420,7 @@ function EditDrawer({ editKpi, isRevision, totalExcludingThis, onClose, onSave }
             <h3 className="text-[15px] font-bold" style={{ color: TEXT }}>
               {isCreate ? "Create Individual KPI" : isRevision ? "Revise Individual KPI" : "Edit Individual KPI"}
             </h3>
-            {editKpi?.status === "Returned for Revision" && (
+            {editKpi?.status === "Returned" && (
               <p className="text-[11px] mt-0.5" style={{ color: RED }}>
                 This KPI was returned for revision
               </p>
@@ -618,7 +619,7 @@ function SubmitDialog({ kpis, onClose, onSubmit }: {
               <li key={k.id} className="flex items-center gap-2 text-[12px]">
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: TEAL }} />
                 <span style={{ color: TEXT }}>{k.name}</span>
-                {k.status === "Returned for Revision" && (
+                {k.status === "Returned" && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full ml-1" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Resubmitting</span>
                 )}
                 <span className="ml-auto font-semibold" style={{ color: MUTED }}>{k.weightage}%</span>
@@ -657,8 +658,11 @@ function SubmitDialog({ kpis, onClose, onSubmit }: {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function MyKpiPlan() {
+  const performanceStore = usePerformanceStore();
+  const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
+  const defaultPeriodName = performanceStore.periods.find(period => period.id === defaultPeriodId)?.name ?? "2027 Annual KPI Review";
   const [kpis, setKpis] = useState<KpiRow[]>(INIT_KPIS);
-  const [selectedPeriod, setSelectedPeriod] = useState("2027 Annual KPI Review");
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const [viewId, setViewId]                 = useState<string | null>(null);
   const [historyId, setHistoryId]           = useState<string | null>(null);
   const [editId, setEditId]                 = useState<string | null>(null);
@@ -667,7 +671,11 @@ export function MyKpiPlan() {
   const [showSubmitDialog, setShowDialog]   = useState(false);
   const [showGuide, setShowGuide]           = useState(false);
   const [submitted, setSubmitted]           = useState(false);
-  const isHistorical = selectedPeriod !== "2027 Annual KPI Review";
+  const selectedSharedPeriod = performanceStore.periods.find(period => period.name === selectedPeriod);
+  const isHistorical = selectedSharedPeriod?.status === "Closed";
+  const isOpenPeriod = selectedSharedPeriod?.status === "Open";
+  const isSetupPastDeadline = Boolean(selectedSharedPeriod && performanceStore.state.effectiveDate > selectedSharedPeriod.deadlines.kpiSetup);
+  const isKpiOverdue = (kpi: KpiRow) => Boolean(kpi.overdue || (isSetupPastDeadline && kpi.level === "Individual" && kpi.status !== "Approved"));
 
   const totalWeightage = useMemo(() => kpis.reduce((s, k) => s + k.weightage, 0), [kpis]);
   const pct = Math.min(100, totalWeightage);
@@ -698,7 +706,8 @@ export function MyKpiPlan() {
   }, [submittableKpis, totalWeightage, allScoresDefined]);
 
   // Resolved objects for open drawers
-  const viewKpi = viewId ? (kpis.find(k => k.id === viewId) ?? null) : null;
+  const rawViewKpi = viewId ? (kpis.find(k => k.id === viewId) ?? null) : null;
+  const viewKpi = rawViewKpi ? { ...rawViewKpi, overdue: isKpiOverdue(rawViewKpi) } : null;
   const historyKpi = historyId ? (kpis.find(k => k.id === historyId) ?? null) : null;
   const editKpi = editId ? (kpis.find(k => k.id === editId) ?? null) : null;
 
@@ -710,8 +719,8 @@ export function MyKpiPlan() {
   // Plan status
   const planStatus: ApprovalStatus = submitted
     ? "Pending Approval"
-    : kpis.some(k => k.level === "Individual" && k.status === "Returned for Revision")
-    ? "Returned for Revision"
+    : kpis.some(k => k.level === "Individual" && k.status === "Returned")
+    ? "Returned"
     : "Draft";
 
   // ── Actions ──
@@ -734,8 +743,8 @@ export function MyKpiPlan() {
       setKpis(prev => prev.map(k =>
         k.id === editId
           ? editIsRevision
-            ? { ...k, ...data, status: "Pending Approval", version: (k.version ?? 1) + 1, revisedOn: "15 Sep 2026", revisedBy: "Amir Hassan", revisionReason: data.revisionReason, previousVersions: [...(k.previousVersions ?? []), { version: k.version ?? 1, perspective: k.perspective, kra: k.kra, name: k.name, target: k.target, weightage: k.weightage, scoreDef: k.scoreDef, revisedOn: k.revisedOn, revisedBy: k.revisedBy, revisionReason: k.revisionReason }] }
-            : { ...k, ...data, status: k.status === "Returned for Revision" ? "Draft" : k.status }
+            ? { ...k, ...data, status: "Pending Approval", version: (k.version ?? 1) + 1, revisedOn: performanceStore.state.effectiveDate, revisedBy: "Amir Hassan", revisionReason: data.revisionReason, previousVersions: [...(k.previousVersions ?? []), { version: k.version ?? 1, perspective: k.perspective, kra: k.kra, name: k.name, target: k.target, weightage: k.weightage, scoreDef: k.scoreDef, revisedOn: k.revisedOn, revisedBy: k.revisedBy, revisionReason: k.revisionReason }] }
+            : { ...k, ...data, status: k.status === "Returned" ? "Draft" : k.status }
           : k
       ));
     }
@@ -744,7 +753,7 @@ export function MyKpiPlan() {
 
   function handleSubmit() {
     setKpis(prev => prev.map(k =>
-      k.level === "Individual" && (k.status === "Draft" || k.status === "Returned for Revision")
+      k.level === "Individual" && (k.status === "Draft" || k.status === "Returned")
         ? { ...k, status: "Pending Approval" }
         : k
     ));
@@ -766,7 +775,9 @@ export function MyKpiPlan() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <select value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} className="px-3 py-2 rounded-md text-[13px] bg-white border" style={{ borderColor: BORDER, color: TEXT }}>
-              <option>2027 Annual KPI Review</option><option>2026 Annual KPI Review — Closed</option><option>2025 Annual KPI Review — Closed</option>
+              {performanceStore.periods.filter(period => period.status !== "Draft").map(period => (
+                <option key={period.id} value={period.name}>{period.name}{period.status === "Closed" ? " — Closed" : ""}</option>
+              ))}
             </select>
             <button onClick={() => setShowGuide(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
@@ -791,6 +802,7 @@ export function MyKpiPlan() {
 
         {/* Submit block reason */}
         {isHistorical && <div className="flex items-center gap-2 px-4 py-2.5 rounded-md text-[12px]" style={{ backgroundColor: "#F2F4F7", color: MUTED }}><Info size={13} />This is a closed Review Period. The KPI plan is historical and read-only.</div>}
+        {isOpenPeriod && <div className="flex items-start gap-2 px-4 py-3 rounded-md text-[12px]" style={{ backgroundColor: "#FFFAEB", color: "#92400E", border: "1px solid #FDE68A" }}><AlertTriangle size={14} className="mt-0.5 shrink-0" /><span><strong>Requirement gap:</strong> An approved revision is preserved and returned for Superior approval, but which KPI version applies to existing or future checkpoints remains TBC. The prototype will not propagate or recalculate assessments automatically.</span></div>}
         {!isHistorical && !submitted && submitBlockReason && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-md text-[12px]"
             style={{ backgroundColor: "#FEF9EC", color: AMBER }}>
@@ -912,7 +924,7 @@ export function MyKpiPlan() {
                   const ls = LEVEL_STYLE[k.level];
                   const ss = STATUS_STYLE[k.status];
                   const canEdit = k.level === "Individual"
-                    && !isHistorical && (k.status === "Draft" || k.status === "Returned for Revision");
+                    && !isHistorical && (k.status === "Draft" || k.status === "Returned");
                   const canRevise = k.level === "Individual" && !isHistorical && k.status === "Approved";
                   return (
                     <tr key={k.id} className="hover:bg-[#F8FAFC] transition-colors"
@@ -922,7 +934,7 @@ export function MyKpiPlan() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-[13px] font-medium" style={{ color: TEXT }}>{k.name}</p>
-                        {k.status === "Returned for Revision" && (
+                        {k.status === "Returned" && (
                           <p className="text-[10px] mt-0.5 flex items-center gap-1" style={{ color: RED }}>
                             <AlertTriangle size={9} /> Returned — revision required
                           </p>
@@ -935,7 +947,7 @@ export function MyKpiPlan() {
                         {k.weightage}%
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5"><Pill label={k.status} color={ss.color} bg={ss.bg} />{k.overdue && <Pill label="Overdue" color={RED} bg="#FEF3F2" />}</div>
+                        <div className="flex items-center gap-1.5"><Pill label={k.status} color={ss.color} bg={ss.bg} />{isKpiOverdue(k) && <Pill label="Overdue" color={RED} bg="#FEF3F2" />}</div>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">

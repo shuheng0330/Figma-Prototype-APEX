@@ -12,6 +12,7 @@ import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus,
   PeriodAppraisal, resolvePeriodData,
 } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -26,12 +27,10 @@ const BORDER = "#DCE3EC";
 const BG     = "#F4F6F9";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 const EMP_META: Record<string, { dept: string; avatarColor: string }> = {
@@ -129,6 +128,7 @@ interface TeamRow {
   trendDelta: number | null;
   sparkPoints: number[];
   status: AppStatus | null;
+  readyForAppraisal: boolean;
 }
 
 // ── Mini Sparkline ─────────────────────────────────────────────────────────────
@@ -239,12 +239,16 @@ function TrendTip({ active, payload, label }: any) {
 export function CompetencyDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const performanceStore = usePerformanceStore();
+  const periodNames = performanceStore.periods.map(period => period.name);
+  const resultPeriodId = performanceStore.getDashboardDefaultPeriodId("team");
+  const resultPeriodName = performanceStore.periods.find(period => period.id === resultPeriodId)?.name ?? LIVE_PERIOD;
   const requestedPeriod = searchParams.get("period");
   const returnToOrganisation = searchParams.get("returnTo") === "organisation-performance";
   const requestedDepartment = searchParams.get("department");
 
   const [selectedPeriod, setSelectedPeriod] = useState(
-    requestedPeriod && PERIOD_OPTIONS.includes(requestedPeriod) ? requestedPeriod : LIVE_PERIOD
+    requestedPeriod && periodNames.includes(requestedPeriod) ? requestedPeriod : resultPeriodName
   );
   const [showPeriod, setShowPeriod]         = useState(false);
   const [trendMetric, setTrendMetric]       = useState<Metric>("final");
@@ -297,6 +301,7 @@ export function CompetencyDashboard() {
         trendDelta,
         sparkPoints,
         status: pd?.status ?? null,
+        readyForAppraisal: Boolean(pd?.readyForAppraisal),
       };
     });
   }, [selectedPeriod, prevPeriod]);
@@ -342,8 +347,7 @@ export function CompetencyDashboard() {
   }, [teamRows]);
 
   const statusOptions: string[] = [
-    "All", "Ready for Appraisal", "Draft", "Pending Review",
-    "Return for Revision", "Approve", "Override and Approve",
+    "All", "Ready for Appraisal", "Draft", "Pending Review", "Returned", "Approved",
   ];
 
   // ── Filtered + sorted rows ──────────────────────────────────────────────────
@@ -352,7 +356,8 @@ export function CompetencyDashboard() {
       const nameOk   = !search || r.name.toLowerCase().includes(search.toLowerCase())
                        || r.staffId.toLowerCase().includes(search.toLowerCase());
       const roleOk   = roleFilter === "All"   || r.role === roleFilter;
-      const statusOk = statusFilter === "All" || r.status === statusFilter;
+      const statusOk = statusFilter === "All" ||
+        (statusFilter === "Ready for Appraisal" ? r.readyForAppraisal && r.status === "Draft" : r.status === statusFilter);
       return nameOk && roleOk && statusOk;
     });
   }, [teamRows, search, roleFilter, statusFilter]);
@@ -400,7 +405,7 @@ export function CompetencyDashboard() {
             {showPeriod && (
               <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
                 style={{ minWidth: 220, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                {PERIOD_OPTIONS.map(p => (
+                {periodNames.map(p => (
                   <button key={p} onClick={() => { setSelectedPeriod(p); setShowPeriod(false); }}
                     className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors"
                     style={{ color: selectedPeriod === p ? BLUE : TEXT, fontWeight: selectedPeriod === p ? 600 : 400 }}>
@@ -696,7 +701,8 @@ export function CompetencyDashboard() {
               </thead>
               <tbody>
                 {sortedRows.map((row, i) => {
-                  const ss = row.status ? STATUS_STYLE[row.status] : null;
+                  const isReady = row.readyForAppraisal && row.status === "Draft";
+                  const ss = isReady ? { color: BLUE, bg: "#EEF3FC" } : row.status ? STATUS_STYLE[row.status] : null;
                   return (
                     <tr key={row.id} className="hover:bg-[#F8FAFC] transition-colors"
                       style={{ borderBottom: i < sortedRows.length - 1 ? `1px solid ${BORDER}` : "none" }}>
@@ -751,7 +757,7 @@ export function CompetencyDashboard() {
                         {ss && row.status
                           ? <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
                               style={{ color: ss.color, backgroundColor: ss.bg }}>
-                              {row.status}
+                              {isReady ? "Ready for Appraisal" : row.status}
                             </span>
                           : <span style={{ color: MUTED }}>—</span>}
                       </td>

@@ -4,6 +4,8 @@ import {
   ArrowLeft, Info, CheckCircle, AlertTriangle, X, Calendar,
   Search, RotateCcw, Eye,
 } from "lucide-react";
+import { usePerformanceStore } from "../performance/store";
+import { validateReviewPeriod, type ReviewPeriod } from "../performance/domain";
 
 const BLUE  = "#2457A6";
 const TEAL  = "#0F9F8F";
@@ -247,7 +249,7 @@ function RuleBuilder({ label, days, setDays, dayType, setDayType, reference, rea
           className="px-2.5 py-1.5 rounded-md text-[13px] outline-none border"
           style={{ borderColor:BORDER, color:TEXT, backgroundColor:readOnly?"#F8FAFC":"white" }}>
           <option>Calendar Days</option>
-          <option>Working Days</option>
+          <option disabled>Working Days — TBC</option>
         </select>
         <span className="text-[13px]" style={{ color: MUTED }}>after</span>
         <span className="px-2.5 py-1 rounded-md text-[12px] font-medium" style={{ backgroundColor:"#EEF3FC", color:BLUE }}>{reference}</span>
@@ -420,17 +422,19 @@ export function ReviewPeriodSetup() {
   const navigate  = useNavigate();
   const { id }    = useParams<{ id: string }>();
   const location  = useLocation();
+  const performanceStore = usePerformanceStore();
+  const storedPeriod = id ? performanceStore.getPeriod(id) : undefined;
 
   const isView    = location.pathname.endsWith("/view");
   const mode: "create"|"edit"|"view" = !id ? "create" : isView ? "view" : "edit";
-  const periodStatus = !id ? "Draft" : id === "2028" ? "Upcoming" : id === "2027" ? "Draft" : id === "2026" ? "Open" : "Closed";
+  const periodStatus = !id ? "Draft" : storedPeriod?.status ?? "Closed";
   const readOnly  = mode === "view" || periodStatus === "Open" || periodStatus === "Closed";
   const pre       = id ? PREFILL[id] : undefined;
 
   // ── Section 1: General Settings ──
-  const [periodName, setPeriodName]     = useState(pre?.periodName   ?? "");
-  const [startDate, setStartDate]       = useState(pre?.startDate    ?? "");
-  const [endDate, setEndDate]           = useState(pre?.endDate      ?? "");
+  const [periodName, setPeriodName]     = useState(storedPeriod?.name      ?? pre?.periodName ?? "");
+  const [startDate, setStartDate]       = useState(storedPeriod?.startDate ?? pre?.startDate  ?? "");
+  const [endDate, setEndDate]           = useState(storedPeriod?.endDate   ?? pre?.endDate    ?? "");
 
   // ── Section 2: Role Frequencies ──
   const [roles, setRoles]               = useState<RoleRow[]>(pre?.roles ?? BLANK_ROLES);
@@ -438,29 +442,29 @@ export function ReviewPeriodSetup() {
   const [roleSearch, setRoleSearch]     = useState("");
 
   // ── Section 3A: KPI Setup Deadlines ──
-  const [kpiSetupDl, setKpiSetupDl]           = useState(pre?.kpiSetupDl ?? "");
+  const [kpiSetupDl, setKpiSetupDl]           = useState(storedPeriod?.deadlines.kpiSetup ?? pre?.kpiSetupDl ?? "");
 
   // ── Section 3B: Assessment Relative Rules ──
-  const [selfDays, setSelfDays]         = useState(pre?.selfDays       ?? 5);
+  const [selfDays, setSelfDays]         = useState(storedPeriod?.deadlines.selfAssessmentDays ?? pre?.selfDays ?? 5);
   const [selfDayType, setSelfDayType]   = useState(pre?.selfDayType    ?? "Calendar Days");
-  const [managerDays, setManagerDays]   = useState(pre?.managerDays    ?? 5);
+  const [managerDays, setManagerDays]   = useState(storedPeriod?.deadlines.superiorAssessmentDays ?? pre?.managerDays ?? 5);
   const [managerDayType, setMgrDayType] = useState(pre?.managerDayType ?? "Calendar Days");
 
   // ── Section 3C: Attitude Deadlines ──
-  const [attitudeSelfDl, setAttSelf]     = useState(pre?.attitudeSelfDl     ?? "");
-  const [attitudeSuperiorDl, setAttSup]  = useState(pre?.attitudeSuperiorDl ?? "");
+  const [attitudeSelfDl, setAttSelf]     = useState(storedPeriod?.deadlines.attitudeSelf ?? pre?.attitudeSelfDl ?? "");
+  const [attitudeSuperiorDl, setAttSup]  = useState(storedPeriod?.deadlines.attitudeSuperior ?? pre?.attitudeSuperiorDl ?? "");
 
   // ── Section 3D: Final Appraisal Deadlines ──
-  const [managerAppraisalDl, setMgrAppr] = useState(pre?.managerAppraisalDl ?? "");
-  const [hrFinalDl, setHrFinal]          = useState(pre?.hrFinalDl          ?? "");
+  const [managerAppraisalDl, setMgrAppr] = useState(storedPeriod?.deadlines.superiorAppraisal ?? pre?.managerAppraisalDl ?? "");
+  const [hrFinalDl, setHrFinal]          = useState(storedPeriod?.deadlines.hrReview ?? pre?.hrFinalDl ?? "");
 
   // ── Section 4: Weightage ──
-  const [companyKpi, setCompanyKpi] = useState(pre?.companyKpi ?? 15);
-  const [deptKpi, setDeptKpi]       = useState(pre?.deptKpi    ?? 25);
-  const [indivKpi, setIndivKpi]     = useState(pre?.indivKpi   ?? 60);
-  const [kpiPerf, setKpiPerf]       = useState(pre?.kpiPerf    ?? 50);
-  const [attitude, setAttitude]     = useState(pre?.attitude   ?? 50);
-  const [consolidationMethod, setConsolidationMethod] = useState<"final"|"average">(pre?.consolidationMethod ?? "final");
+  const [companyKpi, setCompanyKpi] = useState(storedPeriod?.allocations.company ?? pre?.companyKpi ?? 15);
+  const [deptKpi, setDeptKpi]       = useState(storedPeriod?.allocations.department ?? pre?.deptKpi ?? 25);
+  const [indivKpi, setIndivKpi]     = useState(storedPeriod?.allocations.individual ?? pre?.indivKpi ?? 60);
+  const [kpiPerf, setKpiPerf]       = useState(storedPeriod?.allocations.kpi ?? pre?.kpiPerf ?? 50);
+  const [attitude, setAttitude]     = useState(storedPeriod?.allocations.attitude ?? pre?.attitude ?? 50);
+  const [consolidationMethod, setConsolidationMethod] = useState<"final"|"average">(storedPeriod?.consolidationMethod ?? pre?.consolidationMethod ?? "final");
 
   // ── UI state ──
   const [showPublish, setShowPublish]           = useState(false);
@@ -504,14 +508,9 @@ export function ReviewPeriodSetup() {
     }));
   }, [roles, startDate, endDate, selfDays, managerDays]);
 
-  // Warnings for summary
-  const warnings: string[] = [];
-  if (!periodName)   warnings.push("Review Period Name is required.");
-  if (!startDate || !endDate) warnings.push("Start Date and End Date are required.");
-  if (endBeforeStart) warnings.push("End Date is earlier than Start Date.");
-  if (!kpiValid)     warnings.push(`KPI allocation totals ${kpiTotal}% — must equal 100%.`);
-  if (!finalValid)   warnings.push(`Final appraisal allocation totals ${finalTotal}% — must equal 100%.`);
-  if (kpiSetupError) warnings.push(kpiSetupError);
+  // One shared validator drives both UI messages and publication.
+  const warnings = validateReviewPeriod(buildPeriod(periodStatus === "Upcoming" ? "Upcoming" : "Draft"))
+    .map(error => error.message);
 
   function updateRoleFreq(id: string, freq: Freq) {
     setRoles(rs => rs.map(r => r.id === id ? { ...r, selected: freq } : r));
@@ -520,8 +519,42 @@ export function ReviewPeriodSetup() {
     setRoles(rs => rs.map(r => r.id === id ? { ...r, selected: r.sysDefault } : r));
   }
 
-  function handleSaveDraft() { setSavedDraft(true); setTimeout(() => setSavedDraft(false), 2500); }
-  function handlePublish() { setPublished(true); setShowPublish(false); }
+  function buildPeriod(status: "Draft" | "Upcoming"): ReviewPeriod {
+    const periodId = id ?? periodName.match(/\d{4}/)?.[0] ?? `period-${Date.now()}`;
+    return {
+      id: periodId,
+      name: periodName,
+      configuredStatus: status,
+      startDate,
+      endDate,
+      lastUpdated: performanceStore.state.effectiveDate,
+      deadlines: {
+        kpiSetup: kpiSetupDl,
+        selfAssessmentDays: selfDays,
+        superiorAssessmentDays: managerDays,
+        attitudeSelf: attitudeSelfDl,
+        attitudeSuperior: attitudeSuperiorDl,
+        superiorAppraisal: managerAppraisalDl,
+        hrReview: hrFinalDl,
+      },
+      allocations: { company: companyKpi, department: deptKpi, individual: indivKpi, kpi: kpiPerf, attitude },
+      consolidationMethod,
+      roleFrequencies: Object.fromEntries(roles.map(role => [role.id, role.selected])),
+    };
+  }
+
+  function handleSaveDraft() {
+    performanceStore.upsertPeriod(buildPeriod(periodStatus === "Upcoming" ? "Upcoming" : "Draft"));
+    setSavedDraft(true);
+    setTimeout(() => setSavedDraft(false), 2500);
+  }
+  function handlePublish() {
+    const period = buildPeriod("Upcoming");
+    if (validateReviewPeriod(period).length) return;
+    performanceStore.upsertPeriod(period);
+    setPublished(true);
+    setShowPublish(false);
+  }
 
   // Title / badge for different modes
   const pageTitle = mode === "create" ? "Create Review Period"
@@ -587,6 +620,18 @@ export function ReviewPeriodSetup() {
           <p className="text-[13px] font-medium" style={{ color:TEAL }}>
             Review period published. Eligible staff can now begin submitting their KPI plans.
           </p>
+        </div>
+      )}
+
+      {(periodStatus === "Open" || periodStatus === "Closed") && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor:"#FEF9EC", border:"1px solid #F5D98A" }}>
+          <AlertTriangle size={16} style={{ color:AMBER }} className="mt-0.5 shrink-0"/>
+          <div>
+            <p className="text-[12px] font-bold" style={{ color:AMBER }}>Review Period closure rules · TBC</p>
+            <p className="text-[12px] mt-0.5" style={{ color:TEXT }}>
+              The trigger, prerequisites, force-close behaviour, and reopening rules require stakeholder confirmation. No closure logic is assumed by this prototype.
+            </p>
+          </div>
         </div>
       )}
 
@@ -710,7 +755,7 @@ export function ReviewPeriodSetup() {
         <SubSection label="B — KPI Assessment Deadline Rules">
           <p className="text-[12px] mb-4" style={{ color:MUTED }}>
             Deadlines are calculated automatically from each Role's review checkpoint date.
-            Review checkpoints are derived as: Monthly = end of each calendar month · Quarterly = end of each quarter · Annually = the review period End Date.
+            Review checkpoints are derived as: Monthly = end of each calendar month · Quarterly = end of each quarter · Annually = the review period End Date. Calendar Days are used throughout.
           </p>
           <div className="grid grid-cols-2 gap-6">
             <RuleBuilder
@@ -729,7 +774,7 @@ export function ReviewPeriodSetup() {
             />
           </div>
           <p className="mt-3 text-[11px] flex items-center gap-1.5" style={{ color:MUTED }}>
-            <Info size={12}/> Day type (Calendar / Working) requires TBM confirmation before go-live.
+            <Info size={12}/> Working Day and Malaysian public-holiday behaviour remains TBC and is not applied by this prototype.
           </p>
           <button
             onClick={() => setShowSchedule(true)}

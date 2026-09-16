@@ -9,6 +9,7 @@ import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus,
   PeriodAppraisal, resolvePeriodData,
 } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -23,12 +24,10 @@ const BORDER = "#DCE3EC";
 const BG     = "#F4F6F9";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 // ── Employee metadata ──────────────────────────────────────────────────────────
@@ -308,8 +307,10 @@ const ATTITUDE_DATA: Record<string, AttitudeData> = {
 function HistoryDrawer({ period, data, onClose }: {
   period: string; data: PeriodAppraisal; onClose: () => void;
 }) {
-  const ss = STATUS_STYLE[data.status];
-  const isOverride = data.status === "Override and Approve";
+  const ss = data.readyForAppraisal && data.status === "Draft"
+    ? { color: BLUE, bg: "#EEF3FC" }
+    : STATUS_STYLE[data.status];
+  const isOverride = data.hrApprovalMethod === "Overridden Recommendation";
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(0,0,0,0.25)" }} onClick={onClose} />
@@ -355,7 +356,7 @@ function HistoryDrawer({ period, data, onClose }: {
             <p className="text-[12px] font-semibold" style={{ color: MUTED }}>Appraisal Status:</p>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
               style={{ color: ss.color, backgroundColor: ss.bg }}>
-              {data.status}
+              {data.readyForAppraisal && data.status === "Draft" ? "Ready for Appraisal" : data.status}
             </span>
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
@@ -380,12 +381,6 @@ function HistoryDrawer({ period, data, onClose }: {
                   style={{ color: TEXT, backgroundColor: "#FEF3F2", border: "1px solid #FECDCA" }}>
                   {data.hrOverrideReason}
                 </p>
-              </div>
-            )}
-            {data.hrRemarks && (
-              <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{data.hrRemarks}</p>
               </div>
             )}
             {data.finalDate && (
@@ -637,10 +632,15 @@ export function StaffProfileHR() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const performanceStore = usePerformanceStore();
+  const periodNames = performanceStore.periods.map(period => period.name);
+  const resultPeriodId = performanceStore.getDashboardDefaultPeriodId("employee");
+  const resultPeriodName = performanceStore.periods.find(period => period.id === resultPeriodId)?.name ?? LIVE_PERIOD;
   const returnContext = searchParams.get("returnTo");
   const returnToAppraisals = returnContext === "hr-appraisals" || returnContext === "team-appraisals";
   const returnToTeamPerformance = returnContext === "team-performance";
-  const returnPeriod = searchParams.get("period") ?? LIVE_PERIOD;
+  const requestedPeriod = searchParams.get("period");
+  const returnPeriod = requestedPeriod && periodNames.includes(requestedPeriod) ? requestedPeriod : resultPeriodName;
 
   const empId    = id ?? "amir";
   const emp      = EMPLOYEES[empId] ?? EMPLOYEES.amir;
@@ -705,7 +705,7 @@ export function StaffProfileHR() {
               <select value={selectedPeriod} onChange={event => setSelectedPeriod(event.target.value)}
                 className="min-w-[215px] rounded-md px-3 py-2 text-[12px] font-semibold outline-none"
                 style={{ color: TEXT, border: `1px solid ${BORDER}`, backgroundColor: "white" }}>
-                {PERIOD_OPTIONS.map(period => <option key={period} value={period}>{period}</option>)}
+                {periodNames.map(period => <option key={period} value={period}>{period}</option>)}
               </select>
             </label>
           </div>
@@ -921,7 +921,7 @@ export function StaffProfileHR() {
                   <tbody>
                     {prevAppraisals.map(({ period, data: d }, i) => {
                       const pss = STATUS_STYLE[d.status];
-                      const finalDisplay = (d.hrFinalScore ?? d.finalScore).toFixed(1);
+                      const finalDisplay = d.finalScore.toFixed(1);
                       return (
                         <tr key={period} className="hover:bg-[#F8FAFC] transition-colors"
                           style={{ borderBottom: i < prevAppraisals.length - 1 ? `1px solid ${BORDER}` : "none" }}>

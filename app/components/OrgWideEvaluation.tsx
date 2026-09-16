@@ -12,6 +12,7 @@ import {
   BarChart2, Target, Star, Download,
 } from "lucide-react";
 import { PERIOD_OPTIONS } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -32,7 +33,7 @@ type Metric      = "final" | "kpi" | "attitude";
 type TrendWindow = "3Y" | "5Y";
 type RecTab      = "manager" | "hr";
 type SortCol     = "kpiScore" | "attScore" | "finalScore" | "yoyChange";
-type PeriodStatus = "Upcoming" | "Open" | "Closed";
+type PeriodStatus = "Draft" | "Upcoming" | "Open" | "Closed";
 
 const METRIC_LABELS: Record<Metric, string> = {
   final:    "Final Appraisal Score",
@@ -61,6 +62,7 @@ const PERIOD_STATUS: Record<string, PeriodStatus> = {
   "2024 Annual KPI Review": "Closed",
 };
 const PERIOD_STATUS_STYLE: Record<PeriodStatus, { color: string; bg: string }> = {
+  "Draft":    { color: MUTED, bg: "#F2F4F7" },
   "Upcoming": { color: AMBER, bg: "#FEF9EC" },
   "Open":     { color: GREEN, bg: "#ECFDF5" },
   "Closed":   { color: MUTED, bg: "#F2F4F7" },
@@ -501,14 +503,15 @@ function addPdfPageChrome(pdf: jsPDF, period: string) {
   const pages = pdf.getNumberOfPages();
   for (let page = 1; page <= pages; page += 1) {
     pdf.setPage(page);
-    pdf.setDrawColor(...PDF_COLORS.border);
-    pdf.setLineWidth(0.3);
-    pdf.line(14, 198, 283, 198);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(...PDF_COLORS.muted);
+    pdf.text(`Page ${page} of ${pages}`, 279, 203, { align: "right" });
+    pdf.setDrawColor(...PDF_COLORS.border);
+    pdf.setLineWidth(0.3);
+    pdf.line(14, 198, 283, 198);
+    pdf.setTextColor(...PDF_COLORS.muted);
     pdf.text(`Confidential | ${period}`, 14, 203);
-    pdf.text(`Page ${page} of ${pages}`, 283, 203, { align: "right" });
   }
 }
 
@@ -516,9 +519,13 @@ function addPdfPageChrome(pdf: jsPDF, period: string) {
 export function OrgWideEvaluation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const performanceStore = usePerformanceStore();
+  const periodNames = performanceStore.periods.map(item => item.name);
+  const resultPeriodId = performanceStore.getDashboardDefaultPeriodId("organisation");
+  const resultPeriodName = performanceStore.periods.find(item => item.id === resultPeriodId)?.name ?? LIVE_PERIOD;
   const requestedPeriod = searchParams.get("period");
   const [period,      setPeriod]      = useState(
-    requestedPeriod && PERIOD_OPTIONS.includes(requestedPeriod) ? requestedPeriod : LIVE_PERIOD
+    requestedPeriod && periodNames.includes(requestedPeriod) ? requestedPeriod : resultPeriodName
   );
   const [showPeriodDd, setShowPeriodDd] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -554,7 +561,7 @@ export function OrgWideEvaluation() {
 
   const summary     = PERIOD_SUMMARY[period] ?? PERIOD_SUMMARY[LIVE_PERIOD];
   const periodYear  = parseInt(period.split(" ")[0]);
-  const pStatus     = PERIOD_STATUS[period] ?? "Closed";
+  const pStatus     = (performanceStore.periods.find(item => item.name === period)?.status ?? PERIOD_STATUS[period] ?? "Closed") as PeriodStatus;
   const pStatusSty  = PERIOD_STATUS_STYLE[pStatus];
 
   // ── Org Trend ──────────────────────────────────────────────────────────────
@@ -802,8 +809,8 @@ export function OrgWideEvaluation() {
               {showPeriodDd && (
                 <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
                   style={{ minWidth: 260, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                  {PERIOD_OPTIONS.map(p => {
-                    const ps = PERIOD_STATUS[p] ?? "Closed";
+                  {periodNames.map(p => {
+                    const ps = (performanceStore.periods.find(item => item.name === p)?.status ?? PERIOD_STATUS[p] ?? "Closed") as PeriodStatus;
                     const ps_sty = PERIOD_STATUS_STYLE[ps];
                     return (
                       <button key={p} onClick={() => { setPeriod(p); setShowPeriodDd(false); }}

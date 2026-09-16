@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Plus, Search, Eye, Pencil, Trash2 } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2, AlertTriangle, RotateCcw, Clock3 } from "lucide-react";
+import { usePerformanceStore } from "../performance/store";
+import type { ReviewPeriodStatus as ReviewStatus } from "../performance/domain";
 
 const BLUE  = "#2457A6";
 const TEAL  = "#0F9F8F";
@@ -10,28 +12,12 @@ const MUTED = "#667085";
 const BORDER= "#DCE3EC";
 const BG    = "#F4F6F9";
 
-type ReviewStatus = "Draft" | "Upcoming" | "Open" | "Closed";
-
-interface ReviewPeriod {
-  id: string; name: string;
-  startDate: string; endDate: string;
-  status: ReviewStatus;
-  lastUpdated: string;
-}
-
 const STATUS_STYLE: Record<ReviewStatus, { color:string; bg:string }> = {
   Draft:     { color: MUTED,     bg: "#F2F4F7" },
   Upcoming:  { color: AMBER,     bg: "#FEF9EC" },
   Open:      { color: TEAL,      bg: "#ECFDF9" },
   Closed:    { color: "#374151", bg: "#F3F4F6" },
 };
-
-const PERIODS: ReviewPeriod[] = [
-  { id:"2028", name:"2028 Annual KPI Review", startDate:"2028-01-01", endDate:"2028-12-31", status:"Upcoming", lastUpdated:"2026-09-10" },
-  { id:"2027", name:"2027 Annual KPI Review", startDate:"2027-01-01", endDate:"2027-12-31", status:"Draft",    lastUpdated:"2026-08-22" },
-  { id:"2026", name:"2026 Annual KPI Review", startDate:"2026-01-01", endDate:"2026-12-31", status:"Open",     lastUpdated:"2026-01-10" },
-  { id:"2025", name:"2025 Annual KPI Review", startDate:"2025-01-01", endDate:"2025-12-31", status:"Closed",   lastUpdated:"2025-12-28" },
-];
 
 function StatusPill({ status }: { status: ReviewStatus }) {
   const s = STATUS_STYLE[status];
@@ -52,10 +38,10 @@ function fmt(iso: string) {
 
 export function ReviewPeriods() {
   const navigate = useNavigate();
+  const { periods, state, requirementGaps, setEffectiveDate, resetDemoData, deletePeriod } = usePerformanceStore();
   const [search, setSearch]         = useState("");
   const [statusFilter, setStatus]   = useState("All");
   const [yearFilter, setYear]        = useState("All");
-  const [periods, setPeriods]        = useState(PERIODS);
 
   const visible = periods.filter(p => {
     const q = search.toLowerCase();
@@ -86,6 +72,42 @@ export function ReviewPeriods() {
         </button>
       </div>
 
+      {/* ── Prototype consistency controls ── */}
+      <div className="bg-white rounded-lg p-4" style={{ border:`1px solid ${BORDER}`, boxShadow:"0 1px 4px rgba(0,0,0,0.06)" }}>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <div className="flex items-center gap-2">
+              <Clock3 size={14} style={{ color: BLUE }}/>
+              <h2 className="text-[13px] font-bold" style={{ color: TEXT }}>Prototype Simulation Date</h2>
+            </div>
+            <p className="text-[11px] mt-1" style={{ color: MUTED }}>
+              Uses Asia/Kuala_Lumpur and controls period opening, checkpoint availability, and overdue indicators.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input type="date" value={state.effectiveDate} onChange={event => setEffectiveDate(event.target.value)}
+              className="px-3 py-2 rounded-md text-[12px]" style={{ border:`1px solid ${BORDER}`, color:TEXT }}/>
+            <button onClick={() => { if (window.confirm("Reset all locally saved performance demo data?")) resetDemoData(); }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[12px] font-semibold border"
+              style={{ color: MUTED, borderColor: BORDER }}><RotateCcw size={12}/> Reset Demo Data</button>
+          </div>
+        </div>
+        <div className="mt-4 pt-4 border-t" style={{ borderColor: BORDER }}>
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle size={13} style={{ color: AMBER }}/>
+            <p className="text-[12px] font-bold" style={{ color: TEXT }}>Stakeholder Requirement Gaps</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {requirementGaps.map(gap => (
+              <div key={gap.id} className="p-3 rounded-md" style={{ backgroundColor:"#FEF9EC", border:"1px solid #F5D98A" }}>
+                <p className="text-[11px] font-bold" style={{ color: AMBER }}>{gap.title} · TBC</p>
+                <p className="text-[11px] mt-1" style={{ color: TEXT }}>{gap.question}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* ── Filters ── */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2 bg-white border rounded-md px-3 py-2 flex-1"
@@ -109,7 +131,7 @@ export function ReviewPeriods() {
           className="px-3 py-2 bg-white border rounded-md text-[13px] outline-none cursor-pointer"
           style={{ borderColor: BORDER, color: TEXT }}>
           <option value="All">All Years</option>
-          {["2028","2027","2026","2025"].map(y => <option key={y} value={y}>{y}</option>)}
+          {periods.map(period => <option key={period.id} value={period.id}>{period.id}</option>)}
         </select>
       </div>
 
@@ -161,7 +183,7 @@ export function ReviewPeriods() {
                           <Pencil size={11}/> Edit
                         </button>
                         <button
-                          onClick={() => setPeriods(current => current.filter(period => period.id !== p.id))}
+                          onClick={() => { if (window.confirm(`Delete ${p.name} and all of its prototype data?`)) deletePeriod(p.id); }}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded text-[11px] font-medium border transition-colors hover:bg-red-50"
                           style={{ color: "#D14343", borderColor: "#F2B8B5" }}>
                           <Trash2 size={11}/> Delete

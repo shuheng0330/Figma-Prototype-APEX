@@ -21,12 +21,10 @@ const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,     bg: "#EEF3FC" },
   "Draft":                { color: AMBER,    bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,     bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,      bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,    bg: "#ECFDF5" },
-  "Override and Approve": { color: "#7C3AED",bg: "#F5F3FF" },
+  "Returned":             { color: RED,      bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,    bg: "#ECFDF5" },
 };
 
 function todayStr() {
@@ -53,7 +51,7 @@ interface HistoryDrawerProps {
 
 function HistoryDrawer({ period, data, onClose }: HistoryDrawerProps) {
   const ss = STATUS_STYLE[data.status];
-  const isOverride = data.status === "Override and Approve";
+  const isOverride = data.hrApprovalMethod === "Overridden Recommendation";
 
   return (
     <>
@@ -159,13 +157,6 @@ function HistoryDrawer({ period, data, onClose }: HistoryDrawerProps) {
               </div>
             )}
 
-            {data.hrRemarks && (
-              <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{data.hrRemarks}</p>
-              </div>
-            )}
-
             {data.finalDate && (
               <p className="text-[12px] mt-1" style={{ color: MUTED }}>
                 Finalised on: <span className="font-semibold" style={{ color: TEXT }}>{data.finalDate}</span>
@@ -241,7 +232,7 @@ export function FinalAppraisals() {
   const status     = pd.status;
   const ss         = STATUS_STYLE[status];
   const isEditable = isLivePeriod && (
-    status === "Ready for Appraisal" || status === "Draft" || status === "Return for Revision"
+    (status === "Draft" && Boolean(pd.readyForAppraisal)) || status === "Returned"
   );
   const isReadOnly = !isEditable;
   const canSubmit  = decision !== null && mgrComment.trim().length > 20;
@@ -287,17 +278,17 @@ export function FinalAppraisals() {
 
   function simulateHrReturn() {
     patch({
-      status: "Return for Revision",
+      status: "Returned",
       hrReturnReason: `Please provide more detailed justification for your recommendation. Include specific examples of ${firstName}'s performance contributions and explain how the cross-sell target will be addressed before resubmission.`,
     });
   }
 
   function simulateHrApprove() {
     patch({
-      status: "Approve",
+      status: "Approved",
       hrDecision: decision,
+      hrApprovalMethod: "Accepted Superior Recommendation",
       hrOverrideReason: "",
-      hrRemarks: "Approved. The Superior's recommendation has been reviewed and endorsed by HR.",
       finalDate: todayStr(),
     });
   }
@@ -307,14 +298,14 @@ export function FinalAppraisals() {
       "Promotion": "Salary Increment",
       "Salary Increment": "No Recommendation",
       "Both": "Salary Increment",
-      "No Recommendation": "No Recommendation",
+      "No Recommendation": "Salary Increment",
     };
     const overrideDec = decision ? map[decision] : "No Recommendation";
     patch({
-      status: "Override and Approve",
+      status: "Approved",
       hrDecision: overrideDec,
+      hrApprovalMethod: "Overridden Recommendation",
       hrOverrideReason: `HR has applied an override per company policy. Original recommendation of "${decision}" has been adjusted to "${overrideDec}". See policy guidelines for override criteria.`,
-      hrRemarks: "Override applied. HR final decision takes precedence per company guidelines. Superior to be notified separately.",
       finalDate: todayStr(),
     });
   }
@@ -346,6 +337,11 @@ export function FinalAppraisals() {
               >
                 {status}
               </span>
+              {pd.readyForAppraisal && status === "Draft" && (
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>
+                  Ready for Appraisal
+                </span>
+              )}
             </div>
             <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>
               Superior view · {emp.name} ({emp.staffId}) · {selectedPeriod}
@@ -371,7 +367,7 @@ export function FinalAppraisals() {
               >
                 {draftSaved ? "✓ Saved" : "Save Draft"}
               </button>
-              {status === "Return for Revision" ? (
+              {status === "Returned" ? (
                 <button
                   onClick={resubmit}
                   disabled={!canSubmit}
@@ -432,7 +428,7 @@ export function FinalAppraisals() {
           </div>
         )}
 
-        {status === "Return for Revision" && pd.hrReturnReason && (
+        {status === "Returned" && pd.hrReturnReason && (
           <div
             className="flex items-start gap-3 p-4 rounded-lg"
             style={{ backgroundColor: "#FEF3F2", border: `1px solid ${RED}` }}
@@ -445,25 +441,25 @@ export function FinalAppraisals() {
           </div>
         )}
 
-        {(status === "Approve" || status === "Override and Approve") && (
+        {status === "Approved" && (
           <div
             className="rounded-lg overflow-hidden"
-            style={{ border: `1px solid ${status === "Override and Approve" ? "#C4B5FD" : "#6EE7B7"}` }}
+            style={{ border: `1px solid ${pd.hrApprovalMethod === "Overridden Recommendation" ? "#C4B5FD" : "#6EE7B7"}` }}
           >
             <div
               className="px-5 py-3 flex items-center gap-2"
-              style={{ backgroundColor: status === "Override and Approve" ? "#F5F3FF" : "#ECFDF5" }}
+              style={{ backgroundColor: pd.hrApprovalMethod === "Overridden Recommendation" ? "#F5F3FF" : "#ECFDF5" }}
             >
-              <span style={{ color: status === "Override and Approve" ? "#7C3AED" : GREEN }}>✓</span>
-              <p className="text-[13px] font-semibold flex-1" style={{ color: status === "Override and Approve" ? "#7C3AED" : GREEN }}>
-                {status === "Override and Approve" ? "HR Override and Approve" : "Appraisal Approved by HR"}
+              <span style={{ color: pd.hrApprovalMethod === "Overridden Recommendation" ? "#7C3AED" : GREEN }}>✓</span>
+              <p className="text-[13px] font-semibold flex-1" style={{ color: pd.hrApprovalMethod === "Overridden Recommendation" ? "#7C3AED" : GREEN }}>
+                {pd.hrApprovalMethod === "Overridden Recommendation" ? "HR Override and Approve" : "Appraisal Approved by HR"}
               </p>
               {pd.finalDate && (
                 <span className="text-[11px]" style={{ color: MUTED }}>Finalised {pd.finalDate}</span>
               )}
             </div>
             <div className="bg-white px-5 py-4 space-y-3">
-              {status === "Override and Approve" ? (
+              {pd.hrApprovalMethod === "Overridden Recommendation" ? (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Original Superior Recommendation</p>
@@ -480,7 +476,7 @@ export function FinalAppraisals() {
                   <p className="text-[13px] font-semibold" style={{ color: GREEN }}>{pd.hrDecision}</p>
                 </div>
               )}
-              {status === "Override and Approve" && pd.hrOverrideReason && (
+              {pd.hrApprovalMethod === "Overridden Recommendation" && pd.hrOverrideReason && (
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: RED }}>HR Override Reason</p>
                   <p
@@ -489,12 +485,6 @@ export function FinalAppraisals() {
                   >
                     {pd.hrOverrideReason}
                   </p>
-                </div>
-              )}
-              {pd.hrRemarks && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                  <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{pd.hrRemarks}</p>
                 </div>
               )}
             </div>

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import {
   X,
   Send,
@@ -7,8 +7,9 @@ import {
   AlertTriangle,
   Paperclip,
   FileText,
-  RotateCcw,
 } from "lucide-react";
+import { generateCheckpoints, isActivityOverdue, isCheckpointAvailable } from "../performance/domain";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE = "#2457A6";
 const TEAL = "#0F9F8F";
@@ -35,14 +36,13 @@ const SCORE_META: Record<
     label: "Needs Significant Improvement",
     color: "#E06B3A",
   },
-  0: { label: "Not Achieved", color: RED },
 };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type KpiLevel = "Company" | "Department" | "Individual";
 type CheckpointStatus =
-  "Reviewed" | "Draft" | "Upcoming" | "Pending Review" | "Returned";
+  "Reviewed" | "Draft" | "Upcoming" | "Pending Review";
 type CheckpointId = "jan" | "feb" | "mar";
 
 interface ScoreDef {
@@ -51,7 +51,6 @@ interface ScoreDef {
   s3: string;
   s2: string;
   s1: string;
-  s0: string;
 }
 interface KpiRow {
   id: string;
@@ -69,8 +68,6 @@ interface CheckpointData {
   scores: Record<string, number | null>;
   comments: Record<string, string>;
   evidence: Record<string, EvidenceFile | null>;
-  returnReason?: string;
-  returnDate?: string;
   overdue?: boolean;
 }
 interface CheckpointMeta {
@@ -78,6 +75,8 @@ interface CheckpointMeta {
   label: string;
   date: string;
   deadline: string;
+  deadlineIso?: string;
+  availableFrom?: string;
 }
 interface AttitudeRow {
   id: string;
@@ -106,11 +105,6 @@ const CP_STATUS_STYLE: Record<
   Draft: { color: AMBER, bg: "#FEF9EC", label: "Draft" },
   Upcoming: { color: MUTED, bg: "#F2F4F7", label: "Upcoming" },
   "Pending Review": { color: TEAL, bg: "#ECFDF9", label: "Pending Review" },
-  Returned: {
-    color: RED,
-    bg: "#FEF3F2",
-    label: "Returned for Revision",
-  },
 };
 
 const CHECKPOINTS: CheckpointMeta[] = [
@@ -154,7 +148,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Revenue grows 5%–7.9% YoY",
       s2: "Revenue grows 2%–4.9% YoY",
       s1: "Revenue grows 0%–1.9% YoY",
-      s0: "Revenue declines year-on-year",
     },
   },
   {
@@ -168,7 +161,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "CSI score 85%–89%",
       s2: "CSI score 75%–84%",
       s1: "CSI score 60%–74%",
-      s0: "CSI score below 60%",
     },
   },
   {
@@ -182,7 +174,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Operations score 90%–92%",
       s2: "Operations score 80%–89%",
       s1: "Operations score 70%–79%",
-      s0: "Operations score below 70%",
     },
   },
   {
@@ -196,7 +187,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Achieves 90%–99% of monthly sales target",
       s2: "Achieves 75%–89% of monthly sales target",
       s1: "Achieves 50%–74% of monthly sales target",
-      s0: "Achieves less than 50% of monthly sales target",
     },
   },
   {
@@ -210,7 +200,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Covers 80%–89% of the product range",
       s2: "Covers 70%–79% of the product range",
       s1: "Covers 50%–69% of the product range",
-      s0: "Covers less than 50% of the product range",
     },
   },
   {
@@ -224,7 +213,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Acquires 10 new customers per month",
       s2: "Acquires 8–9 new customers per month",
       s1: "Acquires 5–7 new customers per month",
-      s0: "Acquires fewer than 5 new customers per month",
     },
   },
   {
@@ -238,7 +226,6 @@ const KPI_ROWS: KpiRow[] = [
       s3: "Cross-sell rate 20%–21%",
       s2: "Cross-sell rate 15%–19%",
       s1: "Cross-sell rate 10%–14%",
-      s0: "Cross-sell rate below 10%",
     },
   },
 ];
@@ -865,9 +852,13 @@ function KpiSubmitDialog({
 function AttitudeSubmitDialog({
   onClose,
   onSubmit,
+  periodName,
+  deadline,
 }: {
   onClose: () => void;
   onSubmit: () => void;
+  periodName: string;
+  deadline: string;
 }) {
   return (
     <div
@@ -903,13 +894,13 @@ function AttitudeSubmitDialog({
             }}
           >
             {[
-              ["Review Period", "2027 Annual KPI Review"],
+              ["Review Period", periodName],
               ["Evaluation Form", "Sales"],
               [
                 "Criteria Completed",
                 `${INIT_ATTITUDE.length} / ${INIT_ATTITUDE.length}`,
               ],
-              ["Deadline", "20 Dec 2027"],
+              ["Deadline", deadline],
               ["Submitting to", "Sales Manager (Superior)"],
             ].map(([label, value]) => (
               <div
@@ -954,6 +945,24 @@ function AttitudeSubmitDialog({
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export function MyAssessments() {
+  const performanceStore = usePerformanceStore();
+  const openPeriod = performanceStore.periods.find(period => {
+    if (period.status !== "Open") return false;
+    return generateCheckpoints(period, "Monthly").some(checkpoint => isCheckpointAvailable(checkpoint, performanceStore.state.effectiveDate));
+  });
+  const selectedPeriod = openPeriod ?? performanceStore.periods.find(period => period.id === "2027") ?? performanceStore.periods[0];
+  const checkpoints = useMemo<CheckpointMeta[]>(() => {
+    if (!selectedPeriod) return CHECKPOINTS;
+    const ids: CheckpointId[] = ["jan", "feb", "mar"];
+    return generateCheckpoints(selectedPeriod, "Monthly").slice(0, 3).map((checkpoint, index) => ({
+      id: ids[index],
+      label: checkpoint.label,
+      date: new Date(`${checkpoint.checkpointDate}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }),
+      deadline: new Date(`${checkpoint.selfDeadline}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }),
+      deadlineIso: checkpoint.selfDeadline,
+      availableFrom: checkpoint.availableFrom,
+    }));
+  }, [selectedPeriod]);
   const [tab, setTab] = useState<"kpi" | "attitude">("kpi");
   const [selectedCpId, setSelectedCpId] =
     useState<CheckpointId>("feb");
@@ -970,17 +979,21 @@ export function MyAssessments() {
   >(null);
   const [draftSaved, setDraftSaved] = useState(false);
 
-  const currentCp = CHECKPOINTS.find(
+  const currentCp = checkpoints.find(
     (c) => c.id === selectedCpId,
   )!;
   const currentState = cpStates[selectedCpId];
   const isReadOnly =
     currentState.status === "Reviewed" ||
     currentState.status === "Pending Review";
-  const isUpcoming = currentState.status === "Upcoming";
+  const checkpointAvailable = !currentCp.availableFrom || performanceStore.state.effectiveDate >= currentCp.availableFrom;
+  const isUpcoming = !checkpointAvailable;
   const isEditable =
-    currentState.status === "Draft" ||
-    currentState.status === "Returned";
+    currentState.status === "Draft" || currentState.status === "Upcoming";
+  const currentOverdue = isActivityOverdue(currentCp.deadlineIso ?? currentCp.deadline, undefined, performanceStore.state.effectiveDate) && currentState.status !== "Reviewed";
+  const attitudeOverdue = selectedPeriod
+    ? isActivityOverdue(selectedPeriod.deadlines.attitudeSelf, undefined, performanceStore.state.effectiveDate) && attStatus !== "Reviewed"
+    : false;
 
   const allKpiScored = KPI_ROWS.every(
     (k) => (currentState.scores[k.id] ?? null) !== null,
@@ -1067,21 +1080,6 @@ export function MyAssessments() {
     setShowAttDialog(false);
   }
 
-  function handleSimulateReturn() {
-    updateCpStatus("Returned", {
-      returnReason:
-        "Please provide additional supporting information for the Cross-Sell Rate KPI. The current comment does not sufficiently explain the score difference from January.",
-      returnDate: "8 Mar 2027",
-    });
-  }
-
-  function handleResubmit() {
-    updateCpStatus("Pending Review", {
-      returnReason: undefined,
-      returnDate: undefined,
-    });
-  }
-
   const cpStatusStyle = CP_STATUS_STYLE[currentState.status];
 
   return (
@@ -1104,7 +1102,7 @@ export function MyAssessments() {
             className="text-[13px] mt-0.5"
             style={{ color: MUTED }}
           >
-            Amir Hassan · RS-1042 · 2027 Annual KPI Review
+            Amir Hassan · RS-1042 · {selectedPeriod?.name ?? "Annual KPI Review"}
           </p>
         </div>
 
@@ -1165,9 +1163,9 @@ export function MyAssessments() {
                       color: TEXT,
                     }}
                   >
-                    {CHECKPOINTS.map((c) => (
-                      <option key={c.id} value={c.id} disabled={cpStates[c.id].status === "Upcoming"}>
-                        {c.label}{cpStates[c.id].status === "Upcoming" ? " — unavailable" : ""}
+                    {checkpoints.map((c) => (
+                      <option key={c.id} value={c.id} disabled={Boolean(c.availableFrom && performanceStore.state.effectiveDate < c.availableFrom)}>
+                        {c.label}{c.availableFrom && performanceStore.state.effectiveDate < c.availableFrom ? " — unavailable" : ""}
                       </option>
                     ))}
                   </select>
@@ -1193,7 +1191,7 @@ export function MyAssessments() {
                   </span>
                   <span>Checkpoint: {currentCp.date}</span>
                   <span>Deadline: {currentCp.deadline}</span>
-                  {currentState.overdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}
+                  {(currentState.overdue || currentOverdue) && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}
                   <span>KPIs: {KPI_ROWS.length}</span>
                 </div>
               </div>
@@ -1221,9 +1219,7 @@ export function MyAssessments() {
                     }}
                   >
                     <Send size={13} />
-                    {currentState.status === "Returned"
-                      ? "Resubmit Assessment"
-                      : "Submit Assessment"}
+                    Submit Assessment
                   </button>
                 </div>
               )}
@@ -1260,44 +1256,6 @@ export function MyAssessments() {
               </div>
             )}
 
-            {/* Returned banner */}
-            {currentState.status === "Returned" && (
-              <div
-                className="p-4 rounded-lg"
-                style={{
-                  backgroundColor: "#FEF3F2",
-                  border: `1px solid #FECACA`,
-                }}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <RotateCcw size={14} style={{ color: RED }} />
-                  <p
-                    className="text-[13px] font-semibold"
-                    style={{ color: RED }}
-                  >
-                    Returned for Revision
-                  </p>
-                  {currentState.returnDate && (
-                    <span
-                      className="text-[11px]"
-                      style={{ color: RED }}
-                    >
-                      · Returned {currentState.returnDate}
-                    </span>
-                  )}
-                </div>
-                {currentState.returnReason && (
-                  <p
-                    className="text-[12px] mt-1"
-                    style={{ color: RED }}
-                  >
-                    <strong>Reason:</strong>{" "}
-                    {currentState.returnReason}
-                  </p>
-                )}
-              </div>
-            )}
-
             {/* Submitted success banner */}
             {currentState.status === "Pending Review" && (
               <div className="space-y-2">
@@ -1320,26 +1278,16 @@ export function MyAssessments() {
                     >
                       Your KPI Self-Assessment for{" "}
                       {currentCp.label} has been submitted to
-                      your Manager.
+                      your Superior.
                     </p>
                     <p
                       className="text-[12px] mt-0.5"
                       style={{ color: MUTED }}
                     >
-                      You can edit this assessment again only if
-                      your Manager returns it for revision.
+                      Self-Assessment Points are now read-only while your Superior completes the review.
                     </p>
                   </div>
                 </div>
-                {/* Prototype: simulate manager return */}
-                <button
-                  onClick={handleSimulateReturn}
-                  className="text-[11px] underline"
-                  style={{ color: MUTED }}
-                >
-                  Prototype: Simulate Manager returns for
-                  revision
-                </button>
               </div>
             )}
 
@@ -1596,7 +1544,7 @@ export function MyAssessments() {
                 >
                   Sales Evaluation Form
                 </span>
-                <span>2027 Annual KPI Review</span>
+                <span>{selectedPeriod?.name ?? "Annual KPI Review"}</span>
                 <span
                   className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                   style={{
@@ -1608,7 +1556,8 @@ export function MyAssessments() {
                 >
                   {attStatus}
                 </span>
-                <span>Deadline: 20 Dec 2027</span>
+                <span>Deadline: {selectedPeriod?.deadlines.attitudeSelf ?? "—"}</span>
+                {attitudeOverdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}
               </div>
               {attStatus === "Draft" && (
                 <div className="flex gap-2">
@@ -1677,13 +1626,13 @@ export function MyAssessments() {
                     style={{ color: TEAL }}
                   >
                     Your Annual Attitude Self-Assessment has
-                    been submitted to your Manager.
+                    been submitted to your Superior.
                   </p>
                   <p
                     className="text-[12px] mt-0.5"
                     style={{ color: MUTED }}
                   >
-                    Your Manager will review your
+                    Your Superior will review your
                     self-assessment and provide their own
                     evaluation.
                   </p>
@@ -1715,7 +1664,7 @@ export function MyAssessments() {
                   style={{ color: MUTED }}
                 >
                   Rate yourself honestly on each criterion.
-                  Scores are reviewed by your Manager.
+                  Points are reviewed by your Superior.
                 </p>
               </div>
               <div>
@@ -1853,6 +1802,8 @@ export function MyAssessments() {
       )}
       {showAttDialog && (
         <AttitudeSubmitDialog
+          periodName={selectedPeriod?.name ?? "Annual KPI Review"}
+          deadline={selectedPeriod?.deadlines.attitudeSelf ?? "—"}
           onClose={() => setShowAttDialog(false)}
           onSubmit={handleAttSubmit}
         />
