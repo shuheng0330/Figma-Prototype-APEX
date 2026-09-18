@@ -3,7 +3,7 @@ import {
   X, ChevronDown, Plus, Pencil, Eye, ArrowUp, ArrowDown,
   Info, Lock, CheckCircle, Save,
 } from "lucide-react";
-import { PERIOD_OPTIONS } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -32,7 +32,7 @@ interface RatingLevel {
 }
 interface Criterion {
   id: string; order: number; name: string; description: string;
-  type: CriterionType; required: boolean; status: CriterionStatus;
+  type: CriterionType; status: CriterionStatus;
 }
 interface RoleRow {
   id: string; department: string; role: string; format: EvalFormat; status: "Active" | "Inactive";
@@ -74,25 +74,25 @@ const BASE_RATING: RatingLevel[] = [
 ];
 
 const BASE_SHARED: Criterion[] = [
-  { id:"sc1",  order:1,  name:"Respect",                 description:"Treats colleagues, customers and partners with dignity and consideration.",          type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc2",  order:2,  name:"Integrity",               description:"Acts honestly and ethically in all professional interactions.",                      type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc3",  order:3,  name:"Taking Initiative",       description:"Proactively identifies opportunities and takes action without being prompted.",       type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc4",  order:4,  name:"Thoughtfulness",          description:"Considers the impact of decisions and actions on others before acting.",             type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc5",  order:5,  name:"Cooperation",             description:"Works collaboratively with team members and supports shared objectives.",             type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc6",  order:6,  name:"Effective Communication", description:"Communicates clearly, respectfully and constructively across all levels.",           type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc7",  order:7,  name:"Proactive in Learning",   description:"Actively seeks opportunities to grow professionally and expand knowledge.",          type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc8",  order:8,  name:"Willingness to Try",      description:"Embraces new challenges and approaches with an open and adaptable mindset.",        type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc9",  order:9,  name:"Wholeheartedness",        description:"Commits fully to tasks and responsibilities with dedication and care.",              type:"Shared Core Value", required:true, status:"Active" },
-  { id:"sc10", order:10, name:"Positivity",              description:"Maintains a constructive and optimistic outlook, even in challenging situations.",   type:"Shared Core Value", required:true, status:"Active" },
+  { id:"sc1",  order:1,  name:"Respect",                 description:"Treats colleagues, customers and partners with dignity and consideration.",          type:"Shared Core Value", status:"Active" },
+  { id:"sc2",  order:2,  name:"Integrity",               description:"Acts honestly and ethically in all professional interactions.",                      type:"Shared Core Value", status:"Active" },
+  { id:"sc3",  order:3,  name:"Taking Initiative",       description:"Proactively identifies opportunities and takes action without being prompted.",       type:"Shared Core Value", status:"Active" },
+  { id:"sc4",  order:4,  name:"Thoughtfulness",          description:"Considers the impact of decisions and actions on others before acting.",             type:"Shared Core Value", status:"Active" },
+  { id:"sc5",  order:5,  name:"Cooperation",             description:"Works collaboratively with team members and supports shared objectives.",             type:"Shared Core Value", status:"Active" },
+  { id:"sc6",  order:6,  name:"Effective Communication", description:"Communicates clearly, respectfully and constructively across all levels.",           type:"Shared Core Value", status:"Active" },
+  { id:"sc7",  order:7,  name:"Proactive in Learning",   description:"Actively seeks opportunities to grow professionally and expand knowledge.",          type:"Shared Core Value", status:"Active" },
+  { id:"sc8",  order:8,  name:"Willingness to Try",      description:"Embraces new challenges and approaches with an open and adaptable mindset.",        type:"Shared Core Value", status:"Active" },
+  { id:"sc9",  order:9,  name:"Wholeheartedness",        description:"Commits fully to tasks and responsibilities with dedication and care.",              type:"Shared Core Value", status:"Active" },
+  { id:"sc10", order:10, name:"Positivity",              description:"Maintains a constructive and optimistic outlook, even in challenging situations.",   type:"Shared Core Value", status:"Active" },
 ];
 
 const BASE_MANAGER: Criterion[] = [
-  { id:"mc1", order:1, name:"Strategic Focus",               description:"Aligns team activities with organisational goals and long-term priorities.",              type:"Manager-Specific Criterion", required:true, status:"Active" },
-  { id:"mc2", order:2, name:"Management Effectiveness",      description:"Organises, delegates and develops team members to consistently achieve results.",        type:"Manager-Specific Criterion", required:true, status:"Active" },
-  { id:"mc3", order:3, name:"Problem Solving and Prevention",description:"Identifies root causes and proactively prevents issues from escalating.",                type:"Manager-Specific Criterion", required:true, status:"Active" },
-  { id:"mc4", order:4, name:"Leadership and Empowerment",    description:"Inspires confidence, empowers team members and fosters individual accountability.",      type:"Manager-Specific Criterion", required:true, status:"Active" },
-  { id:"mc5", order:5, name:"Creativity and Simplicity",     description:"Generates innovative solutions while keeping processes clear and efficient.",            type:"Manager-Specific Criterion", required:true, status:"Active" },
-  { id:"mc6", order:6, name:"Win-Win Mentality",             description:"Pursues outcomes that benefit both the organisation and its key stakeholders.",          type:"Manager-Specific Criterion", required:true, status:"Active" },
+  { id:"mc1", order:1, name:"Strategic Focus",               description:"Aligns team activities with organisational goals and long-term priorities.",              type:"Manager-Specific Criterion", status:"Active" },
+  { id:"mc2", order:2, name:"Management Effectiveness",      description:"Organises, delegates and develops team members to consistently achieve results.",        type:"Manager-Specific Criterion", status:"Active" },
+  { id:"mc3", order:3, name:"Problem Solving and Prevention",description:"Identifies root causes and proactively prevents issues from escalating.",                type:"Manager-Specific Criterion", status:"Active" },
+  { id:"mc4", order:4, name:"Leadership and Empowerment",    description:"Inspires confidence, empowers team members and fosters individual accountability.",      type:"Manager-Specific Criterion", status:"Active" },
+  { id:"mc5", order:5, name:"Creativity and Simplicity",     description:"Generates innovative solutions while keeping processes clear and efficient.",            type:"Manager-Specific Criterion", status:"Active" },
+  { id:"mc6", order:6, name:"Win-Win Mentality",             description:"Pursues outcomes that benefit both the organisation and its key stakeholders.",          type:"Manager-Specific Criterion", status:"Active" },
 ];
 
 // These begin empty so prototype users can validate the separate Sales and
@@ -202,7 +202,7 @@ interface DrawerState {
 }
 interface CriterionForm {
   name: string; description: string; type: CriterionType;
-  required: boolean; order: number; status: CriterionStatus;
+  order: number; status: CriterionStatus;
 }
 
 function CriterionDrawer({
@@ -222,7 +222,6 @@ function CriterionDrawer({
     name:        state.criterion?.name        ?? "",
     description: state.criterion?.description ?? "",
     type:        state.criterion?.type        ?? defaultType,
-    required:    state.criterion?.required    ?? true,
     order:       state.criterion?.order       ?? 1,
     status:      state.criterion?.status      ?? "Active",
   });
@@ -285,25 +284,6 @@ function CriterionDrawer({
           <div className="p-3 rounded-md" style={{ backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
             <p className="text-[11px] font-semibold mb-0.5" style={{ color: MUTED }}>Applies To</p>
             <p className="text-[13px] font-medium" style={{ color: TEXT }}>{appliesTo}</p>
-          </div>
-
-          {/* Required */}
-          <div className="flex items-center gap-3">
-            <div>
-              <p className="text-[12px] font-semibold" style={{ color: TEXT }}>Required</p>
-              <p className="text-[11px]" style={{ color: MUTED }}>Evaluators must provide a score for this criterion</p>
-            </div>
-            {isReadOnly
-              ? <Pill label={form.required ? "Required" : "Optional"} color={form.required ? BLUE : MUTED} bg={form.required ? "#EEF3FC" : "#F2F4F7"} />
-              : (
-                <button onClick={() => setForm(f => ({ ...f, required: !f.required }))}
-                  className="ml-auto w-10 h-6 rounded-full transition-colors relative shrink-0"
-                  style={{ backgroundColor: form.required ? GREEN : "#D1D5DB" }}>
-                  <span className="absolute top-0.5 transition-all w-5 h-5 bg-white rounded-full shadow"
-                    style={{ left: form.required ? "calc(100% - 22px)" : "2px" }} />
-                </button>
-              )
-            }
           </div>
 
           {/* Display Order */}
@@ -515,10 +495,6 @@ function PreviewDrawer({ config, onClose }: { config: PeriodConfig; onClose: () 
                         <p className="text-[13px] font-semibold" style={{ color: TEXT }}>{c.name}</p>
                         <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: MUTED }}>{c.description}</p>
                       </div>
-                      {c.required && (
-                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded shrink-0"
-                          style={{ backgroundColor: "#EEF3FC", color: BLUE }}>Required</span>
-                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-3">
                       <span className="text-[10px]" style={{ color: MUTED }}>Score:</span>
@@ -582,7 +558,7 @@ function CriteriaTable({
         <table className="w-full text-[12px]">
           <thead>
             <tr style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
-              {["#", "Criterion", "Description", "Required", "Status", "Actions"].map(h => (
+              {["#", "Criterion", "Description", "Status", "Actions"].map(h => (
                 <th key={h} className="px-3 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
                   style={{ color: MUTED }}>{h}</th>
               ))}
@@ -602,9 +578,6 @@ function CriteriaTable({
                 </td>
                 <td className="px-3 py-2.5 max-w-xs">
                   <p className="truncate" style={{ color: MUTED }}>{c.description}</p>
-                </td>
-                <td className="px-3 py-2.5">
-                  <Pill label={c.required ? "Required" : "Optional"} color={c.required ? BLUE : MUTED} bg={c.required ? "#EEF3FC" : "#F2F4F7"} />
                 </td>
                 <td className="px-3 py-2.5">
                   <Pill label={c.status} color={c.status === "Active" ? GREEN : MUTED} bg={c.status === "Active" ? "#ECFDF5" : "#F2F4F7"} />
@@ -647,7 +620,7 @@ function CriteriaTable({
               </tr>
             ))}
             {sorted.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-[12px]" style={{ color: MUTED }}>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-[12px]" style={{ color: MUTED }}>
                 No criteria yet. {isEditable ? `Click "${addLabel}" to add one.` : ""}
               </td></tr>
             )}
@@ -660,8 +633,12 @@ function CriteriaTable({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export function AttitudeSetup() {
-  const [configs, setConfigs] = useState<Record<string, PeriodConfig>>(INITIAL_CONFIGS);
-  const [period, setPeriod]   = useState(LIVE_PERIOD);
+  const performanceStore = usePerformanceStore();
+  const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
+  const defaultPeriod = performanceStore.periods.find(item => item.id === defaultPeriodId);
+  const hasStoredConfigs = Object.keys(performanceStore.state.attitudeConfigurations).length > 0;
+  const configs = (hasStoredConfigs ? performanceStore.state.attitudeConfigurations : INITIAL_CONFIGS) as Record<string, PeriodConfig>;
+  const [period] = useState(defaultPeriod?.name ?? LIVE_PERIOD);
   const [showPeriodDd, setShowPeriodDd] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
 
@@ -681,6 +658,10 @@ export function AttitudeSetup() {
   const [savedMsg, setSavedMsg] = useState("");
 
   useEffect(() => {
+    if (!hasStoredConfigs) performanceStore.setAttitudeConfigurations(INITIAL_CONFIGS);
+  }, [hasStoredConfigs, performanceStore]);
+
+  useEffect(() => {
     const fn = (e: MouseEvent) => {
       if (!periodRef.current?.contains(e.target as Node)) setShowPeriodDd(false);
     };
@@ -689,18 +670,19 @@ export function AttitudeSetup() {
   }, []);
 
   const cfg        = configs[period] ?? configs[LIVE_PERIOD];
-  const pStatus    = PERIOD_STATUS[period] ?? "Closed";
+  const sharedPeriod = performanceStore.periods.find(item => item.name === period);
+  const pStatus    = sharedPeriod?.status === "Draft" ? "Upcoming" : sharedPeriod?.status ?? PERIOD_STATUS[period] ?? "Closed";
   const pStatusSty = PERIOD_STATUS_STYLE[pStatus];
   const cssSty     = CONFIG_STATUS_STYLE[cfg.configStatus];
   const isEditable = pStatus === "Upcoming";
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   function mutatePeriod(updater: (prev: PeriodConfig) => PeriodConfig) {
-    setConfigs(prev => ({ ...prev, [period]: updater(prev[period] ?? prev[LIVE_PERIOD]) }));
+    performanceStore.setAttitudeConfigurations({ ...configs, [period]: updater(configs[period] ?? configs[LIVE_PERIOD]) });
   }
 
   function today() {
-    return new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
+    return new Date(`${performanceStore.state.effectiveDate}T00:00:00`).toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" });
   }
 
   function showSaved(msg: string) {
@@ -765,7 +747,7 @@ export function AttitudeSetup() {
         const newC: Criterion = {
           id: `${({ sharedCriteria: "sc", managerCriteria: "mc", salesCriteria: "slc", nonSalesCriteria: "nsc" } as const)[section]}${Date.now()}`,
           order: maxOrder + 1, name: form.name, description: form.description,
-          type: SECTION_TYPE[drawerState.section], required: form.required, status: form.status,
+          type: SECTION_TYPE[drawerState.section], status: form.status,
         };
         return { ...p, [section]: [...p[section], newC] };
       } else {
@@ -773,7 +755,7 @@ export function AttitudeSetup() {
           ...p,
           [section]: p[section].map(c =>
             c.id === drawerState.criterion?.id
-              ? { ...c, name: form.name, description: form.description, required: form.required, order: form.order, status: form.status }
+              ? { ...c, name: form.name, description: form.description, order: form.order, status: form.status }
               : c
           ),
         };

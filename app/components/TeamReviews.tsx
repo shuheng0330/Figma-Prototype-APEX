@@ -4,6 +4,8 @@ import {
   X, ChevronDown, CheckCircle, RotateCcw, ArrowUp, ArrowDown, FileText,
   ArrowLeft,
 } from "lucide-react";
+import { generateCheckpoints } from "../performance/domain";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -21,7 +23,6 @@ const SCORE_META: Record<number, { label: string; color: string }> = {
   3: { label: "Meets Expectations",            color: BLUE      },
   2: { label: "Partially Meets Expectations",  color: AMBER     },
   1: { label: "Needs Significant Improvement", color: "#E06B3A" },
-  0: { label: "Not Achieved",                  color: RED       },
 };
 
 const SCORE_KEYS = ["s5","s4","s3","s2","s1"] as const;
@@ -31,7 +32,7 @@ type ReviewStatus      = "Pending Review" | "Pending Approval" | "Reviewed" | "A
 type ReviewType        = "Individual KPI Approval" | "KPI Assessment" | "Attitude Evaluation";
 type KpiApprovalStatus = "Pending" | "Approved" | "Returned";
 
-interface ScoreDef { s5: string; s4: string; s3: string; s2: string; s1: string; s0: string; }
+interface ScoreDef { s5: string; s4: string; s3: string; s2: string; s1: string; }
 interface KpiRow {
   id: string; level: KpiLevel; perspective: string; kra: string;
   name: string; target: string; weightage: number; scoreDef: ScoreDef;
@@ -74,7 +75,6 @@ const IND_KPIS: KpiRow[] = [
       s3: "Acquires 10 new customers per month",
       s2: "Acquires 8–9 new customers per month",
       s1: "Acquires 5–7 new customers per month",
-      s0: "Acquires fewer than 5 new customers per month",
     },
   },
   {
@@ -86,7 +86,6 @@ const IND_KPIS: KpiRow[] = [
       s3: "Cross-sell rate 20%–21%",
       s2: "Cross-sell rate 15%–19%",
       s1: "Cross-sell rate 10%–14%",
-      s0: "Cross-sell rate below 10%",
     },
   },
 ];
@@ -96,37 +95,37 @@ const ALL_KPIS: KpiRow[] = [
   {
     id: "c1", level: "Company", perspective: "Financial", kra: "Revenue Management",
     name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 10,
-    scoreDef: { s5: "Revenue grows 10% or more above target YoY", s4: "Revenue grows 8%–9.9% YoY", s3: "Revenue grows 5%–7.9% YoY", s2: "Revenue grows 2%–4.9% YoY", s1: "Revenue grows 0%–1.9% YoY", s0: "Revenue declines year-on-year" },
+    scoreDef: { s5: "Revenue grows 10% or more above target YoY", s4: "Revenue grows 8%–9.9% YoY", s3: "Revenue grows 5%–7.9% YoY", s2: "Revenue grows 2%–4.9% YoY", s1: "Revenue grows 0%–1.9% YoY" },
   },
   {
     id: "c2", level: "Company", perspective: "Customer", kra: "Customer Experience",
     name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 10,
-    scoreDef: { s5: "CSI score 95% or above", s4: "CSI score 90%–94%", s3: "CSI score 85%–89%", s2: "CSI score 75%–84%", s1: "CSI score 60%–74%", s0: "CSI score below 60%" },
+    scoreDef: { s5: "CSI score 95% or above", s4: "CSI score 90%–94%", s3: "CSI score 85%–89%", s2: "CSI score 75%–84%", s1: "CSI score 60%–74%" },
   },
   {
     id: "c3", level: "Company", perspective: "Internal Process", kra: "Operational Excellence",
     name: "Branch Operations Score", target: "≥ 90%", weightage: 10,
-    scoreDef: { s5: "Operations score 98% or above", s4: "Operations score 93%–97%", s3: "Operations score 90%–92%", s2: "Operations score 80%–89%", s1: "Operations score 70%–79%", s0: "Operations score below 70%" },
+    scoreDef: { s5: "Operations score 98% or above", s4: "Operations score 93%–97%", s3: "Operations score 90%–92%", s2: "Operations score 80%–89%", s1: "Operations score 70%–79%" },
   },
   {
     id: "d1", level: "Department", perspective: "Financial", kra: "Sales Performance",
     name: "Monthly Sales Achievement", target: "RM 80,000/month", weightage: 30,
-    scoreDef: { s5: "Achieves 110% or more of monthly sales target", s4: "Achieves 100%–109% of monthly sales target", s3: "Achieves 90%–99% of monthly sales target", s2: "Achieves 75%–89% of monthly sales target", s1: "Achieves 50%–74% of monthly sales target", s0: "Achieves less than 50% of monthly sales target" },
+    scoreDef: { s5: "Achieves 110% or more of monthly sales target", s4: "Achieves 100%–109% of monthly sales target", s3: "Achieves 90%–99% of monthly sales target", s2: "Achieves 75%–89% of monthly sales target", s1: "Achieves 50%–74% of monthly sales target" },
   },
   {
     id: "d2", level: "Department", perspective: "Customer", kra: "Product Distribution",
     name: "Product Coverage", target: "≥ 80% product range", weightage: 15,
-    scoreDef: { s5: "Covers 95% or more of the product range", s4: "Covers 90%–94% of the product range", s3: "Covers 80%–89% of the product range", s2: "Covers 70%–79% of the product range", s1: "Covers 50%–69% of the product range", s0: "Covers less than 50% of the product range" },
+    scoreDef: { s5: "Covers 95% or more of the product range", s4: "Covers 90%–94% of the product range", s3: "Covers 80%–89% of the product range", s2: "Covers 70%–79% of the product range", s1: "Covers 50%–69% of the product range" },
   },
   {
     id: "i1", level: "Individual", perspective: "Customer", kra: "Customer Growth",
     name: "New Customer Acquisition", target: "10 new customers/month", weightage: 15,
-    scoreDef: { s5: "Acquires 13 or more new customers per month", s4: "Acquires 11–12 new customers per month", s3: "Acquires 10 new customers per month", s2: "Acquires 8–9 new customers per month", s1: "Acquires 5–7 new customers per month", s0: "Acquires fewer than 5 new customers per month" },
+    scoreDef: { s5: "Acquires 13 or more new customers per month", s4: "Acquires 11–12 new customers per month", s3: "Acquires 10 new customers per month", s2: "Acquires 8–9 new customers per month", s1: "Acquires 5–7 new customers per month" },
   },
   {
     id: "i2", level: "Individual", perspective: "Customer", kra: "Revenue per Customer",
     name: "Cross-Sell Rate", target: "≥ 20%", weightage: 10,
-    scoreDef: { s5: "Cross-sell rate 25% or above", s4: "Cross-sell rate 22%–24%", s3: "Cross-sell rate 20%–21%", s2: "Cross-sell rate 15%–19%", s1: "Cross-sell rate 10%–14%", s0: "Cross-sell rate below 10%" },
+    scoreDef: { s5: "Cross-sell rate 25% or above", s4: "Cross-sell rate 22%–24%", s3: "Cross-sell rate 20%–21%", s2: "Cross-sell rate 15%–19%", s1: "Cross-sell rate 10%–14%" },
   },
 ];
 
@@ -341,10 +340,11 @@ function CompletionDialog({ item, summaryRows, onClose, onConfirm }: {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function TeamReviews() {
   const navigate = useNavigate();
+  const performanceStore = usePerformanceStore();
   const [searchParams] = useSearchParams();
   const returnToTeamPerformance = searchParams.get("from") === "team-performance";
   const returnPeriod = searchParams.get("period");
-  const [queue, setQueue]               = useState<ReviewItem[]>(INIT_QUEUE);
+  const [staticQueue, setStaticQueue]   = useState<ReviewItem[]>([]);
   const [filterType, setFilterType]     = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterEmp, setFilterEmp]       = useState("All");
@@ -374,7 +374,47 @@ export function TeamReviews() {
   const [scoringDefKpi, setScoringDefKpi]     = useState<KpiRow | null>(null);
   const [evidenceFile, setEvidenceFile]       = useState<{ name: string; size: string } | null>(null);
 
-  const employees = useMemo(() => Array.from(new Set(INIT_QUEUE.map(r => r.employee))), []);
+  const sharedAssessmentItems: ReviewItem[] = Object.values(performanceStore.state.kpiAssessments)
+    .filter(record => record.status !== "Draft")
+    .map(record => {
+      const employee = performanceStore.state.employees[record.employeeId];
+      const period = performanceStore.getPeriod(record.periodId);
+      const checkpoint = period ? generateCheckpoints(period, employee?.reviewFrequency ?? "Monthly").find((_, index) => ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"][index] === record.checkpointId) : undefined;
+      const dueIso = record.superiorDeadline ?? checkpoint?.superiorDeadline ?? period?.endDate ?? record.periodId + "-12-31";
+      return {
+        id: `assessment:${record.id}`, employee: employee?.name ?? record.employeeId, initials: employee?.initials ?? "—", role: employee?.role ?? "Employee", dept: employee?.department ?? "—",
+        type: "KPI Assessment" as const, checkpoint: record.checkpointLabel, due: formatDate(dueIso),
+        dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
+        overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
+      };
+    });
+  const sharedAttitudeItems: ReviewItem[] = Object.values(performanceStore.state.attitudeAssessments)
+    .filter(record => record.status !== "Draft")
+    .map(record => {
+      const employee = performanceStore.state.employees[record.employeeId];
+      const period = performanceStore.getPeriod(record.periodId);
+      const dueIso = period?.deadlines.attitudeSuperior ?? `${record.periodId}-12-27`;
+      return {
+        id: `attitude:${record.id}`, employee: employee?.name ?? record.employeeId, initials: employee?.initials ?? "—", role: employee?.role ?? "Employee", dept: employee?.department ?? "—",
+        type: "Attitude Evaluation" as const, checkpoint: `Annual ${record.periodId}`, due: formatDate(dueIso),
+        dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
+        overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
+      };
+    });
+  const sharedPlanItems: ReviewItem[] = Object.entries(performanceStore.state.employeeKpiPlansByPeriod).flatMap(([periodName, plan]) => {
+    const individual = plan.filter((kpi: any) => kpi.level === "Individual");
+    if (!individual.length || individual.every((kpi: any) => kpi.status === "Draft")) return [];
+    const status: ReviewStatus = individual.some((kpi: any) => kpi.status === "Pending Approval")
+      ? "Pending Approval" : individual.some((kpi: any) => kpi.status === "Returned") ? "Returned" : "Approved";
+    return [{
+      id: `kpi-plan:${periodName}`, employee: "Amir Hassan", initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales",
+      type: "Individual KPI Approval" as const, checkpoint: periodName.split(" ")[0], due: formatDate(performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`), dueTs: Number((performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`).replaceAll("-", "")),
+      status, overdue: status === "Pending Approval" && performanceStore.state.effectiveDate > (performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`),
+    }];
+  });
+  const queue = [...staticQueue, ...sharedAssessmentItems, ...sharedAttitudeItems, ...sharedPlanItems];
+  const workspacePeriod = performanceStore.periods.find(period => period.status === "Open")?.name ?? "Annual KPI Review";
+  const employees = useMemo(() => Array.from(new Set(queue.map(r => r.employee))), [queue]);
 
   const filtered = useMemo(() => {
     let rows = queue.filter(r =>
@@ -398,7 +438,19 @@ export function TeamReviews() {
   }
 
   function updateStatus(id: string, status: ReviewStatus) {
-    setQueue(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    if (id.startsWith("assessment:")) {
+      const recordId = id.slice("assessment:".length);
+      const record = performanceStore.state.kpiAssessments[recordId];
+      if (record) performanceStore.upsertKpiAssessment({ ...record, status: status === "Reviewed" ? "Reviewed" : record.status });
+      return;
+    }
+    if (id.startsWith("attitude:")) {
+      const recordId = id.slice("attitude:".length);
+      const record = performanceStore.state.attitudeAssessments[recordId];
+      if (record) performanceStore.upsertAttitudeAssessment({ ...record, status: status === "Reviewed" ? "Reviewed" : record.status });
+      return;
+    }
+    setStaticQueue(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   }
 
   // ── Derived state for the active drawer ──
@@ -408,37 +460,70 @@ export function TeamReviews() {
   const isReadOnly  = isCompleted || isReturned;
 
   // Individual KPI Approval
-  const approvals   = kpiApprovals[rid] ?? {};
-  const approvCount = IND_KPIS.filter(k => approvals[k.id]?.status === "Approved").length;
-  const retCount    = IND_KPIS.filter(k => approvals[k.id]?.status === "Returned").length;
-  const allReviewed = IND_KPIS.every(k => approvals[k.id]?.status && approvals[k.id]?.status !== "Pending");
+  const activePlanName = rid.startsWith("kpi-plan:") ? rid.slice("kpi-plan:".length) : undefined;
+  const activePlan = activePlanName ? performanceStore.state.employeeKpiPlansByPeriod[activePlanName] ?? [] : [];
+  const individualKpis = (activePlan.filter((item:any) => item.level === "Individual") as KpiRow[]);
+  const displayedIndividualKpis = individualKpis;
+  const approvals = Object.fromEntries(displayedIndividualKpis.map(kpi => {
+    const local = kpiApprovals[rid]?.[kpi.id];
+    const shared = activePlan.find((item: any) => item.id === kpi.id);
+    const sharedStatus = shared?.status === "Approved" ? "Approved" : shared?.status === "Returned" ? "Returned" : "Pending";
+    return [kpi.id, local ?? { status: sharedStatus, returnReason: shared?.returnReason }];
+  })) as Record<string, { status: KpiApprovalStatus; returnReason?: string }>;
+  const approvCount = displayedIndividualKpis.filter(k => approvals[k.id]?.status === "Approved").length;
+  const retCount    = displayedIndividualKpis.filter(k => approvals[k.id]?.status === "Returned").length;
+  const allReviewed = displayedIndividualKpis.length > 0 && displayedIndividualKpis.every(k => approvals[k.id]?.status && approvals[k.id]?.status !== "Pending");
 
   function setKpiApproval(kpiId: string, status: KpiApprovalStatus, reason?: string) {
     setKpiApprovals(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [kpiId]: { status, returnReason: reason } } }));
   }
 
   // KPI Assessment
-  const scores      = mgrScores[rid]   ?? {};
-  const comments    = mgrComments[rid] ?? {};
-  const allScored   = ALL_KPIS.every(k => (scores[k.id] ?? null) !== null);
+  const activeAssessment = rid.startsWith("assessment:")
+    ? performanceStore.state.kpiAssessments[rid.slice("assessment:".length)]
+    : undefined;
+  const assessmentKpis = (activeAssessment?.kpiSnapshots ?? []) as KpiRow[];
+  const scores      = activeAssessment?.superiorPoints ?? mgrScores[rid] ?? {};
+  const comments    = activeAssessment?.superiorComments ?? mgrComments[rid] ?? {};
+  const allScored   = assessmentKpis.length > 0 && assessmentKpis.every(k => (scores[k.id] ?? null) !== null);
   const commentCount = Object.values(comments).filter(c => c.trim()).length;
 
   function setScore(kpiId: string, v: number) {
+    if (activeAssessment) {
+      performanceStore.upsertKpiAssessment({ ...activeAssessment, superiorPoints: { ...activeAssessment.superiorPoints, [kpiId]: v } });
+      return;
+    }
     setMgrScores(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [kpiId]: v } }));
   }
   function setComment(kpiId: string, v: string) {
+    if (activeAssessment) {
+      performanceStore.upsertKpiAssessment({ ...activeAssessment, superiorComments: { ...activeAssessment.superiorComments, [kpiId]: v } });
+      return;
+    }
     setMgrComments(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [kpiId]: v } }));
   }
 
   // Attitude
-  const aScores     = attScores[rid]   ?? {};
-  const aComments   = attComments[rid] ?? {};
-  const allAttScored = ATTITUDE_ROWS.every(c => (aScores[c.id] ?? null) !== null);
+  const activeAttitude = rid.startsWith("attitude:")
+    ? performanceStore.state.attitudeAssessments[rid.slice("attitude:".length)]
+    : undefined;
+  const attitudeCriteria = activeAttitude?.criteria?.map(item => ({ id:item.id, criterion:item.criterion, desc:item.description, selfScore:activeAttitude.selfPoints[item.id] ?? 3 })) ?? [];
+  const aScores     = activeAttitude?.superiorPoints ?? attScores[rid] ?? {};
+  const aComments   = activeAttitude?.superiorComments ?? attComments[rid] ?? {};
+  const allAttScored = attitudeCriteria.length > 0 && attitudeCriteria.every(c => (aScores[c.id] ?? null) !== null);
 
   function setAttScore(id: string, v: number) {
+    if (activeAttitude) {
+      performanceStore.upsertAttitudeAssessment({ ...activeAttitude, superiorPoints: { ...activeAttitude.superiorPoints, [id]: v } });
+      return;
+    }
     setAttScores(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [id]: v } }));
   }
   function setAttComment(id: string, v: string) {
+    if (activeAttitude) {
+      performanceStore.upsertAttitudeAssessment({ ...activeAttitude, superiorComments: { ...activeAttitude.superiorComments, [id]: v } });
+      return;
+    }
     setAttComments(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [id]: v } }));
   }
 
@@ -449,7 +534,29 @@ export function TeamReviews() {
 
   function handleCompleteReview() {
     if (!drawerItem) return;
-    updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
+    if (activePlanName) {
+      const updated = activePlan.map((kpi: any) => {
+        if (kpi.level !== "Individual") return kpi;
+        const decision = approvals[kpi.id];
+        if (!decision || decision.status === "Pending") return kpi;
+        return { ...kpi, status: decision.status, returnReason: decision.returnReason };
+      });
+      performanceStore.setEmployeeKpiPlansByPeriod({ ...performanceStore.state.employeeKpiPlansByPeriod, [activePlanName]: updated });
+    } else if (activeAssessment) {
+      const deadline = activeAssessment.superiorDeadline;
+      performanceStore.upsertKpiAssessment({
+        ...activeAssessment, status: "Reviewed", reviewedAt: performanceStore.state.effectiveDate,
+        completedLate: activeAssessment.completedLate || Boolean(deadline && performanceStore.state.effectiveDate > deadline),
+      });
+    } else if (activeAttitude) {
+      const deadline = performanceStore.getPeriod(activeAttitude.periodId)?.deadlines.attitudeSuperior;
+      performanceStore.upsertAttitudeAssessment({
+        ...activeAttitude, status: "Reviewed", reviewedAt: performanceStore.state.effectiveDate,
+        completedLate: activeAttitude.completedLate || Boolean(deadline && performanceStore.state.effectiveDate > deadline),
+      });
+    } else {
+      updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
+    }
     setCompletionDialog(null);
     setDrawerItem(null);
   }
@@ -475,18 +582,18 @@ export function TeamReviews() {
       ["Review Checkpoint", item.checkpoint],
       ["KPIs Approved", `${approvCount}`],
       ["KPIs Returned for Revision", `${retCount}`],
-      ["Total Individual Weightage", `${IND_KPIS.reduce((s, k) => s + k.weightage, 0)}%`],
+      ["Total Individual Weightage", `${displayedIndividualKpis.reduce((s, k) => s + k.weightage, 0)}%`],
     ];
     if (item.type === "KPI Assessment") return [
       ["Employee", item.employee],
       ["Review Checkpoint", item.checkpoint],
-      ["KPIs Reviewed", `${ALL_KPIS.length}`],
+      ["KPIs Reviewed", `${assessmentKpis.length}`],
       ["Manager Comments", `${commentCount}`],
     ];
     return [
       ["Employee", item.employee],
       ["Evaluation Form", "Sales"],
-      ["Criteria Reviewed", `${ATTITUDE_ROWS.length}`],
+      ["Criteria Reviewed", `${attitudeCriteria.length}`],
     ];
   }
 
@@ -504,7 +611,7 @@ export function TeamReviews() {
             </button>
           )}
           <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>Team Review Workspace</h1>
-          <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Superior view · 2027 Annual KPI Review · Retail Sales Department</p>
+          <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>Superior view · {workspacePeriod} · Retail Sales Department</p>
           <p className="text-[13px] mt-1" style={{ color: MUTED }}>
             Review Individual KPI proposals, KPI Self-Assessments and Attitude Evaluations submitted by your team.
           </p>
@@ -678,7 +785,7 @@ export function TeamReviews() {
                   )}
 
                   <div className="space-y-5 pb-6">
-                    {IND_KPIS.map(kpi => {
+                    {displayedIndividualKpis.map(kpi => {
                       const ls = LEVEL_STYLE[kpi.level];
                       const approval = approvals[kpi.id];
                       const kpiStatus = approval?.status ?? "Pending";
@@ -815,16 +922,16 @@ export function TeamReviews() {
                       </p>
                     </div>
                   )}
-                  {!isReadOnly && (
-                    <p className="text-[12px] mb-5 p-3 rounded-md" style={{ color: MUTED, backgroundColor: "#F8FAFC", border: `1px solid ${BORDER}` }}>
-                      A score difference alone does not require returning an assessment. Use Return for Revision only when the submission contains incorrect information or insufficient supporting details.
-                    </p>
-                  )}
-
                   <div className="space-y-4 pb-6">
-                    {ALL_KPIS.map(kpi => {
+                    {assessmentKpis.map(kpi => {
                       const ls = LEVEL_STYLE[kpi.level];
-                      const emp = AMIR_JAN[kpi.id];
+                      const storedSelfPoint = activeAssessment?.selfPoints[kpi.id];
+                      const fallbackSelf = AMIR_JAN[kpi.id];
+                      const emp = {
+                        score: storedSelfPoint ?? fallbackSelf?.score ?? 1,
+                        comment: activeAssessment?.selfComments[kpi.id] ?? fallbackSelf?.comment ?? "",
+                        evidence: activeAssessment?.evidence[kpi.id] ?? fallbackSelf?.evidence,
+                      };
                       const mgrScore   = scores[kpi.id]   ?? null;
                       const mgrComment = comments[kpi.id] ?? "";
                       const scoreDiff  = mgrScore !== null && Math.abs(mgrScore - emp.score) >= 2;
@@ -932,7 +1039,7 @@ export function TeamReviews() {
                   <div className="flex items-center gap-2 mb-4 flex-wrap">
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold"
                       style={{ color: BLUE, backgroundColor: "#EEF3FC" }}>Sales Evaluation Form</span>
-                    <span className="text-[12px]" style={{ color: MUTED }}>2027 Annual KPI Review · Annual Assessment</span>
+                    <span className="text-[12px]" style={{ color: MUTED }}>{activeAttitude ? performanceStore.getPeriod(activeAttitude.periodId)?.name : workspacePeriod} · Annual Assessment</span>
                   </div>
 
                   {isReturned && (
@@ -957,9 +1064,10 @@ export function TeamReviews() {
                   )}
 
                   <div className="space-y-3 pb-6">
-                    {ATTITUDE_ROWS.map(c => {
+                    {attitudeCriteria.map(c => {
                       const mgrScore   = aScores[c.id]   ?? null;
                       const mgrComment = aComments[c.id] ?? "";
+                      const selfScore = activeAttitude?.selfPoints[c.id] ?? c.selfScore;
                       return (
                         <div key={c.id} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
                           <div className="px-5 py-3" style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
@@ -971,9 +1079,9 @@ export function TeamReviews() {
                               <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Self-Assessment</p>
                               <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded flex items-center justify-center text-[12px] font-bold text-white"
-                                  style={{ backgroundColor: SCORE_META[c.selfScore].color }}>{c.selfScore}</div>
-                                <span className="text-[12px]" style={{ color: SCORE_META[c.selfScore].color }}>
-                                  {SCORE_META[c.selfScore].label}
+                                  style={{ backgroundColor: SCORE_META[selfScore].color }}>{selfScore}</div>
+                                <span className="text-[12px]" style={{ color: SCORE_META[selfScore].color }}>
+                                  {SCORE_META[selfScore].label}
                                 </span>
                               </div>
                             </div>
@@ -1023,7 +1131,7 @@ export function TeamReviews() {
             ) : drawerItem.type === "Individual KPI Approval" ? (
               <div className="px-6 py-4 border-t shrink-0 flex items-center justify-between" style={{ borderColor: BORDER }}>
                 <p className="text-[12px]" style={{ color: MUTED }}>
-                  {approvCount + retCount} of {IND_KPIS.length} KPIs reviewed
+                  {approvCount + retCount} of {displayedIndividualKpis.length} KPIs reviewed
                 </p>
                 <button onClick={() => setCompletionDialog(drawerItem)} disabled={!allReviewed}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-md text-[13px] font-semibold text-white"
@@ -1085,7 +1193,7 @@ export function TeamReviews() {
       {scoringDefKpi && (
         <ScoringDefModal
           kpi={scoringDefKpi}
-          helperText="Use these criteria when selecting the Superior Assessment Score."
+          helperText="Use these criteria when selecting the Superior Assessment Point."
           onClose={() => setScoringDefKpi(null)}
         />
       )}
@@ -1098,4 +1206,8 @@ export function TeamReviews() {
       )}
     </div>
   );
+}
+
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }

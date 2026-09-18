@@ -4,6 +4,7 @@ import {
   Pencil, Trash2, CheckCircle, Info, Globe,
 } from "lucide-react";
 import { PERIOD_OPTIONS, LIVE_PERIOD } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -51,6 +52,7 @@ interface DeptKpiRow {
   revisedBy?: string;
   revisionReason?: string;
   previousVersions?: KpiVersion[];
+  departmentId?: string;
 }
 
 const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "" };
@@ -88,7 +90,7 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
   "2027 Annual KPI Review": [
     {
       id: "d27-1", perspective: "Financial", kra: "Sales Performance",
-      name: "Monthly Sales Achievement", target: "RM 85,000 / month", weightage: 15, status: "Draft",
+      name: "Monthly Sales Achievement", target: "RM 80,000 / month", weightage: 15, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
         s5: "Achieves RM 95,000 or more per month",
         s4: "Achieves RM 90,000–RM 94,999 per month",
@@ -99,13 +101,13 @@ const SEED_KPIS: Record<string, DeptKpiRow[]> = {
     },
     {
       id: "d27-2", perspective: "Customer", kra: "Customer Satisfaction",
-      name: "Customer Satisfaction Score", target: "≥ 4.2 / 5.0", weightage: 5, status: "Draft",
+      name: "Product Coverage Rate", target: "≥ 80% product range", weightage: 10, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
-        s5: "Average satisfaction score 4.8 or above",
-        s4: "Average satisfaction score 4.5–4.79",
-        s3: "Average satisfaction score 4.2–4.49",
-        s2: "Average satisfaction score 3.8–4.19",
-        s1: "Average satisfaction score 3.2–3.79",
+        s5: "Covers 95% or more of the product range",
+        s4: "Covers 90%–94% of the product range",
+        s3: "Covers 80%–89% of the product range",
+        s2: "Covers 70%–79% of the product range",
+        s1: "Covers 50%–69% of the product range",
       },
     },
   ],
@@ -750,10 +752,14 @@ function EditDrawer({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function DepartmentKPIs() {
-  const [kpisByPeriod, setKpisByPeriod] = useState<Record<string, DeptKpiRow[]>>(() =>
-    Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]]))
-  );
-  const [selectedPeriod, setSelectedPeriod] = useState(LIVE_PERIOD);
+  const performanceStore = usePerformanceStore();
+  const sharedPeriods = performanceStore.periods;
+  const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
+  const defaultPeriodName = sharedPeriods.find(period => period.id === defaultPeriodId)?.name ?? LIVE_PERIOD;
+  const seededKpis = useMemo(() => Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]])) as Record<string, DeptKpiRow[]>, []);
+  const hasStoredKpis = Object.keys(performanceStore.state.departmentKpisByPeriod).length > 0;
+  const kpisByPeriod = (hasStoredKpis ? performanceStore.state.departmentKpisByPeriod : seededKpis) as Record<string, DeptKpiRow[]>;
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
   const [viewId, setViewId]             = useState<string | null>(null);
@@ -770,13 +776,20 @@ export function DepartmentKPIs() {
   const periodRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!hasStoredKpis) performanceStore.setDepartmentKpisByPeriod(seededKpis);
+  }, [hasStoredKpis, seededKpis, performanceStore]);
+
+  useEffect(() => {
     const fn = (e: MouseEvent) => { if (!periodRef.current?.contains(e.target as Node)) setShowPeriodDd(false); };
     document.addEventListener("mousedown", fn);
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
   const kpis         = kpisByPeriod[selectedPeriod] ?? [];
-  const config       = PERIOD_CONFIG[selectedPeriod] ?? { status: "Closed" as PeriodStatus, maxAllocation: 20, kpiSetupDeadline: "" };
+  const sharedPeriod = sharedPeriods.find(period => period.name === selectedPeriod);
+  const config       = sharedPeriod
+    ? { status: sharedPeriod.status as PeriodStatus, maxAllocation: sharedPeriod.allocations.department, kpiSetupDeadline: sharedPeriod.deadlines.kpiSetup }
+    : { status: "Closed" as PeriodStatus, maxAllocation: 20, kpiSetupDeadline: "" };
   const periodStatus = config.status;
   const maxAlloc     = config.maxAllocation;
 
@@ -801,7 +814,7 @@ export function DepartmentKPIs() {
 
   // ── Helpers ──
   function mutatePeriod(updater: (prev: DeptKpiRow[]) => DeptKpiRow[]) {
-    setKpisByPeriod(prev => ({ ...prev, [selectedPeriod]: updater(prev[selectedPeriod] ?? []) }));
+    performanceStore.setDepartmentKpisByPeriod({ ...kpisByPeriod, [selectedPeriod]: updater(kpisByPeriod[selectedPeriod] ?? []) });
   }
 
   function changePeriod(p: string) {
@@ -822,7 +835,7 @@ export function DepartmentKPIs() {
 
   function handleSaveAsDraft(data: EditFormData) {
     if (editIsCreate) {
-      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...data, status: "Draft" };
+      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, departmentId:"retail-sales", ...data, status: "Draft" };
       mutatePeriod(prev => [...prev, newKpi]);
     } else if (editId) {
       mutatePeriod(prev => prev.map(k => k.id === editId ? { ...k, ...data, status: "Draft" } : k));
@@ -836,7 +849,7 @@ export function DepartmentKPIs() {
 
   function createRevision(data: EditFormData) {
     if (!editId) return;
-    const revisedOn = "15 Sep 2026";
+    const revisedOn = performanceStore.state.effectiveDate;
     mutatePeriod(prev => prev.map(kpi => {
       if (kpi.id !== editId) return kpi;
       const previous: KpiVersion = {
@@ -868,7 +881,7 @@ export function DepartmentKPIs() {
 
   function confirmPublish() {
     if (!publishConfirm) return;
-    const publishedOn = new Date().toISOString().slice(0, 10);
+    const publishedOn = performanceStore.state.effectiveDate;
     const publication = {
       status: "Published" as DeptKpiStatus,
       publishedOn,
@@ -878,7 +891,7 @@ export function DepartmentKPIs() {
     if (publishConfirm.isFromTable && publishConfirm.id) {
       mutatePeriod(prev => prev.map(k => k.id === publishConfirm.id ? { ...k, ...publication } : k));
     } else if (editIsCreate) {
-      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...publishConfirm.data, ...publication };
+      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, departmentId:"retail-sales", ...publishConfirm.data, ...publication };
       mutatePeriod(prev => [...prev, newKpi]);
       closeEdit();
     } else if (editId) {
@@ -927,9 +940,9 @@ export function DepartmentKPIs() {
               {showPeriodDd && (
                 <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
                   style={{ minWidth: 240, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                  {PERIOD_OPTIONS.map(p => {
-                    const cfg = PERIOD_CONFIG[p];
-                    const ps  = cfg ? PERIOD_STATUS_STYLE[cfg.status] : PERIOD_STATUS_STYLE["Closed"];
+                  {sharedPeriods.map(shared => {
+                    const p = shared.name;
+                    const ps = PERIOD_STATUS_STYLE[(shared.status === "Draft" ? "Upcoming" : shared.status) as PeriodStatus] ?? PERIOD_STATUS_STYLE["Closed"];
                     return (
                       <button key={p} onClick={() => changePeriod(p)}
                         className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors flex items-center justify-between"
@@ -942,6 +955,13 @@ export function DepartmentKPIs() {
                 </div>
               )}
             </div>
+
+            {periodStatus === "Open" && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-md text-[11px]" style={{ backgroundColor:"#FEF9EC", color:AMBER, border:"1px solid #F5D98A" }}>
+                <AlertTriangle size={12} className="mt-0.5 shrink-0"/>
+                Open-period revision effective-version behaviour is TBC. Version history is preserved, but assessment propagation and recalculation are not modelled.
+              </div>
+            )}
 
             <button onClick={() => setShowGuide(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"

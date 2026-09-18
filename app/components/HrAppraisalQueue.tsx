@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ChevronDown, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
-import { EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, Decision, resolvePeriodData } from "./appraisalData";
+import { EMPLOYEES, LIVE_PERIOD, AppStatus, Decision, PeriodAppraisal, resolvePeriodData } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -14,22 +15,19 @@ const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
 
 // HR queue only shows these statuses (manager-side states are not HR's concern)
-const HR_STATUSES: AppStatus[] = ["Pending Review", "Return for Revision", "Approve", "Override and Approve"];
+const HR_STATUSES: AppStatus[] = ["Pending Review", "Returned", "Approved"];
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 const ACTION_LABEL: Partial<Record<AppStatus, string>> = {
   "Pending Review":       "Review Appraisal",
-  "Return for Revision":  "View Status",
-  "Approve":              "View Appraisal",
-  "Override and Approve": "View Appraisal",
+  "Returned":             "View Status",
+  "Approved":             "View Appraisal",
 };
 
 const EMP_META: Record<string, { department: string; manager: string }> = {
@@ -61,15 +59,15 @@ interface HrRow {
   status: AppStatus;
 }
 
-function buildHrRows(period: string): HrRow[] {
+function buildHrRows(period: string, sharedAppraisals: Record<string, Partial<PeriodAppraisal>>): HrRow[] {
   return Object.entries(EMPLOYEES).flatMap(([id, emp]) => {
-    const pd = resolvePeriodData(id, period);
+    const pd = resolvePeriodData(id, period, period === LIVE_PERIOD ? sharedAppraisals[id] : undefined);
     if (!pd || !HR_STATUSES.includes(pd.status)) return [];
     const meta = EMP_META[id] ?? { department: "—", manager: "—" };
     return [{
       id, name: emp.name, initials: emp.initials, role: emp.role,
       department: meta.department, manager: meta.manager,
-      finalScore: pd.hrFinalScore ?? pd.finalScore,
+      finalScore: pd.finalScore,
       managerDecision: pd.managerDecision,
       submittedDate: pd.submittedDate,
       status: pd.status,
@@ -79,26 +77,14 @@ function buildHrRows(period: string): HrRow[] {
 
 export function HrAppraisalQueue() {
   const navigate = useNavigate();
-  const [period,      setPeriod]      = useState(LIVE_PERIOD);
-  const [rows,        setRows]        = useState<HrRow[]>(() => buildHrRows(LIVE_PERIOD));
+  const performanceStore = usePerformanceStore();
+  const period = LIVE_PERIOD;
+  const rows = useMemo(() => buildHrRows(period, performanceStore.state.appraisals), [period, performanceStore.state.appraisals]);
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterMgr,   setFilterMgr]   = useState("All");
   const [filterEmp,   setFilterEmp]   = useState("All");
   const [sortField,   setSortField]   = useState<SortField | null>(null);
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("desc");
-
-  useEffect(() => {
-    setRows(buildHrRows(period));
-    setFilterStatus("All");
-    setFilterMgr("All");
-    setFilterEmp("All");
-  }, [period]);
-
-  useEffect(() => {
-    const handler = () => setRows(buildHrRows(period));
-    window.addEventListener("appraisalStatusChange", handler);
-    return () => window.removeEventListener("appraisalStatusChange", handler);
-  }, [period]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");
@@ -136,13 +122,13 @@ export function HrAppraisalQueue() {
 
   const counts = useMemo(() => ({
     "Pending Review":      rows.filter(r => r.status === "Pending Review").length,
-    "Return for Revision": rows.filter(r => r.status === "Return for Revision").length,
-    "Approved":            rows.filter(r => r.status === "Approve" || r.status === "Override and Approve").length,
+    "Returned":            rows.filter(r => r.status === "Returned").length,
+    "Approved":            rows.filter(r => r.status === "Approved").length,
   }), [rows]);
 
   const SUMMARY_CARDS = [
     { label: "Pending Review",      key: "Pending Review",      color: TEAL,  bg: "#ECFDF9" },
-    { label: "Return for Revision", key: "Return for Revision", color: RED,   bg: "#FEF3F2" },
+    { label: "Returned",            key: "Returned",            color: RED,   bg: "#FEF3F2" },
     { label: "Approved",            key: "Approved",            color: GREEN, bg: "#ECFDF5" },
   ] as const;
 
@@ -154,21 +140,10 @@ export function HrAppraisalQueue() {
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-[20px] font-bold" style={{ color: TEXT }}>HR Appraisal Review</h1>
-            <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>HR / Super Admin view · Retail Sales Department</p>
+            <p className="text-[13px] mt-0.5" style={{ color: MUTED }}>HR view · Retail Sales Department</p>
             <p className="text-[13px] mt-1" style={{ color: MUTED }}>
               Review submitted appraisals, approve outcomes, or return to Superiors for revision.
             </p>
-          </div>
-          <div className="relative">
-            <select
-              value={period}
-              onChange={e => setPeriod(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-md text-[13px] font-semibold outline-none bg-white"
-              style={{ border: `1px solid ${BORDER}`, color: TEXT }}
-            >
-              {PERIOD_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
           </div>
         </div>
 

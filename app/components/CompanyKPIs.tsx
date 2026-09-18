@@ -4,6 +4,7 @@ import {
   Pencil, Trash2, CheckCircle, Info, Building2,
 } from "lucide-react";
 import { PERIOD_OPTIONS, LIVE_PERIOD } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -92,7 +93,7 @@ const SEED_KPIS: Record<string, KpiRow[]> = {
   "2027 Annual KPI Review": [
     {
       id: "c27-1", perspective: "Financial", kra: "Revenue Growth",
-      name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Draft",
+      name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
         s5: "Revenue grows 12% or more above target YoY",
         s4: "Revenue grows 9%–11.9% YoY",
@@ -103,13 +104,21 @@ const SEED_KPIS: Record<string, KpiRow[]> = {
     },
     {
       id: "c27-2", perspective: "Customer", kra: "Customer Satisfaction",
-      name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Draft",
+      name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
         s5: "CSI score 95% or above",
         s4: "CSI score 90%–94%",
         s3: "CSI score 85%–89%",
         s2: "CSI score 75%–84%",
         s1: "CSI score 60%–74%",
+      },
+    },
+    {
+      id: "c27-3", perspective: "Internal Process", kra: "Branch Operations",
+      name: "Branch Operations Score", target: "≥ 90%", weightage: 3, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
+      scoreDef: {
+        s5: "Operations score 98% or above", s4: "Operations score 94%–97%", s3: "Operations score 90%–93%",
+        s2: "Operations score 80%–89%", s1: "Operations score 70%–79%",
       },
     },
   ],
@@ -749,10 +758,14 @@ function EditDrawer({
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function CompanyKPIs() {
-  const [kpisByPeriod, setKpisByPeriod] = useState<Record<string, KpiRow[]>>(() =>
-    Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]]))
-  );
-  const [selectedPeriod, setSelectedPeriod] = useState(LIVE_PERIOD);
+  const performanceStore = usePerformanceStore();
+  const sharedPeriods = performanceStore.periods;
+  const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
+  const defaultPeriodName = sharedPeriods.find(period => period.id === defaultPeriodId)?.name ?? LIVE_PERIOD;
+  const seededKpis = useMemo(() => Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]])) as Record<string, KpiRow[]>, []);
+  const hasStoredKpis = Object.keys(performanceStore.state.companyKpisByPeriod).length > 0;
+  const kpisByPeriod = (hasStoredKpis ? performanceStore.state.companyKpisByPeriod : seededKpis) as Record<string, KpiRow[]>;
+  const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
   const [viewId, setViewId]             = useState<string | null>(null);
@@ -769,6 +782,10 @@ export function CompanyKPIs() {
   const periodRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!hasStoredKpis) performanceStore.setCompanyKpisByPeriod(seededKpis);
+  }, [hasStoredKpis, seededKpis, performanceStore]);
+
+  useEffect(() => {
     const fn = (e: MouseEvent) => {
       if (!periodRef.current?.contains(e.target as Node)) setShowPeriodDd(false);
     };
@@ -777,7 +794,10 @@ export function CompanyKPIs() {
   }, []);
 
   const kpis         = kpisByPeriod[selectedPeriod] ?? [];
-  const config       = PERIOD_CONFIG[selectedPeriod] ?? { status: "Closed" as PeriodStatus, maxAllocation: 10, kpiSetupDeadline: "" };
+  const sharedPeriod = sharedPeriods.find(period => period.name === selectedPeriod);
+  const config       = sharedPeriod
+    ? { status: sharedPeriod.status as PeriodStatus, maxAllocation: sharedPeriod.allocations.company, kpiSetupDeadline: sharedPeriod.deadlines.kpiSetup }
+    : { status: "Closed" as PeriodStatus, maxAllocation: 10, kpiSetupDeadline: "" };
   const periodStatus = config.status;
   const maxAlloc     = config.maxAllocation;
 
@@ -799,7 +819,7 @@ export function CompanyKPIs() {
 
   // ── Mutations ──
   function mutatePeriod(updater: (prev: KpiRow[]) => KpiRow[]) {
-    setKpisByPeriod(prev => ({ ...prev, [selectedPeriod]: updater(prev[selectedPeriod] ?? []) }));
+    performanceStore.setCompanyKpisByPeriod({ ...kpisByPeriod, [selectedPeriod]: updater(kpisByPeriod[selectedPeriod] ?? []) });
   }
 
   function changePeriod(p: string) {
@@ -834,7 +854,7 @@ export function CompanyKPIs() {
 
   function confirmPublish() {
     if (!publishConfirm) return;
-    const publishedOn = new Date().toISOString().slice(0, 10);
+    const publishedOn = performanceStore.state.effectiveDate;
     const publication = {
       status: "Published" as KpiStatus,
       publishedOn,
@@ -862,7 +882,7 @@ export function CompanyKPIs() {
 
   function createRevision(data: EditFormData) {
     if (!editId) return;
-    const revisedOn = "15 Sep 2026";
+    const revisedOn = performanceStore.state.effectiveDate;
     mutatePeriod(prev => prev.map(kpi => {
       if (kpi.id !== editId) return kpi;
       const previous: KpiVersion = {
@@ -908,9 +928,9 @@ export function CompanyKPIs() {
               {showPeriodDd && (
                 <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-lg py-1"
                   style={{ minWidth: 240, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", border: `1px solid ${BORDER}` }}>
-                  {PERIOD_OPTIONS.map(p => {
-                    const cfg = PERIOD_CONFIG[p];
-                    const ps  = cfg ? PERIOD_STATUS_STYLE[cfg.status] : PERIOD_STATUS_STYLE["Closed"];
+                  {sharedPeriods.map(shared => {
+                    const p = shared.name;
+                    const ps = PERIOD_STATUS_STYLE[(shared.status === "Draft" ? "Upcoming" : shared.status) as PeriodStatus] ?? PERIOD_STATUS_STYLE["Closed"];
                     return (
                       <button key={p} onClick={() => changePeriod(p)}
                         className="w-full text-left px-4 py-2 text-[12px] hover:bg-[#F8FAFC] transition-colors flex items-center justify-between"
@@ -923,6 +943,13 @@ export function CompanyKPIs() {
                 </div>
               )}
             </div>
+
+            {periodStatus === "Open" && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded-md text-[11px]" style={{ backgroundColor:"#FEF9EC", color:AMBER, border:"1px solid #F5D98A" }}>
+                <AlertTriangle size={12} className="mt-0.5 shrink-0"/>
+                Open-period revision effective-version behaviour is TBC. Version history is preserved, but assessment propagation and recalculation are not modelled.
+              </div>
+            )}
 
             <button onClick={() => setShowGuide(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"

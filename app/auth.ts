@@ -59,6 +59,26 @@ export function getCurrentAccount(): PrototypeAccount | null {
 }
 
 export function pathIsAllowed(role: OrganisationalRole, pathname: string): boolean {
+  const capabilityRoutes: Array<[string, PerformanceCapability]> = [
+    ["/performance/my-kpi-plan", "own-performance"],
+    ["/performance/my-assessments", "own-performance"],
+    ["/performance/department-kpis", "department-kpis"],
+    ["/performance/team-reviews", "team-reviews"],
+    ["/performance/final-appraisals", "team-appraisals"],
+    ["/performance/hr-appraisals", "hr-appraisals"],
+    ["/performance/review-periods", "review-period-admin"],
+    ["/performance/company-kpis", "company-kpi-admin"],
+    ["/performance/attitude-setup", "attitude-admin"],
+    ["/org-eval", "organisation-performance"],
+    ["/users", "user-admin"],
+  ];
+  const matched = capabilityRoutes.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  if (matched) return hasCapability(role, matched[1]);
+
+  if (pathname === "/performance") return hasCapability(role, "own-performance");
+  if (pathname === "/dashboard") return hasCapability(role, "team-performance") || hasCapability(role, "organisation-performance");
+  if (pathname.startsWith("/staff-profile/")) return hasCapability(role, "team-performance") || hasCapability(role, "organisation-performance") || hasCapability(role, "hr-appraisals");
+
   const allowed = ROLE_PATHS[role];
   if (allowed.includes(pathname)) return true;
   const dynamicParents = [
@@ -82,3 +102,4 @@ export function signOut() {
   localStorage.removeItem("userEmail");
   localStorage.removeItem("appraisalRole");
 }
+import { hasCapability, type PerformanceCapability } from "./performance/domain";

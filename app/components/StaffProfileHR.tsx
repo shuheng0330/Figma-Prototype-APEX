@@ -9,6 +9,7 @@ import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus,
   PeriodAppraisal, resolvePeriodData,
 } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const BLUE   = "#2457A6";
@@ -23,12 +24,10 @@ const BORDER = "#DCE3EC";
 const BG     = "#F4F6F9";
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
-  "Ready for Appraisal":  { color: BLUE,   bg: "#EEF3FC" },
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
   "Pending Review":       { color: TEAL,   bg: "#ECFDF9" },
-  "Return for Revision":  { color: RED,    bg: "#FEF3F2" },
-  "Approve":              { color: GREEN,  bg: "#ECFDF5" },
-  "Override and Approve": { color: PURPLE, bg: "#F5F3FF" },
+  "Returned":             { color: RED,    bg: "#FEF3F2" },
+  "Approved":             { color: GREEN,  bg: "#ECFDF5" },
 };
 
 // ── Employee metadata ──────────────────────────────────────────────────────────
@@ -56,15 +55,16 @@ interface KpiItem {
   target: string;
   frequency: "Monthly" | "Quarterly" | "Annually";
   finalScore: number;
+  weightage?: number;
   checkpoints: KpiCheckpoint[];
 }
 
 const businessKpiLevel = (level: string) => (
-  level === "Level 1" ? "Company" : level === "Level 2" ? "Department" : "Individual"
+  level === "Level 1" || level === "Company" ? "Company" : level === "Level 2" || level === "Department" ? "Department" : "Individual"
 );
 
 const kpiWeightage = (kpi: KpiItem) => (
-  kpi.level === "Level 3" ? 20 : kpi.level === "Level 2" ? 15 : 20
+  kpi.weightage ?? (kpi.level === "Level 3" ? 20 : kpi.level === "Level 2" ? 15 : 20)
 );
 
 const annualKpiPoint = (kpi: KpiItem) => kpi.finalScore / 20;
@@ -308,8 +308,10 @@ const ATTITUDE_DATA: Record<string, AttitudeData> = {
 function HistoryDrawer({ period, data, onClose }: {
   period: string; data: PeriodAppraisal; onClose: () => void;
 }) {
-  const ss = STATUS_STYLE[data.status];
-  const isOverride = data.status === "Override and Approve";
+  const ss = data.readyForAppraisal && data.status === "Draft"
+    ? { color: BLUE, bg: "#EEF3FC" }
+    : STATUS_STYLE[data.status];
+  const isOverride = data.hrApprovalMethod === "Overridden Recommendation";
   return (
     <>
       <div className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(0,0,0,0.25)" }} onClick={onClose} />
@@ -355,7 +357,7 @@ function HistoryDrawer({ period, data, onClose }: {
             <p className="text-[12px] font-semibold" style={{ color: MUTED }}>Appraisal Status:</p>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold"
               style={{ color: ss.color, backgroundColor: ss.bg }}>
-              {data.status}
+              {data.readyForAppraisal && data.status === "Draft" ? "Ready for Appraisal" : data.status}
             </span>
           </div>
           <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
@@ -380,12 +382,6 @@ function HistoryDrawer({ period, data, onClose }: {
                   style={{ color: TEXT, backgroundColor: "#FEF3F2", border: "1px solid #FECDCA" }}>
                   {data.hrOverrideReason}
                 </p>
-              </div>
-            )}
-            {data.hrRemarks && (
-              <div className="mb-3">
-                <p className="text-[11px] font-semibold mb-1" style={{ color: MUTED }}>HR Finalisation Remarks</p>
-                <p className="text-[12px] leading-relaxed" style={{ color: TEXT }}>{data.hrRemarks}</p>
               </div>
             )}
             {data.finalDate && (
@@ -637,17 +633,19 @@ export function StaffProfileHR() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const performanceStore = usePerformanceStore();
+  const periodNames = performanceStore.periods.map(period => period.name);
+  const resultPeriodId = performanceStore.getDashboardDefaultPeriodId("employee");
+  const resultPeriodName = performanceStore.periods.find(period => period.id === resultPeriodId)?.name ?? LIVE_PERIOD;
   const returnContext = searchParams.get("returnTo");
   const returnToAppraisals = returnContext === "hr-appraisals" || returnContext === "team-appraisals";
   const returnToTeamPerformance = returnContext === "team-performance";
-  const returnPeriod = searchParams.get("period") ?? LIVE_PERIOD;
+  const requestedPeriod = searchParams.get("period");
+  const returnPeriod = requestedPeriod && periodNames.includes(requestedPeriod) ? requestedPeriod : resultPeriodName;
 
   const empId    = id ?? "amir";
   const emp      = EMPLOYEES[empId] ?? EMPLOYEES.amir;
   const meta     = EMP_META[empId] ?? { dept: "Retail Banking", avatarColor: BLUE };
-  const kpis     = KPI_DATA[empId] ?? [];
-  const attitude = ATTITUDE_DATA[empId] ?? null;
-
   const [selectedPeriod, setSelectedPeriod] = useState(returnPeriod);
   const [chartYears,     setChartYears]     = useState<3 | 5>(5);
   const [prevOpen,       setPrevOpen]       = useState(false);
@@ -655,14 +653,35 @@ export function StaffProfileHR() {
   const [showAssessment, setShowAssessment] = useState(false);
   const [showAttitude,   setShowAttitude]   = useState(false);
 
-  const pd = resolvePeriodData(empId, selectedPeriod);
-
-  const chartData = useMemo(
-    () => chartYears === 3 ? emp.trendData.slice(-3) : emp.trendData,
-    [chartYears, emp.trendData]
-  );
+  const selectedPeriodRecord = performanceStore.periods.find(period => period.name === selectedPeriod);
+  const workflowResult = selectedPeriodRecord ? performanceStore.getPerformanceResult(selectedPeriodRecord.id, empId) : undefined;
+  const assessmentRecords = selectedPeriodRecord ? Object.values(performanceStore.state.kpiAssessments).filter(record => record.periodId === selectedPeriodRecord.id && record.employeeId === empId) : [];
+  const kpis: KpiItem[] = workflowResult ? workflowResult.kpiResults.map(result => ({
+    id: result.kpiId, name: result.name, level: result.level, target: result.target, frequency: "Monthly", finalScore: result.annualPoint * 20, weightage: result.weightage,
+    checkpoints: assessmentRecords.map(record => ({ label:record.checkpointLabel, status:record.status === "Reviewed" ? "Completed" : "Pending", selfScore:typeof record.selfPoints[result.kpiId] === "number" ? Number(record.selfPoints[result.kpiId]) * 20 : null, superiorScore:typeof record.superiorPoints[result.kpiId] === "number" ? Number(record.superiorPoints[result.kpiId]) * 20 : null, selfComment:record.selfComments[result.kpiId] ?? "", superiorComment:record.superiorComments[result.kpiId] ?? "" })),
+  })) : KPI_DATA[empId] ?? [];
+  const attitudeRecord = selectedPeriodRecord ? performanceStore.state.attitudeAssessments[`${selectedPeriodRecord.id}:${empId}`] : undefined;
+  const attitude: AttitudeData | null = workflowResult && attitudeRecord ? {
+    form:`${workflowResult.attitudeFormat} Form`, superiorScore:workflowResult.attitudeEvaluationScore, status:attitudeRecord.status === "Reviewed" ? "Completed" : "Pending",
+    criteria:(attitudeRecord.criteria ?? []).map(criterion => ({ criterion:criterion.criterion, selfScore:Number(attitudeRecord.selfPoints[criterion.id] ?? 0) * 20, superiorScore:Number(attitudeRecord.superiorPoints[criterion.id] ?? 0) * 20, selfComment:attitudeRecord.selfComments[criterion.id] ?? "", managerComment:attitudeRecord.superiorComments[criterion.id] ?? "" })),
+  } : ATTITUDE_DATA[empId] ?? null;
+  const sharedAppraisal = selectedPeriodRecord?.id === performanceStore.state.appraisals[empId]?.periodId ? performanceStore.state.appraisals[empId] : undefined;
+  const pd = resolvePeriodData(empId, selectedPeriod, sharedAppraisal);
 
   const selectedYear   = parseInt(selectedPeriod.split(" ")[0]);
+  const chartData = useMemo(() => {
+    const data = emp.trendData.filter(point => Number(point.year) <= selectedYear);
+    if (workflowResult && !data.some(point => Number(point.year) === selectedYear)) {
+      data.push({
+        year: String(selectedYear),
+        kpi: workflowResult.kpiPerformanceScore,
+        attitude: workflowResult.attitudeEvaluationScore,
+        final: workflowResult.finalAppraisalScore,
+      });
+    }
+    return chartYears === 3 ? data.slice(-3) : data.slice(-5);
+  }, [chartYears, emp.trendData, selectedYear, workflowResult]);
+
   const prevAppraisals = PERIOD_OPTIONS
     .filter(p => parseInt(p.split(" ")[0]) < selectedYear && emp.periods[p])
     .map(p => ({ period: p, data: emp.periods[p] }));
@@ -705,7 +724,7 @@ export function StaffProfileHR() {
               <select value={selectedPeriod} onChange={event => setSelectedPeriod(event.target.value)}
                 className="min-w-[215px] rounded-md px-3 py-2 text-[12px] font-semibold outline-none"
                 style={{ color: TEXT, border: `1px solid ${BORDER}`, backgroundColor: "white" }}>
-                {PERIOD_OPTIONS.map(period => <option key={period} value={period}>{period}</option>)}
+                {periodNames.map(period => <option key={period} value={period}>{period}</option>)}
               </select>
             </label>
           </div>
@@ -921,7 +940,7 @@ export function StaffProfileHR() {
                   <tbody>
                     {prevAppraisals.map(({ period, data: d }, i) => {
                       const pss = STATUS_STYLE[d.status];
-                      const finalDisplay = (d.hrFinalScore ?? d.finalScore).toFixed(1);
+                      const finalDisplay = d.finalScore.toFixed(1);
                       return (
                         <tr key={period} className="hover:bg-[#F8FAFC] transition-colors"
                           style={{ borderBottom: i < prevAppraisals.length - 1 ? `1px solid ${BORDER}` : "none" }}>
