@@ -555,11 +555,11 @@ function SopCourseDetail({ course, onBack }: { course: Course; onBack: () => voi
   const totalCompleted = Object.keys(completions).length;
 
   return (
-    <div className="flex" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="apex-sop-course flex" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Left sidebar — module list ──────────────────────────────────── */}
       <div
-        className="shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden"
+        className="apex-sop-course-nav shrink-0 bg-white border-r border-gray-100 flex flex-col overflow-hidden"
         style={{ width: 252 }}
       >
         {/* Back button + course title */}
@@ -647,7 +647,7 @@ function SopCourseDetail({ course, onBack }: { course: Course; onBack: () => voi
       </div>
 
       {/* ── Main content area ───────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: "#F4F6F9" }}>
+      <div className="apex-sop-course-content flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: "#F4F6F9" }}>
 
         {/* Phase header strip */}
         <div className="bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center gap-3">
@@ -1019,10 +1019,10 @@ function CourseDetail({ course, onBack }: { course: Course; onBack: () => void }
     });
 
   return (
-    <div className="flex" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="apex-course-viewer flex" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Main viewer ──────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#F4F6F9]">
+      <div className="apex-course-viewer-main flex-1 flex flex-col overflow-hidden bg-[#F4F6F9]">
 
         {/* Top bar */}
         <div
@@ -1113,7 +1113,7 @@ function CourseDetail({ course, onBack }: { course: Course; onBack: () => void }
 
       {/* ── Right sidebar ─────────────────────────────────────────────────── */}
       <div
-        className="w-[272px] bg-white border-l border-gray-100 overflow-y-auto shrink-0 flex flex-col"
+        className="apex-course-viewer-sidebar w-[272px] bg-white border-l border-gray-100 overflow-y-auto shrink-0 flex flex-col"
         style={{ scrollbarWidth: "thin" }}
       >
         {/* Course info */}
@@ -1521,14 +1521,14 @@ export function LearningPortal() {
 
       {/* ── Recommended for you — compact strip ─────────────────────────── */}
       <div
-        className="mx-6 mt-4 mb-1 rounded-xl bg-white border border-gray-100 flex items-stretch overflow-hidden shrink-0 cursor-pointer"
+        className="apex-learning-featured mx-6 mt-4 mb-1 rounded-xl bg-white border border-gray-100 flex items-stretch overflow-hidden shrink-0 cursor-pointer"
         style={{ minHeight: 132, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}
         onClick={() => setSelectedCourse(FEATURED)}
       >
         {/* Left TEAL accent bar */}
         <div className="w-1 shrink-0" style={{ backgroundColor: TEAL }} />
 
-        <div className="flex items-center flex-1 gap-5 px-5 py-4">
+        <div className="apex-learning-featured-body flex items-center flex-1 gap-5 px-5 py-4">
           {/* Thumbnail */}
           <div
             className="rounded-xl overflow-hidden shrink-0 relative flex items-center justify-center"
@@ -1583,7 +1583,7 @@ export function LearningPortal() {
           {/* Resume button */}
           <button
             onClick={e => { e.stopPropagation(); setSelectedCourse(FEATURED); }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold shrink-0 transition-opacity hover:opacity-85"
+            className="apex-learning-featured-action flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold shrink-0 transition-opacity hover:opacity-85"
             style={{ backgroundColor: TEAL, color: "#1A1F2E" }}
           >
             <Play size={11} fill="currentColor" /> Resume

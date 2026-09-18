@@ -156,7 +156,7 @@ export function TrainingAssignment() {
   };
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="apex-training-assignment flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0 flex items-center justify-between">
@@ -173,10 +173,10 @@ export function TrainingAssignment() {
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="apex-training-assignment-body flex flex-1 overflow-hidden">
 
         {/* Main scrollable form */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="apex-training-assignment-form flex-1 overflow-y-auto p-6 space-y-4">
 
           {/* ── 1. Select Course ─────────────────────────────────────────── */}
           <Section num={1} title="Select Course">
@@ -488,7 +488,7 @@ export function TrainingAssignment() {
         </div>
 
         {/* ── Right sidebar: history ───────────────────────────────────── */}
-        <aside className="w-[268px] shrink-0 bg-white border-l border-gray-100 flex flex-col overflow-hidden">
+        <aside className="apex-training-history w-[268px] shrink-0 bg-white border-l border-gray-100 flex flex-col overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 shrink-0">
             <p className="text-[13px] font-bold text-[#1A1F2E]">Assignment History</p>
             <p className="text-[11px] text-[#9CA3AF] mt-0.5">Recent assignments</p>
@@ -514,7 +514,7 @@ export function TrainingAssignment() {
       </div>
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-t border-gray-100 px-6 py-3.5 shrink-0 flex items-center justify-between">
+      <div className="apex-training-assignment-footer bg-white border-t border-gray-100 px-6 py-3.5 shrink-0 flex items-center justify-between">
         <div className="text-[12px] text-[#9CA3AF]">
           {selectedCourse
             ? <><BookOpen size={12} className="inline mr-1" />{selectedCourse.title} · {selectedCourse.version}</>

@@ -1276,7 +1276,7 @@ function SessionsPanel({
   onDelete: (id: string) => void; canDelete: boolean;
 }) {
   return (
-    <aside className="w-[304px] shrink-0 bg-white border-l border-gray-100 flex flex-col overflow-hidden">
+    <aside className="apex-calendar-sessions w-[304px] shrink-0 bg-white border-l border-gray-100 flex flex-col overflow-hidden">
       <div className="px-5 py-3.5 border-b border-gray-100 shrink-0">
         <p className="text-[13px] font-bold text-[#1A1F2E] truncate">{fmtFull(selectedDate)}</p>
         <p className="text-[11px] text-[#9CA3AF] mt-0.5">
@@ -1546,6 +1546,10 @@ export function TrainingCalendar() {
   const [registerSession, setRegisterSession] = useState<Session | null>(null);
   const [reportSession, setReportSession]       = useState<Session | null>(null);
 
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 767px)").matches) setViewMode("list");
+  }, []);
+
   const daysSessions = useMemo(
     () => sessions.filter(s => s.date === selectedDate),
     [sessions, selectedDate]
@@ -1614,12 +1618,12 @@ export function TrainingCalendar() {
   };
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="apex-calendar-page flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
+      <div className="apex-calendar-toolbar bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
         {/* Date navigator */}
-        <div className="flex items-center gap-1">
+        <div className="apex-calendar-navigator flex items-center gap-1">
           {viewMode !== "list" && (
             <button
               onClick={navPrev}
@@ -1648,7 +1652,7 @@ export function TrainingCalendar() {
         </div>
 
         {/* Right: Schedule button + legend + view toggle */}
-        <div className="flex items-center gap-4">
+        <div className="apex-calendar-tools flex items-center gap-4">
           {/* New Session button — trainer / admin only */}
           {canCreate && (
             <button
@@ -1696,10 +1700,10 @@ export function TrainingCalendar() {
       </div>
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="apex-calendar-body flex flex-1 overflow-hidden">
 
         {/* Calendar area */}
-        <div className="flex-1 overflow-y-auto p-5 bg-[#F4F6F9]">
+        <div className="apex-calendar-main flex-1 overflow-y-auto p-5 bg-[#F4F6F9]">
           {viewMode === "month" && (
             <MonthView
               year={anchorDate.getFullYear()} month={anchorDate.getMonth()}

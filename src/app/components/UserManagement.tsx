@@ -70,7 +70,7 @@ export function UserManagement() {
       {/* Table Card */}
       <div className="bg-white rounded-lg overflow-hidden" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
         {/* Filters */}
-        <div className="flex gap-2 px-5 py-3.5 border-b border-gray-100">
+        <div className="apex-mobile-filters flex gap-2 px-5 py-3.5 border-b border-gray-100">
           {[
             { label: "All Roles", options: ["All Roles", "Admin", "Trainer", "Staff"] },
             { label: "All Departments", options: ["All Departments", "IT", "HR", "Sales", "Finance", "Operations"] },

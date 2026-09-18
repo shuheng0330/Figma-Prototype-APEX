@@ -574,7 +574,7 @@ export function ReviewPeriodSetup() {
           className="flex items-center gap-1.5 text-[12px] mb-4 transition-colors hover:text-[#1A1F2E]" style={{ color:MUTED }}>
           <ArrowLeft size={13}/> Back to Review Periods
         </button>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2.5 mb-1">
               <h1 className="text-[20px] font-bold" style={{ color:TEXT }}>{pageTitle}</h1>
@@ -587,7 +587,7 @@ export function ReviewPeriodSetup() {
                 : "Configure all settings before publishing. You can save a draft at any time."}
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="apex-page-actions flex items-center gap-2 shrink-0">
             <button onClick={() => setShowSummary(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-blue-50"
               style={{ color:BLUE, borderColor:BLUE }}>

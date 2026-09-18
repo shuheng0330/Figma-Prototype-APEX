@@ -224,10 +224,10 @@ export function QuizReview() {
   const selectedHistory = history[selected.id] || [];
 
   return (
-    <div className="flex h-[calc(100vh-56px)] overflow-hidden bg-[#F4F6F9]">
+    <div className="apex-quiz-review flex h-[calc(100vh-56px)] overflow-hidden bg-[#F4F6F9]">
 
       {/* ── Left Panel ────────────────────────────────────────────────────────── */}
-      <aside className="w-[260px] bg-white border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
+      <aside className="apex-quiz-nav w-[260px] bg-white border-r border-gray-100 flex flex-col overflow-hidden shrink-0">
         <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <div className="flex items-center justify-between">
             <h2 className="text-[14px] font-bold text-[#1A1F2E]">Pending Review</h2>
@@ -304,7 +304,7 @@ export function QuizReview() {
       </aside>
 
       {/* ── Center Panel ──────────────────────────────────────────────────────── */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="apex-quiz-content flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 bg-white border-b border-gray-100 shrink-0">
           <div className="flex items-start justify-between">
@@ -391,7 +391,7 @@ export function QuizReview() {
       </main>
 
       {/* ── Right Panel ───────────────────────────────────────────────────────── */}
-      <aside className="w-[300px] bg-white border-l border-gray-100 flex flex-col overflow-hidden shrink-0">
+      <aside className="apex-quiz-actions w-[300px] bg-white border-l border-gray-100 flex flex-col overflow-hidden shrink-0">
         <div className="px-5 py-4 border-b border-gray-100 shrink-0">
           <h2 className="text-[14px] font-bold text-[#1A1F2E]">Review Actions</h2>
           <p className="text-[11px] text-[#9CA3AF] mt-0.5">Approve or request changes</p>

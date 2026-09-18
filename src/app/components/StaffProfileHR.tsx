@@ -702,7 +702,7 @@ export function StaffProfileHR() {
               <ArrowLeft size={14} /> {returnToTeamPerformance ? "Back to Team Performance" : returnContext === "team-appraisals" ? "Back to Team Appraisals" : "Back to Appraisal Reviews"}
             </button>
           )}
-          <div className="bg-white rounded-lg p-5 flex items-center gap-4"
+          <div className="apex-profile-summary bg-white rounded-lg p-5 flex items-center gap-4"
             style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="w-14 h-14 rounded-full flex items-center justify-center text-white text-[18px] font-bold shrink-0"
               style={{ backgroundColor: meta.avatarColor }}>
@@ -719,7 +719,7 @@ export function StaffProfileHR() {
                 <span>{meta.dept}</span>
               </div>
             </div>
-            <label className="shrink-0">
+            <label className="apex-period-control shrink-0">
               <span className="block text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Annual KPI Review Period</span>
               <select value={selectedPeriod} onChange={event => setSelectedPeriod(event.target.value)}
                 className="min-w-[215px] rounded-md px-3 py-2 text-[12px] font-semibold outline-none"
@@ -788,7 +788,7 @@ export function StaffProfileHR() {
               <Line type="monotone" dataKey="final"    name="Final Appraisal Score"   stroke={PURPLE} strokeWidth={2.5} dot={{ r: 5, fill: PURPLE }} activeDot={{ r: 7 }} strokeDasharray="5 3" />
             </LineChart>
           </ResponsiveContainer>
-          <div className="flex items-center justify-center gap-5 mt-2">
+          <div className="apex-chart-legend flex items-center justify-center gap-5 mt-2">
             {[
               { label: "KPI Performance Score",     color: BLUE   },
               { label: "Attitude Evaluation Score",color: TEAL   },
@@ -804,7 +804,7 @@ export function StaffProfileHR() {
 
         {/* ── 4. KPI Performance Breakdown ── */}
         {kpis.length > 0 && (
-          <div className="bg-white rounded-lg overflow-hidden"
+          <div className="apex-table-card bg-white rounded-lg overflow-hidden"
             style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: `1px solid ${BORDER}` }}>
             <div className="flex items-center justify-between px-5 py-4"
               style={{ borderBottom: `1px solid ${BORDER}` }}>

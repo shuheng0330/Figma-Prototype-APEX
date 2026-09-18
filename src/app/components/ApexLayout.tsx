@@ -37,7 +37,7 @@ export function ApexLayout() {
       {mobileOpen && (
         <button
           type="button"
-          aria-label="Close navigation"
+          aria-label="Dismiss navigation"
           className="apex-mobile-backdrop fixed inset-0 z-[29] bg-black/40 md:hidden"
           onClick={handleMobileClose}
         />

@@ -853,7 +853,7 @@ function ProfilePanel() {
   const hoursLogged = completed.reduce((s,r)=>s+r.hours,0);
 
   return (
-    <div className="w-[248px] shrink-0 bg-white border-r border-gray-100 overflow-y-auto flex flex-col">
+    <div className="apex-profile-panel w-[248px] shrink-0 bg-white border-r border-gray-100 overflow-y-auto flex flex-col">
       {/* Avatar */}
       <div className="px-5 pt-6 pb-5 border-b border-gray-100 text-center">
         <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-[18px] font-extrabold mx-auto mb-3" style={{ backgroundColor:TEAL }}>AS</div>
@@ -946,12 +946,12 @@ export function MyProfile() {
   const [tab, setTab] = useState<Tab>("training");
 
   return (
-    <div className="flex" style={{ height:"calc(100vh - 56px)" }}>
+    <div className="apex-profile-page flex" style={{ height:"calc(100vh - 56px)" }}>
       <ProfilePanel/>
 
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor:BG }}>
+      <div className="apex-profile-content flex-1 flex flex-col overflow-hidden" style={{ backgroundColor:BG }}>
         {/* Tab bar */}
-        <div className="bg-white border-b border-gray-100 px-6 flex items-end gap-0.5 shrink-0">
+        <div className="apex-mobile-tabs bg-white border-b border-gray-100 px-6 flex items-end gap-0.5 shrink-0">
           {TABS.map(t=>(
             <button key={t.id} onClick={()=>setTab(t.id)}
               className="px-4 py-3.5 text-[13px] font-semibold border-b-2 transition-all"

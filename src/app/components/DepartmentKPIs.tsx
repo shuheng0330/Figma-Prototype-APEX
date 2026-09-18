@@ -925,9 +925,9 @@ export function DepartmentKPIs() {
               Retail Sales Department · Department-Level KPI management
             </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="apex-page-actions flex items-center gap-2 flex-wrap shrink-0">
             {/* Period Selector */}
-            <div ref={periodRef} className="relative">
+            <div ref={periodRef} className="apex-period-picker relative">
               <button onClick={() => setShowPeriodDd(o => !o)}
                 className="flex items-center gap-2 px-3 py-2 bg-white rounded-md text-[13px] transition-colors"
                 style={{ border: `1px solid ${BORDER}`, color: TEXT, boxShadow: "0 1px 3px rgba(0,0,0,0.06)" }}>

@@ -587,10 +587,10 @@ export function MaterialReview() {
 
   // ── NEW TWO-PANEL LAYOUT ────────────────────────────────────────────────────
   return (
-    <div className="flex bg-white" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="apex-review-materials flex bg-white" style={{ height: "calc(100vh - 56px)" }}>
 
         {/* Left panel: SOP info + module list */}
-        <aside className="w-[272px] shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+        <aside className="apex-review-materials-nav w-[272px] shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
 
           {/* SOP selector */}
           <div className="px-4 py-3.5 border-b border-gray-100 shrink-0">
@@ -681,7 +681,7 @@ export function MaterialReview() {
         </aside>
 
         {/* Right panel: document view */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: "#F8FAFB" }}>
+        <div className="apex-review-materials-document flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: "#F8FAFB" }}>
 
           {/* Module top bar */}
           <div className="bg-white border-b border-gray-200 px-8 py-3.5 flex items-center justify-between shrink-0">

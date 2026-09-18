@@ -787,7 +787,7 @@ export function MyKpiPlan() {
               {selectedPeriod} · Retail Sales Executive · Monthly Review Frequency
             </p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="apex-page-actions flex items-center gap-2 shrink-0">
             <select value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} className="px-3 py-2 rounded-md text-[13px] bg-white border" style={{ borderColor: BORDER, color: TEXT }}>
               {performanceStore.periods.filter(period => period.status !== "Draft").map(period => (
                 <option key={period.id} value={period.name}>{period.name}{period.status === "Closed" ? " — Closed" : ""}</option>

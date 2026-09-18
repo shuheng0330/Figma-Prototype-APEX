@@ -273,6 +273,276 @@
     min-width: 680px;
   }
 
+  .apex-content main div:has(> table),
+  .apex-table-card {
+    max-width: 100%;
+    overflow-x: auto !important;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .apex-profile-summary {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+  }
+
+  .apex-profile-summary > div:nth-child(2) {
+    min-width: 0;
+  }
+
+  .apex-period-control {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .apex-period-control select {
+    width: 100%;
+    min-width: 0 !important;
+  }
+
+  .apex-chart-legend {
+    flex-wrap: wrap;
+    justify-content: flex-start !important;
+    gap: 0.5rem 1rem !important;
+  }
+
+  .apex-profile-page,
+  .apex-review-materials,
+  .apex-quiz-review,
+  .apex-training-assignment,
+  .apex-calendar-page,
+  .apex-sop-course,
+  .apex-course-viewer {
+    height: auto !important;
+    min-height: calc(100dvh - 56px);
+  }
+
+  .apex-profile-page,
+  .apex-review-materials,
+  .apex-quiz-review,
+  .apex-training-assignment-body,
+  .apex-calendar-body,
+  .apex-sop-course,
+  .apex-course-viewer {
+    flex-direction: column;
+    overflow: visible !important;
+  }
+
+  .apex-profile-panel,
+  .apex-review-materials-nav,
+  .apex-quiz-nav,
+  .apex-quiz-actions,
+  .apex-training-history,
+  .apex-calendar-sessions,
+  .apex-sop-course-nav,
+  .apex-course-viewer-sidebar {
+    width: 100% !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid #e5e7eb;
+    overflow: visible !important;
+  }
+
+  .apex-profile-content,
+  .apex-review-materials-document,
+  .apex-quiz-content,
+  .apex-training-assignment-form,
+  .apex-calendar-main,
+  .apex-sop-course-content,
+  .apex-course-viewer-main {
+    width: 100%;
+    flex: none !important;
+    overflow: visible !important;
+  }
+
+  .apex-profile-panel {
+    max-height: none;
+  }
+
+  .apex-profile-panel > div:first-child {
+    padding-top: 1.25rem !important;
+    padding-bottom: 1.25rem !important;
+  }
+
+  .apex-profile-panel > div:not(:first-child) {
+    display: none;
+  }
+
+  .apex-page-actions {
+    width: 100%;
+    min-width: 0;
+    flex-shrink: 1 !important;
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+
+  .apex-page-actions > *,
+  .apex-period-picker,
+  .apex-period-picker > button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .apex-page-actions > button {
+    justify-content: center;
+  }
+
+  .apex-period-picker > button {
+    justify-content: flex-start;
+  }
+
+  .apex-period-picker > button svg {
+    margin-left: auto;
+  }
+
+  .apex-mobile-filters {
+    flex-wrap: wrap;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .apex-mobile-filters select {
+    flex: 1 1 145px;
+    width: 100%;
+  }
+
+  .apex-mobile-tabs {
+    width: 100%;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .apex-mobile-tabs button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .apex-review-materials-nav,
+  .apex-quiz-nav,
+  .apex-sop-course-nav {
+    max-height: 320px;
+    overflow-y: auto !important;
+  }
+
+  .apex-review-materials-document > div:first-child,
+  .apex-quiz-content > div:first-child {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .apex-review-materials-document > div:nth-child(2) > div,
+  .apex-quiz-content > div:last-child {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .apex-quiz-nav {
+    order: 1;
+  }
+
+  .apex-quiz-actions {
+    order: 2;
+  }
+
+  .apex-quiz-content {
+    order: 3;
+  }
+
+  .apex-training-assignment > div:first-child,
+  .apex-training-assignment-footer,
+  .apex-calendar-toolbar {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .apex-training-assignment-form {
+    padding: 1rem !important;
+  }
+
+  .apex-training-history {
+    max-height: none;
+  }
+
+  .apex-training-assignment-footer {
+    align-items: stretch !important;
+    gap: 0.75rem;
+  }
+
+  .apex-training-assignment-footer > div:last-child {
+    width: 100%;
+  }
+
+  .apex-training-assignment-footer > div:last-child button {
+    flex: 1;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  .apex-calendar-toolbar {
+    align-items: stretch !important;
+    gap: 0.75rem;
+  }
+
+  .apex-calendar-navigator,
+  .apex-calendar-tools {
+    width: 100%;
+  }
+
+  .apex-calendar-navigator > span {
+    min-width: 0 !important;
+    flex: 1;
+  }
+
+  .apex-calendar-tools {
+    justify-content: space-between;
+    gap: 0.5rem !important;
+  }
+
+  .apex-calendar-tools > div:nth-last-child(2) {
+    display: none;
+  }
+
+  .apex-calendar-main {
+    padding: 1rem !important;
+  }
+
+  .apex-calendar-sessions {
+    min-height: 260px;
+  }
+
+  .apex-sop-course-content,
+  .apex-course-viewer-main {
+    min-height: 520px;
+  }
+
+  .apex-course-viewer-main > div:nth-child(2) {
+    padding: 1rem !important;
+  }
+
+  .apex-learning-featured {
+    margin-left: 1rem !important;
+    margin-right: 1rem !important;
+  }
+
+  .apex-learning-featured-body {
+    align-items: stretch !important;
+    flex-wrap: wrap;
+    gap: 0.75rem !important;
+    padding: 1rem !important;
+  }
+
+  .apex-learning-featured-body > div:nth-child(2) {
+    min-width: calc(100% - 120px);
+  }
+
+  .apex-learning-featured-action {
+    width: 100%;
+    justify-content: center;
+  }
+
   .apex-content .fixed.right-0 {
     width: 100vw !important;
     max-width: 100vw !important;
