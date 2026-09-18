@@ -93,7 +93,7 @@ const SEED_KPIS: Record<string, KpiRow[]> = {
   "2027 Annual KPI Review": [
     {
       id: "c27-1", perspective: "Financial", kra: "Revenue Growth",
-      name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Draft",
+      name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
         s5: "Revenue grows 12% or more above target YoY",
         s4: "Revenue grows 9%–11.9% YoY",
@@ -104,13 +104,21 @@ const SEED_KPIS: Record<string, KpiRow[]> = {
     },
     {
       id: "c27-2", perspective: "Customer", kra: "Customer Satisfaction",
-      name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Draft",
+      name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
       scoreDef: {
         s5: "CSI score 95% or above",
         s4: "CSI score 90%–94%",
         s3: "CSI score 85%–89%",
         s2: "CSI score 75%–84%",
         s1: "CSI score 60%–74%",
+      },
+    },
+    {
+      id: "c27-3", perspective: "Internal Process", kra: "Branch Operations",
+      name: "Branch Operations Score", target: "≥ 90%", weightage: 3, status: "Published", publishedOn: "2026-12-20", overdue: false, version: 1,
+      scoreDef: {
+        s5: "Operations score 98% or above", s4: "Operations score 94%–97%", s3: "Operations score 90%–93%",
+        s2: "Operations score 80%–89%", s1: "Operations score 70%–79%",
       },
     },
   ],
@@ -754,9 +762,9 @@ export function CompanyKPIs() {
   const sharedPeriods = performanceStore.periods;
   const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
   const defaultPeriodName = sharedPeriods.find(period => period.id === defaultPeriodId)?.name ?? LIVE_PERIOD;
-  const [kpisByPeriod, setKpisByPeriod] = useState<Record<string, KpiRow[]>>(() =>
-    Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]]))
-  );
+  const seededKpis = useMemo(() => Object.fromEntries(Object.entries(SEED_KPIS).map(([k, v]) => [k, [...v]])) as Record<string, KpiRow[]>, []);
+  const hasStoredKpis = Object.keys(performanceStore.state.companyKpisByPeriod).length > 0;
+  const kpisByPeriod = (hasStoredKpis ? performanceStore.state.companyKpisByPeriod : seededKpis) as Record<string, KpiRow[]>;
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const [showPeriodDd, setShowPeriodDd]     = useState(false);
 
@@ -772,6 +780,10 @@ export function CompanyKPIs() {
   const [showGuide, setShowGuide] = useState(false);
 
   const periodRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!hasStoredKpis) performanceStore.setCompanyKpisByPeriod(seededKpis);
+  }, [hasStoredKpis, seededKpis, performanceStore]);
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -807,7 +819,7 @@ export function CompanyKPIs() {
 
   // ── Mutations ──
   function mutatePeriod(updater: (prev: KpiRow[]) => KpiRow[]) {
-    setKpisByPeriod(prev => ({ ...prev, [selectedPeriod]: updater(prev[selectedPeriod] ?? []) }));
+    performanceStore.setCompanyKpisByPeriod({ ...kpisByPeriod, [selectedPeriod]: updater(kpisByPeriod[selectedPeriod] ?? []) });
   }
 
   function changePeriod(p: string) {

@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ChevronDown, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
-import { EMPLOYEES, LIVE_PERIOD, AppStatus, Decision, resolvePeriodData } from "./appraisalData";
+import { EMPLOYEES, LIVE_PERIOD, AppStatus, Decision, PeriodAppraisal, resolvePeriodData } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -58,9 +59,9 @@ interface HrRow {
   status: AppStatus;
 }
 
-function buildHrRows(period: string): HrRow[] {
+function buildHrRows(period: string, sharedAppraisals: Record<string, Partial<PeriodAppraisal>>): HrRow[] {
   return Object.entries(EMPLOYEES).flatMap(([id, emp]) => {
-    const pd = resolvePeriodData(id, period);
+    const pd = resolvePeriodData(id, period, period === LIVE_PERIOD ? sharedAppraisals[id] : undefined);
     if (!pd || !HR_STATUSES.includes(pd.status)) return [];
     const meta = EMP_META[id] ?? { department: "—", manager: "—" };
     return [{
@@ -76,26 +77,14 @@ function buildHrRows(period: string): HrRow[] {
 
 export function HrAppraisalQueue() {
   const navigate = useNavigate();
+  const performanceStore = usePerformanceStore();
   const period = LIVE_PERIOD;
-  const [rows,        setRows]        = useState<HrRow[]>(() => buildHrRows(LIVE_PERIOD));
+  const rows = useMemo(() => buildHrRows(period, performanceStore.state.appraisals), [period, performanceStore.state.appraisals]);
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterMgr,   setFilterMgr]   = useState("All");
   const [filterEmp,   setFilterEmp]   = useState("All");
   const [sortField,   setSortField]   = useState<SortField | null>(null);
   const [sortDir,     setSortDir]     = useState<"asc" | "desc">("desc");
-
-  useEffect(() => {
-    setRows(buildHrRows(period));
-    setFilterStatus("All");
-    setFilterMgr("All");
-    setFilterEmp("All");
-  }, [period]);
-
-  useEffect(() => {
-    const handler = () => setRows(buildHrRows(period));
-    window.addEventListener("appraisalStatusChange", handler);
-    return () => window.removeEventListener("appraisalStatusChange", handler);
-  }, [period]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir(d => d === "desc" ? "asc" : "desc");

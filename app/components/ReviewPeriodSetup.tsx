@@ -249,7 +249,6 @@ function RuleBuilder({ label, days, setDays, dayType, setDayType, reference, rea
           className="px-2.5 py-1.5 rounded-md text-[13px] outline-none border"
           style={{ borderColor:BORDER, color:TEXT, backgroundColor:readOnly?"#F8FAFC":"white" }}>
           <option>Calendar Days</option>
-          <option disabled>Working Days — TBC</option>
         </select>
         <span className="text-[13px]" style={{ color: MUTED }}>after</span>
         <span className="px-2.5 py-1 rounded-md text-[12px] font-medium" style={{ backgroundColor:"#EEF3FC", color:BLUE }}>{reference}</span>
@@ -774,7 +773,7 @@ export function ReviewPeriodSetup() {
             />
           </div>
           <p className="mt-3 text-[11px] flex items-center gap-1.5" style={{ color:MUTED }}>
-            <Info size={12}/> Working Day and Malaysian public-holiday behaviour remains TBC and is not applied by this prototype.
+            <Info size={12}/> This prototype uses Calendar Days only. Working-day and public-holiday calculations are outside the project scope.
           </p>
           <button
             onClick={() => setShowSchedule(true)}

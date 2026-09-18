@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, X, CheckCircle, Info, Eye, BookOpen, Send, AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { usePerformanceStore } from "../performance/store";
 
@@ -6,6 +6,7 @@ const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
 const AMBER  = "#D99000";
 const RED    = "#D14343";
+const GREEN  = "#059669";
 const TEXT   = "#172033";
 const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
@@ -15,7 +16,7 @@ const PURPLE = "#7C3AED";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ApprovalStatus =
-  | "Assigned"
+  | "Published"
   | "Approved"
   | "Pending Approval"
   | "Draft"
@@ -49,7 +50,7 @@ const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "" };
 const SCORE_KEYS: (keyof ScoreDef)[] = ["s5", "s4", "s3", "s2", "s1"];
 
 const STATUS_STYLE: Record<ApprovalStatus, { color: string; bg: string }> = {
-  "Assigned":                 { color: MUTED,  bg: "#F2F4F7" },
+  "Published":                { color: GREEN,  bg: "#ECFDF5" },
   "Approved":                 { color: TEAL,   bg: "#ECFDF9" },
   "Pending Approval":         { color: AMBER,  bg: "#FEF9EC" },
   "Draft":                    { color: "#374151", bg: "#F3F4F6" },
@@ -75,7 +76,7 @@ const KRA_BY_PERSPECTIVE: Record<string, string[]> = {
 const INIT_KPIS: KpiRow[] = [
   {
     id: "c1", level: "Company", perspective: "Financial", kra: "Company Target",
-    name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Assigned",
+    name: "Company Revenue Growth", target: "≥ 8% YoY", weightage: 5, status: "Published",
     scoreDef: {
       s5: "Revenue grows 10% or more above target YoY",
       s4: "Revenue grows 8%–9.9% YoY",
@@ -86,7 +87,7 @@ const INIT_KPIS: KpiRow[] = [
   },
   {
     id: "c2", level: "Company", perspective: "Customer", kra: "Customer Satisfaction",
-    name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Assigned",
+    name: "Customer Satisfaction Index", target: "≥ 85%", weightage: 7, status: "Published",
     scoreDef: {
       s5: "CSI score 95% or above",
       s4: "CSI score 90%–94%",
@@ -97,7 +98,7 @@ const INIT_KPIS: KpiRow[] = [
   },
   {
     id: "c3", level: "Company", perspective: "Internal Process", kra: "Service Quality",
-    name: "Branch Operations Score", target: "≥ 90%", weightage: 3, status: "Assigned",
+    name: "Branch Operations Score", target: "≥ 90%", weightage: 3, status: "Published",
     scoreDef: {
       s5: "Operations score 98% or above",
       s4: "Operations score 93%–97%",
@@ -108,7 +109,7 @@ const INIT_KPIS: KpiRow[] = [
   },
   {
     id: "d1", level: "Department", perspective: "Financial", kra: "Sales Performance",
-    name: "Monthly Sales Achievement", target: "RM 80,000/month", weightage: 15, status: "Assigned",
+    name: "Monthly Sales Achievement", target: "RM 80,000/month", weightage: 15, status: "Published",
     scoreDef: {
       s5: "Achieves 110% or more of monthly sales target",
       s4: "Achieves 100%–109% of monthly sales target",
@@ -119,7 +120,7 @@ const INIT_KPIS: KpiRow[] = [
   },
   {
     id: "d2", level: "Department", perspective: "Financial", kra: "Sales Performance",
-    name: "Product Coverage", target: "≥ 80% range", weightage: 10, status: "Assigned",
+    name: "Product Coverage", target: "≥ 80% range", weightage: 10, status: "Published",
     scoreDef: {
       s5: "Covers 95% or more of the product range",
       s4: "Covers 90%–94% of the product range",
@@ -661,8 +662,9 @@ export function MyKpiPlan() {
   const performanceStore = usePerformanceStore();
   const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
   const defaultPeriodName = performanceStore.periods.find(period => period.id === defaultPeriodId)?.name ?? "2027 Annual KPI Review";
-  const [kpis, setKpis] = useState<KpiRow[]>(INIT_KPIS);
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
+  const planMap = performanceStore.state.employeeKpiPlansByPeriod as Record<string, KpiRow[]>;
+  const kpis = planMap[selectedPeriod] ?? INIT_KPIS;
   const [viewId, setViewId]                 = useState<string | null>(null);
   const [historyId, setHistoryId]           = useState<string | null>(null);
   const [editId, setEditId]                 = useState<string | null>(null);
@@ -671,6 +673,16 @@ export function MyKpiPlan() {
   const [showSubmitDialog, setShowDialog]   = useState(false);
   const [showGuide, setShowGuide]           = useState(false);
   const [submitted, setSubmitted]           = useState(false);
+
+  useEffect(() => {
+    if (!planMap[selectedPeriod]) {
+      performanceStore.setEmployeeKpiPlansByPeriod({ ...planMap, [selectedPeriod]: INIT_KPIS.map(kpi => ({ ...kpi })) });
+    }
+  }, [selectedPeriod, planMap, performanceStore]);
+
+  function setKpis(updater: (previous: KpiRow[]) => KpiRow[]) {
+    performanceStore.setEmployeeKpiPlansByPeriod({ ...planMap, [selectedPeriod]: updater(kpis) });
+  }
   const selectedSharedPeriod = performanceStore.periods.find(period => period.name === selectedPeriod);
   const isHistorical = selectedSharedPeriod?.status === "Closed";
   const isOpenPeriod = selectedSharedPeriod?.status === "Open";
@@ -717,7 +729,7 @@ export function MyKpiPlan() {
   }, [kpis, editId, editIsCreate, totalWeightage]);
 
   // Plan status
-  const planStatus: ApprovalStatus = submitted
+  const planStatus: ApprovalStatus = submitted || kpis.some(k => k.level === "Individual" && k.status === "Pending Approval")
     ? "Pending Approval"
     : kpis.some(k => k.level === "Individual" && k.status === "Returned")
     ? "Returned"
@@ -913,7 +925,7 @@ export function MyKpiPlan() {
             <table className="w-full text-[13px]">
               <thead>
                 <tr style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
-                  {["KPI Level", "KPI Name", "Target", "Weightage", "Approval Status", "Actions"].map(h => (
+                  {["KPI Level", "KPI Name", "Target", "Weightage", "Status", "Actions"].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
                       style={{ color: MUTED }}>{h}</th>
                   ))}

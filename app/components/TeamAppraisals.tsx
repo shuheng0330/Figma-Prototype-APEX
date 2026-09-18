@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import { ChevronDown, ArrowRight, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
-import { EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, resolvePeriodData } from "./appraisalData";
+import { EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, PeriodAppraisal, resolvePeriodData } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -51,9 +52,9 @@ interface RowEmployee {
   readyForAppraisal: boolean;
 }
 
-function buildRows(period: string): RowEmployee[] {
+function buildRows(period: string, sharedAppraisals: Record<string, Partial<PeriodAppraisal>>): RowEmployee[] {
   return Object.entries(EMPLOYEES).flatMap(([id, emp]) => {
-    const pd = resolvePeriodData(id, period);
+    const pd = resolvePeriodData(id, period, period === LIVE_PERIOD ? sharedAppraisals[id] : undefined);
     if (!pd) return [];
     return [{
       id, name: emp.name, initials: emp.initials, role: emp.role,
@@ -65,23 +66,17 @@ function buildRows(period: string): RowEmployee[] {
 
 export function TeamAppraisals() {
   const navigate = useNavigate();
+  const performanceStore = usePerformanceStore();
   const [period,         setPeriod]         = useState(LIVE_PERIOD);
-  const [rows,           setRows]           = useState<RowEmployee[]>(() => buildRows(LIVE_PERIOD));
+  const rows = useMemo(() => buildRows(period, performanceStore.state.appraisals), [period, performanceStore.state.appraisals]);
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterEmployee, setFilterEmployee] = useState("All");
   const [sortField,      setSortField]      = useState<SortField | null>(null);
   const [sortDir,        setSortDir]        = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
-    setRows(buildRows(period));
     setFilterStatus("All");
     setFilterEmployee("All");
-  }, [period]);
-
-  useEffect(() => {
-    const handler = () => setRows(buildRows(period));
-    window.addEventListener("appraisalStatusChange", handler);
-    return () => window.removeEventListener("appraisalStatusChange", handler);
   }, [period]);
 
   function toggleSort(field: SortField) {

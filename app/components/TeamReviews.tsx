@@ -4,6 +4,8 @@ import {
   X, ChevronDown, CheckCircle, RotateCcw, ArrowUp, ArrowDown, FileText,
   ArrowLeft,
 } from "lucide-react";
+import { generateCheckpoints } from "../performance/domain";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -338,10 +340,11 @@ function CompletionDialog({ item, summaryRows, onClose, onConfirm }: {
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function TeamReviews() {
   const navigate = useNavigate();
+  const performanceStore = usePerformanceStore();
   const [searchParams] = useSearchParams();
   const returnToTeamPerformance = searchParams.get("from") === "team-performance";
   const returnPeriod = searchParams.get("period");
-  const [queue, setQueue]               = useState<ReviewItem[]>(INIT_QUEUE);
+  const [staticQueue, setStaticQueue]   = useState<ReviewItem[]>(() => INIT_QUEUE.filter(item => !["r1", "r2", "r4"].includes(item.id)));
   const [filterType, setFilterType]     = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterEmp, setFilterEmp]       = useState("All");
@@ -371,7 +374,44 @@ export function TeamReviews() {
   const [scoringDefKpi, setScoringDefKpi]     = useState<KpiRow | null>(null);
   const [evidenceFile, setEvidenceFile]       = useState<{ name: string; size: string } | null>(null);
 
-  const employees = useMemo(() => Array.from(new Set(INIT_QUEUE.map(r => r.employee))), []);
+  const period2027 = performanceStore.getPeriod("2027");
+  const monthlyCheckpoints = period2027 ? generateCheckpoints(period2027, "Monthly") : [];
+  const sharedAssessmentItems: ReviewItem[] = Object.values(performanceStore.state.kpiAssessments)
+    .filter(record => record.periodId === "2027" && record.employeeId === "amir" && record.status !== "Draft")
+    .map(record => {
+      const checkpoint = monthlyCheckpoints.find(item => item.id === record.checkpointId);
+      const dueIso = checkpoint?.superiorDeadline ?? "2027-12-31";
+      return {
+        id: `assessment:${record.id}`, employee: "Amir Hassan", initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales",
+        type: "KPI Assessment" as const, checkpoint: record.checkpointLabel, due: formatDate(dueIso),
+        dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
+        overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
+      };
+    });
+  const sharedAttitudeItems: ReviewItem[] = Object.values(performanceStore.state.attitudeAssessments)
+    .filter(record => record.periodId === "2027" && record.employeeId === "amir" && record.status !== "Draft")
+    .map(record => {
+      const dueIso = period2027?.deadlines.attitudeSuperior ?? "2027-12-27";
+      return {
+        id: `attitude:${record.id}`, employee: "Amir Hassan", initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales",
+        type: "Attitude Evaluation" as const, checkpoint: "Annual 2027", due: formatDate(dueIso),
+        dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
+        overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
+      };
+    });
+  const sharedPlanItems: ReviewItem[] = Object.entries(performanceStore.state.employeeKpiPlansByPeriod).flatMap(([periodName, plan]) => {
+    const individual = plan.filter((kpi: any) => kpi.level === "Individual");
+    if (!individual.length || individual.every((kpi: any) => kpi.status === "Draft")) return [];
+    const status: ReviewStatus = individual.some((kpi: any) => kpi.status === "Pending Approval")
+      ? "Pending Approval" : individual.some((kpi: any) => kpi.status === "Returned") ? "Returned" : "Approved";
+    return [{
+      id: `kpi-plan:${periodName}`, employee: "Amir Hassan", initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales",
+      type: "Individual KPI Approval" as const, checkpoint: periodName.split(" ")[0], due: "1 Jan 2027", dueTs: 20270101,
+      status, overdue: status === "Pending Approval" && performanceStore.state.effectiveDate > "2027-01-01",
+    }];
+  });
+  const queue = [...staticQueue, ...sharedAssessmentItems, ...sharedAttitudeItems, ...sharedPlanItems];
+  const employees = useMemo(() => Array.from(new Set(queue.map(r => r.employee))), [queue]);
 
   const filtered = useMemo(() => {
     let rows = queue.filter(r =>
@@ -395,7 +435,19 @@ export function TeamReviews() {
   }
 
   function updateStatus(id: string, status: ReviewStatus) {
-    setQueue(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    if (id.startsWith("assessment:")) {
+      const recordId = id.slice("assessment:".length);
+      const record = performanceStore.state.kpiAssessments[recordId];
+      if (record) performanceStore.upsertKpiAssessment({ ...record, status: status === "Reviewed" ? "Reviewed" : record.status });
+      return;
+    }
+    if (id.startsWith("attitude:")) {
+      const recordId = id.slice("attitude:".length);
+      const record = performanceStore.state.attitudeAssessments[recordId];
+      if (record) performanceStore.upsertAttitudeAssessment({ ...record, status: status === "Reviewed" ? "Reviewed" : record.status });
+      return;
+    }
+    setStaticQueue(prev => prev.map(r => r.id === id ? { ...r, status } : r));
   }
 
   // ── Derived state for the active drawer ──
@@ -405,7 +457,14 @@ export function TeamReviews() {
   const isReadOnly  = isCompleted || isReturned;
 
   // Individual KPI Approval
-  const approvals   = kpiApprovals[rid] ?? {};
+  const activePlanName = rid.startsWith("kpi-plan:") ? rid.slice("kpi-plan:".length) : undefined;
+  const activePlan = activePlanName ? performanceStore.state.employeeKpiPlansByPeriod[activePlanName] ?? [] : [];
+  const approvals = Object.fromEntries(IND_KPIS.map(kpi => {
+    const local = kpiApprovals[rid]?.[kpi.id];
+    const shared = activePlan.find((item: any) => item.id === kpi.id);
+    const sharedStatus = shared?.status === "Approved" ? "Approved" : shared?.status === "Returned" ? "Returned" : "Pending";
+    return [kpi.id, local ?? { status: sharedStatus, returnReason: shared?.returnReason }];
+  })) as Record<string, { status: KpiApprovalStatus; returnReason?: string }>;
   const approvCount = IND_KPIS.filter(k => approvals[k.id]?.status === "Approved").length;
   const retCount    = IND_KPIS.filter(k => approvals[k.id]?.status === "Returned").length;
   const allReviewed = IND_KPIS.every(k => approvals[k.id]?.status && approvals[k.id]?.status !== "Pending");
@@ -415,27 +474,49 @@ export function TeamReviews() {
   }
 
   // KPI Assessment
-  const scores      = mgrScores[rid]   ?? {};
-  const comments    = mgrComments[rid] ?? {};
+  const activeAssessment = rid.startsWith("assessment:")
+    ? performanceStore.state.kpiAssessments[rid.slice("assessment:".length)]
+    : undefined;
+  const scores      = activeAssessment?.superiorPoints ?? mgrScores[rid] ?? {};
+  const comments    = activeAssessment?.superiorComments ?? mgrComments[rid] ?? {};
   const allScored   = ALL_KPIS.every(k => (scores[k.id] ?? null) !== null);
   const commentCount = Object.values(comments).filter(c => c.trim()).length;
 
   function setScore(kpiId: string, v: number) {
+    if (activeAssessment) {
+      performanceStore.upsertKpiAssessment({ ...activeAssessment, superiorPoints: { ...activeAssessment.superiorPoints, [kpiId]: v } });
+      return;
+    }
     setMgrScores(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [kpiId]: v } }));
   }
   function setComment(kpiId: string, v: string) {
+    if (activeAssessment) {
+      performanceStore.upsertKpiAssessment({ ...activeAssessment, superiorComments: { ...activeAssessment.superiorComments, [kpiId]: v } });
+      return;
+    }
     setMgrComments(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [kpiId]: v } }));
   }
 
   // Attitude
-  const aScores     = attScores[rid]   ?? {};
-  const aComments   = attComments[rid] ?? {};
+  const activeAttitude = rid.startsWith("attitude:")
+    ? performanceStore.state.attitudeAssessments[rid.slice("attitude:".length)]
+    : undefined;
+  const aScores     = activeAttitude?.superiorPoints ?? attScores[rid] ?? {};
+  const aComments   = activeAttitude?.superiorComments ?? attComments[rid] ?? {};
   const allAttScored = ATTITUDE_ROWS.every(c => (aScores[c.id] ?? null) !== null);
 
   function setAttScore(id: string, v: number) {
+    if (activeAttitude) {
+      performanceStore.upsertAttitudeAssessment({ ...activeAttitude, superiorPoints: { ...activeAttitude.superiorPoints, [id]: v } });
+      return;
+    }
     setAttScores(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [id]: v } }));
   }
   function setAttComment(id: string, v: string) {
+    if (activeAttitude) {
+      performanceStore.upsertAttitudeAssessment({ ...activeAttitude, superiorComments: { ...activeAttitude.superiorComments, [id]: v } });
+      return;
+    }
     setAttComments(prev => ({ ...prev, [rid]: { ...(prev[rid] ?? {}), [id]: v } }));
   }
 
@@ -446,7 +527,29 @@ export function TeamReviews() {
 
   function handleCompleteReview() {
     if (!drawerItem) return;
-    updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
+    if (activePlanName) {
+      const updated = activePlan.map((kpi: any) => {
+        if (kpi.level !== "Individual") return kpi;
+        const decision = approvals[kpi.id];
+        if (!decision || decision.status === "Pending") return kpi;
+        return { ...kpi, status: decision.status, returnReason: decision.returnReason };
+      });
+      performanceStore.setEmployeeKpiPlansByPeriod({ ...performanceStore.state.employeeKpiPlansByPeriod, [activePlanName]: updated });
+    } else if (activeAssessment) {
+      const deadline = monthlyCheckpoints.find(item => item.id === activeAssessment.checkpointId)?.superiorDeadline;
+      performanceStore.upsertKpiAssessment({
+        ...activeAssessment, status: "Reviewed", reviewedAt: performanceStore.state.effectiveDate,
+        completedLate: activeAssessment.completedLate || Boolean(deadline && performanceStore.state.effectiveDate > deadline),
+      });
+    } else if (activeAttitude) {
+      const deadline = period2027?.deadlines.attitudeSuperior;
+      performanceStore.upsertAttitudeAssessment({
+        ...activeAttitude, status: "Reviewed", reviewedAt: performanceStore.state.effectiveDate,
+        completedLate: activeAttitude.completedLate || Boolean(deadline && performanceStore.state.effectiveDate > deadline),
+      });
+    } else {
+      updateStatus(drawerItem.id, drawerItem.type === "Individual KPI Approval" ? "Approved" : "Reviewed");
+    }
     setCompletionDialog(null);
     setDrawerItem(null);
   }
@@ -815,7 +918,13 @@ export function TeamReviews() {
                   <div className="space-y-4 pb-6">
                     {ALL_KPIS.map(kpi => {
                       const ls = LEVEL_STYLE[kpi.level];
-                      const emp = AMIR_JAN[kpi.id];
+                      const storedSelfPoint = activeAssessment?.selfPoints[kpi.id];
+                      const fallbackSelf = AMIR_JAN[kpi.id];
+                      const emp = {
+                        score: storedSelfPoint ?? fallbackSelf?.score ?? 1,
+                        comment: activeAssessment?.selfComments[kpi.id] ?? fallbackSelf?.comment ?? "",
+                        evidence: activeAssessment?.evidence[kpi.id] ?? fallbackSelf?.evidence,
+                      };
                       const mgrScore   = scores[kpi.id]   ?? null;
                       const mgrComment = comments[kpi.id] ?? "";
                       const scoreDiff  = mgrScore !== null && Math.abs(mgrScore - emp.score) >= 2;
@@ -951,6 +1060,7 @@ export function TeamReviews() {
                     {ATTITUDE_ROWS.map(c => {
                       const mgrScore   = aScores[c.id]   ?? null;
                       const mgrComment = aComments[c.id] ?? "";
+                      const selfScore = activeAttitude?.selfPoints[c.id] ?? c.selfScore;
                       return (
                         <div key={c.id} className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
                           <div className="px-5 py-3" style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${BORDER}` }}>
@@ -962,9 +1072,9 @@ export function TeamReviews() {
                               <p className="text-[10px] font-bold uppercase tracking-wide mb-2" style={{ color: MUTED }}>Self-Assessment</p>
                               <div className="flex items-center gap-2">
                                 <div className="w-7 h-7 rounded flex items-center justify-center text-[12px] font-bold text-white"
-                                  style={{ backgroundColor: SCORE_META[c.selfScore].color }}>{c.selfScore}</div>
-                                <span className="text-[12px]" style={{ color: SCORE_META[c.selfScore].color }}>
-                                  {SCORE_META[c.selfScore].label}
+                                  style={{ backgroundColor: SCORE_META[selfScore].color }}>{selfScore}</div>
+                                <span className="text-[12px]" style={{ color: SCORE_META[selfScore].color }}>
+                                  {SCORE_META[selfScore].label}
                                 </span>
                               </div>
                             </div>
@@ -1089,4 +1199,8 @@ export function TeamReviews() {
       )}
     </div>
   );
+}
+
+function formatDate(value: string) {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }

@@ -90,11 +90,6 @@ export const REQUIREMENT_GAPS: RequirementGap[] = [
     question: "Which KPI version applies to existing and future checkpoints, and is recalculation required?",
   },
   {
-    id: "working-days",
-    title: "Working Day deadlines",
-    question: "Which Malaysian holiday calendar and working-week rules should deadline generation use?",
-  },
-  {
     id: "role-frequency-defaults",
     title: "Role frequency defaults",
     question: "What is the production source of the default Monthly, Quarterly, and Annual role mappings?",

@@ -636,7 +636,8 @@ export function AttitudeSetup() {
   const performanceStore = usePerformanceStore();
   const defaultPeriodId = performanceStore.getConfigurationDefaultPeriodId();
   const defaultPeriod = performanceStore.periods.find(item => item.id === defaultPeriodId);
-  const [configs, setConfigs] = useState<Record<string, PeriodConfig>>(INITIAL_CONFIGS);
+  const hasStoredConfigs = Object.keys(performanceStore.state.attitudeConfigurations).length > 0;
+  const configs = (hasStoredConfigs ? performanceStore.state.attitudeConfigurations : INITIAL_CONFIGS) as Record<string, PeriodConfig>;
   const [period] = useState(defaultPeriod?.name ?? LIVE_PERIOD);
   const [showPeriodDd, setShowPeriodDd] = useState(false);
   const periodRef = useRef<HTMLDivElement>(null);
@@ -657,6 +658,10 @@ export function AttitudeSetup() {
   const [savedMsg, setSavedMsg] = useState("");
 
   useEffect(() => {
+    if (!hasStoredConfigs) performanceStore.setAttitudeConfigurations(INITIAL_CONFIGS);
+  }, [hasStoredConfigs, performanceStore]);
+
+  useEffect(() => {
     const fn = (e: MouseEvent) => {
       if (!periodRef.current?.contains(e.target as Node)) setShowPeriodDd(false);
     };
@@ -673,7 +678,7 @@ export function AttitudeSetup() {
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   function mutatePeriod(updater: (prev: PeriodConfig) => PeriodConfig) {
-    setConfigs(prev => ({ ...prev, [period]: updater(prev[period] ?? prev[LIVE_PERIOD]) }));
+    performanceStore.setAttitudeConfigurations({ ...configs, [period]: updater(configs[period] ?? configs[LIVE_PERIOD]) });
   }
 
   function today() {

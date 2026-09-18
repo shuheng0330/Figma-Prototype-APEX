@@ -7,8 +7,9 @@ import {
 import { X, ChevronDown, ChevronRight, CheckCircle, AlertCircle, RotateCcw, ArrowLeft } from "lucide-react";
 import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, Decision,
-  PeriodAppraisal, resolvePeriodData, writeLive,
+  PeriodAppraisal, resolvePeriodData,
 } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -19,6 +20,10 @@ const PURPLE = "#7C3AED";
 const TEXT   = "#172033";
 const MUTED  = "#667085";
 const BORDER = "#DCE3EC";
+
+function formatPrototypeDate(value: string) {
+  return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kuala_Lumpur" });
+}
 
 const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
   "Draft":                { color: AMBER,  bg: "#FEF9EC" },
@@ -337,14 +342,17 @@ export function HrAppraisals() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const performanceStore = usePerformanceStore();
 
   const empId = id ?? "rizal";
   const emp = EMPLOYEES[empId];
   const selectedPeriod = searchParams.get("period") ?? LIVE_PERIOD;
   const isLivePeriod = selectedPeriod === LIVE_PERIOD;
 
-  const [refreshKey, setRefreshKey] = useState(0);
-  const pd = useMemo(() => resolvePeriodData(empId, selectedPeriod), [empId, selectedPeriod, refreshKey]);
+  const pd = useMemo(
+    () => resolvePeriodData(empId, selectedPeriod, isLivePeriod ? performanceStore.state.appraisals[empId] : undefined),
+    [empId, selectedPeriod, isLivePeriod, performanceStore.state.appraisals],
+  );
 
   const [showApproveModal,  setShowApproveModal]  = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
@@ -373,8 +381,7 @@ export function HrAppraisals() {
   const ss = STATUS_STYLE[status];
 
   function patch(updates: Partial<PeriodAppraisal>) {
-    writeLive(empId, updates);
-    setRefreshKey(k => k + 1);
+    if (isLivePeriod) performanceStore.updateAppraisal(empId, updates);
   }
 
   function handleApprove() {
@@ -382,7 +389,7 @@ export function HrAppraisals() {
       status: "Approved",
       hrApprovalMethod: "Accepted Superior Recommendation",
       hrDecision: pd!.managerDecision,
-      finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      finalDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
     setShowApproveModal(false);
   }
@@ -394,7 +401,7 @@ export function HrAppraisals() {
       hrApprovalMethod: "Overridden Recommendation",
       hrDecision,
       hrOverrideReason: reason,
-      finalDate: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      finalDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
     setShowOverrideModal(false);
   }

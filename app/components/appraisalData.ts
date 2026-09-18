@@ -99,13 +99,13 @@ export function writeLive(empId: string, patch: Partial<PeriodAppraisal>) {
 }
 
 /** Returns the period data merged with any localStorage overrides (live period only). */
-export function resolvePeriodData(empId: string, period: string): PeriodAppraisal | null {
+export function resolvePeriodData(empId: string, period: string, sharedLive?: Partial<PeriodAppraisal>): PeriodAppraisal | null {
   const emp = EMPLOYEES[empId];
   if (!emp) return null;
   const base = emp.periods[period];
   if (!base) return null;
   if (period !== LIVE_PERIOD) return base;
-  return { ...base, ...readLive(empId) };
+  return { ...base, ...(sharedLive ?? readLive(empId)) };
 }
 
 export const EMPLOYEES: Record<string, EmployeeAppraisalData> = {

@@ -9,7 +9,7 @@ import {
   FileText,
 } from "lucide-react";
 import { generateCheckpoints, isActivityOverdue, isCheckpointAvailable } from "../performance/domain";
-import { usePerformanceStore } from "../performance/store";
+import { usePerformanceStore, type KpiAssessmentRecord } from "../performance/store";
 
 const BLUE = "#2457A6";
 const TEAL = "#0F9F8F";
@@ -43,7 +43,8 @@ const SCORE_META: Record<
 type KpiLevel = "Company" | "Department" | "Individual";
 type CheckpointStatus =
   "Reviewed" | "Draft" | "Upcoming" | "Pending Review";
-type CheckpointId = "jan" | "feb" | "mar";
+const CHECKPOINT_IDS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"] as const;
+type CheckpointId = (typeof CHECKPOINT_IDS)[number];
 
 interface ScoreDef {
   s5: string;
@@ -230,10 +231,10 @@ const KPI_ROWS: KpiRow[] = [
   },
 ];
 
-const INIT_CHECKPOINT_STATES: Record<
+const INIT_CHECKPOINT_STATES: Partial<Record<
   CheckpointId,
   CheckpointData
-> = {
+>> = {
   jan: {
     status: "Reviewed",
     scores: { c1: 4, c2: 3, c3: 4, d1: 3, d2: 4, i1: 3, i2: 2 },
@@ -953,9 +954,8 @@ export function MyAssessments() {
   const selectedPeriod = openPeriod ?? performanceStore.periods.find(period => period.id === "2027") ?? performanceStore.periods[0];
   const checkpoints = useMemo<CheckpointMeta[]>(() => {
     if (!selectedPeriod) return CHECKPOINTS;
-    const ids: CheckpointId[] = ["jan", "feb", "mar"];
-    return generateCheckpoints(selectedPeriod, "Monthly").slice(0, 3).map((checkpoint, index) => ({
-      id: ids[index],
+    return generateCheckpoints(selectedPeriod, "Monthly").slice(0, 12).map((checkpoint, index) => ({
+      id: CHECKPOINT_IDS[index],
       label: checkpoint.label,
       date: new Date(`${checkpoint.checkpointDate}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }),
       deadline: new Date(`${checkpoint.selfDeadline}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }),
@@ -966,12 +966,30 @@ export function MyAssessments() {
   const [tab, setTab] = useState<"kpi" | "attitude">("kpi");
   const [selectedCpId, setSelectedCpId] =
     useState<CheckpointId>("feb");
-  const [cpStates, setCpStates] = useState<
-    Record<CheckpointId, CheckpointData>
-  >(INIT_CHECKPOINT_STATES);
-  const [attitudeRows, setAttitudeRows] =
-    useState<AttitudeRow[]>(INIT_ATTITUDE);
-  const [attStatus, setAttStatus] = useState<"Draft" | "Pending Review" | "Reviewed">("Draft");
+  const assessmentKey = (checkpointId: CheckpointId) => `${selectedPeriod?.id ?? "2027"}:amir:${checkpointId}`;
+  const emptyCheckpointState = (): CheckpointData => ({
+    status: "Draft",
+    scores: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
+    comments: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, ""])),
+    evidence: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
+  });
+  const cpStates = Object.fromEntries(CHECKPOINT_IDS.map(checkpointId => {
+    const stored = performanceStore.state.kpiAssessments[assessmentKey(checkpointId)];
+    return [checkpointId, stored ? {
+      status: stored.status,
+      scores: stored.selfPoints,
+      comments: stored.selfComments,
+      evidence: stored.evidence,
+      overdue: stored.completedLate,
+    } : (INIT_CHECKPOINT_STATES[checkpointId] ?? emptyCheckpointState())];
+  })) as Record<CheckpointId, CheckpointData>;
+  const attitudeRecord = performanceStore.state.attitudeAssessments[`${selectedPeriod?.id ?? "2027"}:amir`];
+  const attitudeRows: AttitudeRow[] = INIT_ATTITUDE.map(row => ({
+    ...row,
+    score: attitudeRecord?.selfPoints[row.id] ?? null,
+    comment: attitudeRecord?.selfComments[row.id] ?? "",
+  }));
+  const attStatus = attitudeRecord?.status ?? "Draft";
   const [showKpiDialog, setShowKpiDialog] = useState(false);
   const [showAttDialog, setShowAttDialog] = useState(false);
   const [criteriaKpiId, setCriteriaId] = useState<
@@ -988,8 +1006,7 @@ export function MyAssessments() {
     currentState.status === "Pending Review";
   const checkpointAvailable = !currentCp.availableFrom || performanceStore.state.effectiveDate >= currentCp.availableFrom;
   const isUpcoming = !checkpointAvailable;
-  const isEditable =
-    currentState.status === "Draft" || currentState.status === "Upcoming";
+  const isEditable = checkpointAvailable && currentState.status === "Draft";
   const currentOverdue = isActivityOverdue(currentCp.deadlineIso ?? currentCp.deadline, undefined, performanceStore.state.effectiveDate) && currentState.status !== "Reviewed";
   const attitudeOverdue = selectedPeriod
     ? isActivityOverdue(selectedPeriod.deadlines.attitudeSelf, undefined, performanceStore.state.effectiveDate) && attStatus !== "Reviewed"
@@ -1012,57 +1029,44 @@ export function MyAssessments() {
 
   // ── Checkpoint state updaters ──
   function setScore(kpiId: string, score: number) {
-    setCpStates((prev) => ({
-      ...prev,
-      [selectedCpId]: {
-        ...prev[selectedCpId],
-        scores: {
-          ...prev[selectedCpId].scores,
-          [kpiId]: score,
-        },
-      },
-    }));
+    const record = getCurrentAssessmentRecord();
+    performanceStore.upsertKpiAssessment({ ...record, selfPoints: { ...record.selfPoints, [kpiId]: score } });
   }
   function setComment(kpiId: string, comment: string) {
-    setCpStates((prev) => ({
-      ...prev,
-      [selectedCpId]: {
-        ...prev[selectedCpId],
-        comments: {
-          ...prev[selectedCpId].comments,
-          [kpiId]: comment,
-        },
-      },
-    }));
+    const record = getCurrentAssessmentRecord();
+    performanceStore.upsertKpiAssessment({ ...record, selfComments: { ...record.selfComments, [kpiId]: comment } });
   }
   function setEvidence(
     kpiId: string,
     file: EvidenceFile | null,
   ) {
-    setCpStates((prev) => ({
-      ...prev,
-      [selectedCpId]: {
-        ...prev[selectedCpId],
-        evidence: {
-          ...prev[selectedCpId].evidence,
-          [kpiId]: file,
-        },
-      },
-    }));
+    const record = getCurrentAssessmentRecord();
+    performanceStore.upsertKpiAssessment({ ...record, evidence: { ...record.evidence, [kpiId]: file } });
+  }
+
+  function getCurrentAssessmentRecord(): KpiAssessmentRecord {
+    const existing = performanceStore.state.kpiAssessments[assessmentKey(selectedCpId)];
+    if (existing) return existing;
+    return {
+      id: assessmentKey(selectedCpId), periodId: selectedPeriod?.id ?? "2027", employeeId: "amir",
+      checkpointId: selectedCpId, checkpointLabel: currentCp.label, status: "Draft",
+      selfPoints: currentState.scores, selfComments: currentState.comments, evidence: currentState.evidence,
+      superiorPoints: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
+      superiorComments: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, ""])),
+    };
   }
 
   function updateCpStatus(
     status: CheckpointStatus,
     extra?: Partial<CheckpointData>,
   ) {
-    setCpStates((prev) => ({
-      ...prev,
-      [selectedCpId]: {
-        ...prev[selectedCpId],
-        status,
-        ...extra,
-      },
-    }));
+    const record = getCurrentAssessmentRecord();
+    performanceStore.upsertKpiAssessment({
+      ...record,
+      status: status === "Upcoming" ? "Draft" : status,
+      completedLate: extra?.overdue ?? record.completedLate,
+      submittedAt: status === "Pending Review" ? performanceStore.state.effectiveDate : record.submittedAt,
+    });
   }
 
   function handleSaveDraft() {
@@ -1071,16 +1075,21 @@ export function MyAssessments() {
   }
 
   function handleKpiSubmit() {
-    updateCpStatus("Pending Review");
+    updateCpStatus("Pending Review", { overdue: currentOverdue || currentState.overdue });
     setShowKpiDialog(false);
   }
 
   function handleAttSubmit() {
-    setAttStatus("Pending Review");
+    if (attitudeRecord) performanceStore.upsertAttitudeAssessment({
+      ...attitudeRecord,
+      status: "Pending Review",
+      submittedAt: performanceStore.state.effectiveDate,
+      completedLate: attitudeOverdue || attitudeRecord.completedLate,
+    });
     setShowAttDialog(false);
   }
 
-  const cpStatusStyle = CP_STATUS_STYLE[currentState.status];
+  const cpStatusStyle = CP_STATUS_STYLE[isUpcoming ? "Upcoming" : currentState.status];
 
   return (
     <div
@@ -1287,6 +1296,15 @@ export function MyAssessments() {
                       Self-Assessment Points are now read-only while your Superior completes the review.
                     </p>
                   </div>
+                </div>
+              </div>
+            )}
+            {currentState.status === "Reviewed" && (
+              <div className="flex items-start gap-3 p-4 rounded-lg" style={{ backgroundColor: "#ECFDF9", border: `1px solid #6EE7B7` }}>
+                <CheckCircle size={16} className="mt-0.5 shrink-0" style={{ color: TEAL }} />
+                <div>
+                  <p className="text-[13px] font-semibold" style={{ color: TEAL }}>Your KPI Self-Assessment has been reviewed by your Superior.</p>
+                  <p className="text-[12px] mt-0.5" style={{ color: MUTED }}>The submitted Self-Assessment Points remain preserved and read-only.</p>
                 </div>
               </div>
             )}
@@ -1730,15 +1748,10 @@ export function MyAssessments() {
                           <ScoreSelector
                             value={r.score}
                             minScore={1}
-                            onChange={(v) =>
-                              setAttitudeRows((prev) =>
-                                prev.map((a) =>
-                                  a.id === r.id
-                                    ? { ...a, score: v }
-                                    : a,
-                                ),
-                              )
-                            }
+                            onChange={(v) => attitudeRecord && performanceStore.upsertAttitudeAssessment({
+                              ...attitudeRecord,
+                              selfPoints: { ...attitudeRecord.selfPoints, [r.id]: v },
+                            })}
                           />
                         )}
                       </div>
@@ -1746,18 +1759,10 @@ export function MyAssessments() {
                     {attStatus === "Draft" && (
                       <textarea
                         value={r.comment}
-                        onChange={(e) =>
-                          setAttitudeRows((prev) =>
-                            prev.map((a) =>
-                              a.id === r.id
-                                ? {
-                                    ...a,
-                                    comment: e.target.value,
-                                  }
-                                : a,
-                            ),
-                          )
-                        }
+                        onChange={(e) => attitudeRecord && performanceStore.upsertAttitudeAssessment({
+                          ...attitudeRecord,
+                          selfComments: { ...attitudeRecord.selfComments, [r.id]: e.target.value },
+                        })}
                         placeholder="Optional comment…"
                         rows={2}
                         className="mt-3 w-full px-3 py-2 rounded-md text-[12px] outline-none resize-none"

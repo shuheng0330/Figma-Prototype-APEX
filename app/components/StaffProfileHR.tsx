@@ -655,7 +655,7 @@ export function StaffProfileHR() {
   const [showAssessment, setShowAssessment] = useState(false);
   const [showAttitude,   setShowAttitude]   = useState(false);
 
-  const pd = resolvePeriodData(empId, selectedPeriod);
+  const pd = resolvePeriodData(empId, selectedPeriod, selectedPeriod === LIVE_PERIOD ? performanceStore.state.appraisals[empId] : undefined);
 
   const chartData = useMemo(
     () => chartYears === 3 ? emp.trendData.slice(-3) : emp.trendData,

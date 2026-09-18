@@ -7,8 +7,9 @@ import {
 import { Sparkles, X, Send, ArrowLeft, ChevronDown, ChevronRight } from "lucide-react";
 import {
   EMPLOYEES, PERIOD_OPTIONS, LIVE_PERIOD, AppStatus, Decision,
-  PeriodAppraisal, resolvePeriodData, writeLive,
+  PeriodAppraisal, resolvePeriodData,
 } from "./appraisalData";
+import { usePerformanceStore } from "../performance/store";
 
 const BLUE   = "#2457A6";
 const TEAL   = "#0F9F8F";
@@ -29,6 +30,10 @@ const STATUS_STYLE: Record<AppStatus, { color: string; bg: string }> = {
 
 function todayStr() {
   return new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatPrototypeDate(value: string) {
+  return new Date(`${value}T00:00:00+08:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kuala_Lumpur" });
 }
 
 function buildAiInsight(firstName: string) {
@@ -176,6 +181,7 @@ export function FinalAppraisals() {
   const { id }          = useParams<{ id: string }>();
   const navigate        = useNavigate();
   const [searchParams]  = useSearchParams();
+  const performanceStore = usePerformanceStore();
 
   const empId          = id ?? "amir";
   const selectedPeriod = searchParams.get("period") ?? LIVE_PERIOD;
@@ -183,13 +189,9 @@ export function FinalAppraisals() {
   const firstName      = emp.name.split(" ")[0];
   const isLivePeriod   = selectedPeriod === LIVE_PERIOD;
 
-  // refreshKey forces re-evaluation of pd after localStorage writes
-  const [refreshKey, setRefreshKey] = useState(0);
-
   const pd = useMemo(
-    () => resolvePeriodData(empId, selectedPeriod),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [empId, selectedPeriod, refreshKey]
+    () => resolvePeriodData(empId, selectedPeriod, isLivePeriod ? performanceStore.state.appraisals[empId] : undefined),
+    [empId, selectedPeriod, isLivePeriod, performanceStore.state.appraisals]
   );
 
   // Editable local state (only used when isEditable)
@@ -205,7 +207,7 @@ export function FinalAppraisals() {
 
   // Sync editable fields when navigating between employees or periods
   useEffect(() => {
-    const data = resolvePeriodData(empId, selectedPeriod);
+    const data = resolvePeriodData(empId, selectedPeriod, isLivePeriod ? performanceStore.state.appraisals[empId] : undefined);
     setDecision(data?.managerDecision ?? null);
     setMgrComment(data?.justification ?? "");
     setAiShown(false);
@@ -214,9 +216,7 @@ export function FinalAppraisals() {
     setPrevOpen(false);
     setHistDrawer(null);
     setChartYears(5);
-    setRefreshKey(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empId, selectedPeriod]);
+  }, [empId, selectedPeriod, isLivePeriod, performanceStore.state.appraisals]);
 
   if (!pd) {
     return (
@@ -247,8 +247,7 @@ export function FinalAppraisals() {
     .map(p => ({ period: p, data: emp.periods[p] }));
 
   function patch(updates: Partial<PeriodAppraisal>) {
-    writeLive(empId, updates);
-    setRefreshKey(k => k + 1);
+    if (isLivePeriod) performanceStore.updateAppraisal(empId, updates);
   }
 
   function saveDraft() {
@@ -262,7 +261,7 @@ export function FinalAppraisals() {
       status: "Pending Review",
       managerDecision: decision,
       justification: mgrComment,
-      submittedDate: todayStr(),
+      submittedDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
     setShowSubmit(false);
   }
@@ -272,7 +271,7 @@ export function FinalAppraisals() {
       status: "Pending Review",
       managerDecision: decision,
       justification: mgrComment,
-      submittedDate: todayStr(),
+      submittedDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
   }
 
@@ -289,7 +288,7 @@ export function FinalAppraisals() {
       hrDecision: decision,
       hrApprovalMethod: "Accepted Superior Recommendation",
       hrOverrideReason: "",
-      finalDate: todayStr(),
+      finalDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
   }
 
@@ -306,7 +305,7 @@ export function FinalAppraisals() {
       hrDecision: overrideDec,
       hrApprovalMethod: "Overridden Recommendation",
       hrOverrideReason: `HR has applied an override per company policy. Original recommendation of "${decision}" has been adjusted to "${overrideDec}". See policy guidelines for override criteria.`,
-      finalDate: todayStr(),
+      finalDate: formatPrototypeDate(performanceStore.state.effectiveDate),
     });
   }
 
