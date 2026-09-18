@@ -965,13 +965,17 @@ export function MyAssessments() {
   }, [selectedPeriod]);
   const [tab, setTab] = useState<"kpi" | "attitude">("kpi");
   const [selectedCpId, setSelectedCpId] =
-    useState<CheckpointId>("feb");
+    useState<CheckpointId>("jan");
   const assessmentKey = (checkpointId: CheckpointId) => `${selectedPeriod?.id ?? "2027"}:amir:${checkpointId}`;
+  const selectedStoredAssessment = performanceStore.state.kpiAssessments[assessmentKey(selectedCpId)];
+  const kpiRows: KpiRow[] = (selectedStoredAssessment?.kpiSnapshots
+    ?? (selectedPeriod ? performanceStore.getConfirmedEmployeeKpiPlan(selectedPeriod.id, "amir") : []))
+    .map(kpi => ({ id:kpi.id, level:kpi.level, name:kpi.name, target:kpi.target, scoreDef:kpi.scoreDef }));
   const emptyCheckpointState = (): CheckpointData => ({
     status: "Draft",
-    scores: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
-    comments: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, ""])),
-    evidence: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
+    scores: Object.fromEntries(kpiRows.map(kpi => [kpi.id, null])),
+    comments: Object.fromEntries(kpiRows.map(kpi => [kpi.id, ""])),
+    evidence: Object.fromEntries(kpiRows.map(kpi => [kpi.id, null])),
   });
   const cpStates = Object.fromEntries(CHECKPOINT_IDS.map(checkpointId => {
     const stored = performanceStore.state.kpiAssessments[assessmentKey(checkpointId)];
@@ -981,14 +985,13 @@ export function MyAssessments() {
       comments: stored.selfComments,
       evidence: stored.evidence,
       overdue: stored.completedLate,
-    } : (INIT_CHECKPOINT_STATES[checkpointId] ?? emptyCheckpointState())];
+    } : (selectedPeriod?.id === "2027" ? (INIT_CHECKPOINT_STATES[checkpointId] ?? emptyCheckpointState()) : emptyCheckpointState())];
   })) as Record<CheckpointId, CheckpointData>;
   const attitudeRecord = performanceStore.state.attitudeAssessments[`${selectedPeriod?.id ?? "2027"}:amir`];
-  const attitudeRows: AttitudeRow[] = INIT_ATTITUDE.map(row => ({
-    ...row,
-    score: attitudeRecord?.selfPoints[row.id] ?? null,
-    comment: attitudeRecord?.selfComments[row.id] ?? "",
-  }));
+  const attitudeCriteria = attitudeRecord?.criteria?.length
+    ? attitudeRecord.criteria
+    : selectedPeriod ? performanceStore.getAttitudeCriteria(selectedPeriod.id, "amir") : [];
+  const attitudeRows: AttitudeRow[] = attitudeCriteria.map(row => ({ id:row.id, criterion:row.criterion, description:row.description, score: attitudeRecord?.selfPoints[row.id] ?? null, comment: attitudeRecord?.selfComments[row.id] ?? "" }));
   const attStatus = attitudeRecord?.status ?? "Draft";
   const [showKpiDialog, setShowKpiDialog] = useState(false);
   const [showAttDialog, setShowAttDialog] = useState(false);
@@ -1012,7 +1015,7 @@ export function MyAssessments() {
     ? isActivityOverdue(selectedPeriod.deadlines.attitudeSelf, undefined, performanceStore.state.effectiveDate) && attStatus !== "Reviewed"
     : false;
 
-  const allKpiScored = KPI_ROWS.every(
+  const allKpiScored = kpiRows.length > 0 && kpiRows.every(
     (k) => (currentState.scores[k.id] ?? null) !== null,
   );
   const evidenceCount = Object.values(
@@ -1024,7 +1027,7 @@ export function MyAssessments() {
   );
 
   const criteriaKpi = criteriaKpiId
-    ? (KPI_ROWS.find((k) => k.id === criteriaKpiId) ?? null)
+    ? (kpiRows.find((k) => k.id === criteriaKpiId) ?? null)
     : null;
 
   // ── Checkpoint state updaters ──
@@ -1050,9 +1053,10 @@ export function MyAssessments() {
     return {
       id: assessmentKey(selectedCpId), periodId: selectedPeriod?.id ?? "2027", employeeId: "amir",
       checkpointId: selectedCpId, checkpointLabel: currentCp.label, status: "Draft",
+      checkpointDate: currentCp.date, selfDeadline: currentCp.deadlineIso, kpiSnapshots: selectedPeriod ? performanceStore.getConfirmedEmployeeKpiPlan(selectedPeriod.id, "amir") : [],
       selfPoints: currentState.scores, selfComments: currentState.comments, evidence: currentState.evidence,
-      superiorPoints: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, null])),
-      superiorComments: Object.fromEntries(KPI_ROWS.map(kpi => [kpi.id, ""])),
+      superiorPoints: Object.fromEntries(kpiRows.map(kpi => [kpi.id, null])),
+      superiorComments: Object.fromEntries(kpiRows.map(kpi => [kpi.id, ""])),
     };
   }
 
@@ -1080,13 +1084,21 @@ export function MyAssessments() {
   }
 
   function handleAttSubmit() {
-    if (attitudeRecord) performanceStore.upsertAttitudeAssessment({
-      ...attitudeRecord,
+    const record = getAttitudeRecord();
+    performanceStore.upsertAttitudeAssessment({
+      ...record,
       status: "Pending Review",
       submittedAt: performanceStore.state.effectiveDate,
-      completedLate: attitudeOverdue || attitudeRecord.completedLate,
+      completedLate: attitudeOverdue || record.completedLate,
     });
     setShowAttDialog(false);
+  }
+
+  function getAttitudeRecord() {
+    if (attitudeRecord) return attitudeRecord;
+    const points = Object.fromEntries(attitudeCriteria.map(criterion => [criterion.id, null]));
+    const comments = Object.fromEntries(attitudeCriteria.map(criterion => [criterion.id, ""]));
+    return { id:`${selectedPeriod?.id ?? "2027"}:amir`, periodId:selectedPeriod?.id ?? "2027", employeeId:"amir", format:"Sales" as const, criteria:attitudeCriteria, status:"Draft" as const, selfPoints:points, selfComments:comments, superiorPoints:{...points}, superiorComments:{...comments} };
   }
 
   const cpStatusStyle = CP_STATUS_STYLE[isUpcoming ? "Upcoming" : currentState.status];
@@ -1201,7 +1213,7 @@ export function MyAssessments() {
                   <span>Checkpoint: {currentCp.date}</span>
                   <span>Deadline: {currentCp.deadline}</span>
                   {(currentState.overdue || currentOverdue) && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ color: RED, backgroundColor: "#FEF3F2" }}>Overdue</span>}
-                  <span>KPIs: {KPI_ROWS.length}</span>
+                  <span>KPIs: {kpiRows.length}</span>
                 </div>
               </div>
 
@@ -1367,7 +1379,7 @@ export function MyAssessments() {
                     </tr>
                   </thead>
                   <tbody>
-                    {KPI_ROWS.map((kpi, i) => {
+                    {kpiRows.map((kpi, i) => {
                       const ls = LEVEL_STYLE[kpi.level];
                       const score =
                         currentState.scores[kpi.id] ?? null;
@@ -1375,7 +1387,7 @@ export function MyAssessments() {
                         currentState.comments[kpi.id] ?? "";
                       const evidence =
                         currentState.evidence[kpi.id] ?? null;
-                      const isLast = i === KPI_ROWS.length - 1;
+                      const isLast = i === kpiRows.length - 1;
                       return (
                         <tr
                           key={kpi.id}
@@ -1748,10 +1760,10 @@ export function MyAssessments() {
                           <ScoreSelector
                             value={r.score}
                             minScore={1}
-                            onChange={(v) => attitudeRecord && performanceStore.upsertAttitudeAssessment({
-                              ...attitudeRecord,
-                              selfPoints: { ...attitudeRecord.selfPoints, [r.id]: v },
-                            })}
+                            onChange={(v) => { const record = getAttitudeRecord(); performanceStore.upsertAttitudeAssessment({
+                              ...record,
+                              selfPoints: { ...record.selfPoints, [r.id]: v },
+                            }); }}
                           />
                         )}
                       </div>
@@ -1759,10 +1771,10 @@ export function MyAssessments() {
                     {attStatus === "Draft" && (
                       <textarea
                         value={r.comment}
-                        onChange={(e) => attitudeRecord && performanceStore.upsertAttitudeAssessment({
-                          ...attitudeRecord,
-                          selfComments: { ...attitudeRecord.selfComments, [r.id]: e.target.value },
-                        })}
+                        onChange={(e) => { const record = getAttitudeRecord(); performanceStore.upsertAttitudeAssessment({
+                          ...record,
+                          selfComments: { ...record.selfComments, [r.id]: e.target.value },
+                        }); }}
                         placeholder="Optional comment…"
                         rows={2}
                         className="mt-3 w-full px-3 py-2 rounded-md text-[12px] outline-none resize-none"

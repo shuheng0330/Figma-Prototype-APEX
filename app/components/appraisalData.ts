@@ -34,13 +34,14 @@ export interface EmployeeAppraisalData {
 }
 
 export const PERIOD_OPTIONS = [
+  "2028 Annual KPI Review",
   "2027 Annual KPI Review",
   "2026 Annual KPI Review",
   "2025 Annual KPI Review",
   "2024 Annual KPI Review",
 ];
 
-export const LIVE_PERIOD = "2027 Annual KPI Review";
+export const LIVE_PERIOD = "2028 Annual KPI Review";
 
 // localStorage keys — only live-period state is mutable
 const K = (empId: string, field: string) => `apx3_${empId}_${field}`;
@@ -103,6 +104,23 @@ export function resolvePeriodData(empId: string, period: string, sharedLive?: Pa
   const emp = EMPLOYEES[empId];
   if (!emp) return null;
   const base = emp.periods[period];
+  if (!base && period === LIVE_PERIOD && sharedLive) {
+    return {
+      status: sharedLive.status ?? "Draft",
+      readyForAppraisal: sharedLive.readyForAppraisal,
+      kpiScore: sharedLive.kpiScore ?? 0,
+      attScore: sharedLive.attScore ?? 0,
+      finalScore: sharedLive.finalScore ?? 0,
+      managerDecision: sharedLive.managerDecision ?? null,
+      justification: sharedLive.justification ?? "",
+      hrDecision: sharedLive.hrDecision ?? null,
+      hrApprovalMethod: sharedLive.hrApprovalMethod ?? null,
+      hrOverrideReason: sharedLive.hrOverrideReason ?? "",
+      hrReturnReason: sharedLive.hrReturnReason ?? "",
+      submittedDate: sharedLive.submittedDate ?? "",
+      finalDate: sharedLive.finalDate ?? "",
+    };
+  }
   if (!base) return null;
   if (period !== LIVE_PERIOD) return base;
   return { ...base, ...(sharedLive ?? readLive(empId)) };

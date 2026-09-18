@@ -38,10 +38,13 @@ function fmt(iso: string) {
 
 export function ReviewPeriods() {
   const navigate = useNavigate();
-  const { periods, state, requirementGaps, setEffectiveDate, resetDemoData, deletePeriod } = usePerformanceStore();
+  const { periods, state, requirementGaps, setEffectiveDate, resetDemoData, deletePeriod, prepareEmployeeForAppraisal } = usePerformanceStore();
   const [search, setSearch]         = useState("");
   const [statusFilter, setStatus]   = useState("All");
   const [yearFilter, setYear]        = useState("All");
+  const [demoPeriodId, setDemoPeriodId] = useState("2028");
+  const [demoEmployeeId, setDemoEmployeeId] = useState("amir");
+  const [demoMessage, setDemoMessage] = useState("");
 
   const visible = periods.filter(p => {
     const q = search.toLowerCase();
@@ -93,6 +96,20 @@ export function ReviewPeriods() {
           </div>
         </div>
         <div className="mt-4 pt-4 border-t" style={{ borderColor: BORDER }}>
+          <div className="p-3 mb-4 rounded-md" style={{ backgroundColor:"#EEF3FC", border:"1px solid #B8CCEA" }}>
+            <p className="text-[12px] font-bold" style={{ color: BLUE }}>Demo Tools — Prototype Simulation Only</p>
+            <p className="text-[11px] mt-1" style={{ color: MUTED }}>Prepare the remaining reviewed checkpoints without weakening the real Ready for Appraisal rule. Existing manual work is preserved.</p>
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <select value={demoPeriodId} onChange={event => setDemoPeriodId(event.target.value)} className="px-3 py-2 rounded-md text-[12px] bg-white" style={{ border:`1px solid ${BORDER}` }}>
+                {periods.map(period => <option key={period.id} value={period.id}>{period.name} — {period.status}</option>)}
+              </select>
+              <select value={demoEmployeeId} onChange={event => setDemoEmployeeId(event.target.value)} className="px-3 py-2 rounded-md text-[12px] bg-white" style={{ border:`1px solid ${BORDER}` }}>
+                {Object.values(state.employees).map(employee => <option key={employee.id} value={employee.id}>{employee.name} · {employee.staffId}</option>)}
+              </select>
+              <button onClick={() => { const result = prepareEmployeeForAppraisal(demoPeriodId, demoEmployeeId); setDemoMessage(result.message); }} className="px-3 py-2 rounded-md text-[12px] font-semibold text-white" style={{ backgroundColor: BLUE }}>Prepare Employee for Appraisal</button>
+              {demoMessage && <span className="text-[11px]" style={{ color: demoMessage.startsWith("Remaining") ? TEAL : AMBER }}>{demoMessage}</span>}
+            </div>
+          </div>
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle size={13} style={{ color: AMBER }}/>
             <p className="text-[12px] font-bold" style={{ color: TEXT }}>Stakeholder Requirement Gaps</p>

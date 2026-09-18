@@ -371,7 +371,7 @@ function drawPdfLineChart(
   y: number,
   width: number,
   height: number,
-  rows: Array<{ year: string; [key: string]: string | number }>,
+  rows: Array<{ year: string; [key: string]: string | number | undefined }>,
   series: Array<{ key: string; label: string; color: PdfRgb }>,
 ) {
   const legendColumns = series.length > 4 ? 3 : series.length;
@@ -418,16 +418,23 @@ function drawPdfLineChart(
   });
 
   series.forEach(item => {
-    const points = rows.map((row, index) => ({
-      x: plotX + (rows.length === 1 ? plotW / 2 : (plotW / (rows.length - 1)) * index),
-      y: plotY + plotH - ((Number(row[item.key]) - min) / range) * plotH,
-    }));
     pdf.setDrawColor(...item.color);
     pdf.setFillColor(...item.color);
     pdf.setLineWidth(0.8);
-    points.forEach((point, index) => {
-      if (index > 0) pdf.line(points[index - 1].x, points[index - 1].y, point.x, point.y);
+    let previousPoint: { x: number; y: number } | null = null;
+    rows.forEach((row, index) => {
+      const value = Number(row[item.key]);
+      if (!Number.isFinite(value)) {
+        previousPoint = null;
+        return;
+      }
+      const point = {
+        x: plotX + (rows.length === 1 ? plotW / 2 : (plotW / (rows.length - 1)) * index),
+        y: plotY + plotH - ((value - min) / range) * plotH,
+      };
+      if (previousPoint) pdf.line(previousPoint.x, previousPoint.y, point.x, point.y);
       pdf.circle(point.x, point.y, 1.1, "F");
+      previousPoint = point;
     });
   });
 }
@@ -559,8 +566,14 @@ export function OrgWideEvaluation() {
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  const summary     = PERIOD_SUMMARY[period] ?? PERIOD_SUMMARY[LIVE_PERIOD];
   const periodYear  = parseInt(period.split(" ")[0]);
+  const selectedPeriodId = performanceStore.periods.find(item => item.name === period)?.id;
+  const workflowResults = selectedPeriodId ? Object.values(performanceStore.state.performanceResults).filter(result => result.periodId === selectedPeriodId) : [];
+  const average = (values:number[]) => values.length ? values.reduce((sum,value)=>sum+value,0)/values.length : 0;
+  const summary: PeriodSummary = workflowResults.length ? {
+    total:Object.keys(performanceStore.state.employees).length, withResults:workflowResults.length,
+    kpiScore:average(workflowResults.map(result=>result.kpiPerformanceScore)), attScore:average(workflowResults.map(result=>result.attitudeEvaluationScore)), finalScore:average(workflowResults.map(result=>result.finalAppraisalScore)),
+  } : PERIOD_SUMMARY[period] ?? PERIOD_SUMMARY[LIVE_PERIOD];
   const pStatus     = (performanceStore.periods.find(item => item.name === period)?.status ?? PERIOD_STATUS[period] ?? "Closed") as PeriodStatus;
   const pStatusSty  = PERIOD_STATUS_STYLE[pStatus];
 
@@ -570,12 +583,20 @@ export function OrgWideEvaluation() {
     return Array.from({ length: count }, (_, i) => periodYear - (count - 1) + i)
       .map(y => {
         const yr = String(y);
+        if (y === periodYear && workflowResults.length) {
+          const value = orgMetric === "kpi"
+            ? summary.kpiScore
+            : orgMetric === "attitude"
+              ? summary.attScore
+              : summary.finalScore;
+          return { year: yr, value };
+        }
         const d  = ORG_YEAR_DATA[yr];
         if (!d) return null;
         return { year: yr, value: d[orgMetric as keyof DeptSlice] as number };
       })
       .filter(Boolean);
-  }, [period, orgMetric, orgWindow]);
+  }, [periodYear, orgMetric, orgWindow, workflowResults.length, summary.kpiScore, summary.attScore, summary.finalScore]);
 
   // ── Dept Growth Trend ──────────────────────────────────────────────────────
   const deptTrendRows = useMemo(() => {
@@ -584,28 +605,54 @@ export function OrgWideEvaluation() {
       const yr  = String(y);
       const row: Record<string, any> = { year: yr };
       selectedDepts.forEach(dept => {
+        if (y === periodYear && workflowResults.length) {
+          const results = workflowResults.filter(result => performanceStore.state.employees[result.employeeId]?.department === dept);
+          if (results.length) {
+            row[dept] = average(results.map(result => deptMetric === "kpi"
+              ? result.kpiPerformanceScore
+              : deptMetric === "attitude"
+                ? result.attitudeEvaluationScore
+                : result.finalAppraisalScore));
+            return;
+          }
+        }
         const d = DEPT_YEAR_DATA[dept]?.[yr];
         if (d) row[dept] = d[deptMetric as keyof DeptSlice];
       });
       return row;
     });
-  }, [period, deptMetric, deptWindow, selectedDepts]);
+  }, [periodYear, deptMetric, deptWindow, selectedDepts, workflowResults, performanceStore.state.employees]);
 
   // ── Distribution ───────────────────────────────────────────────────────────
   const distData = useMemo(() =>
-    SCORE_DIST[period]?.[distMetric] ?? SCORE_DIST[LIVE_PERIOD][distMetric],
-    [period, distMetric]);
+    workflowResults.length ? ["Below 60","60–69","70–79","80–89","90–100"].map(range => {
+      const values=workflowResults.map(result=>distMetric==="kpi"?result.kpiPerformanceScore:distMetric==="attitude"?result.attitudeEvaluationScore:result.finalAppraisalScore);
+      const count=values.filter(value=>range==="Below 60"?value<60:range==="60–69"?value>=60&&value<70:range==="70–79"?value>=70&&value<80:range==="80–89"?value>=80&&value<90:value>=90).length;
+      return {range,count,pct:values.length?count/values.length*100:0};
+    }) : SCORE_DIST[period]?.[distMetric] ?? SCORE_DIST[LIVE_PERIOD][distMetric],
+    [period, distMetric, workflowResults]);
 
   // ── Dept Table ─────────────────────────────────────────────────────────────
   const deptRows = useMemo(() => {
-    const rows = DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD];
+    const rows = workflowResults.length ? Object.values(workflowResults.reduce((groups, result) => {
+      const employee=performanceStore.state.employees[result.employeeId]; const dept=employee?.department ?? "Unassigned";
+      const group=groups[dept] ?? {dept,total:Object.values(performanceStore.state.employees).filter(item=>item.department===dept).length,withResults:0,kpi:[] as number[],att:[] as number[],final:[] as number[]};
+      group.withResults++;group.kpi.push(result.kpiPerformanceScore);group.att.push(result.attitudeEvaluationScore);group.final.push(result.finalAppraisalScore);groups[dept]=group;return groups;
+    }, {} as Record<string,{dept:string;total:number;withResults:number;kpi:number[];att:number[];final:number[]}>)).map(group=>({dept:group.dept,total:group.total,withResults:group.withResults,kpiScore:average(group.kpi),attScore:average(group.att),finalScore:average(group.final),yoyChange:0})) : DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD];
     return [...rows].sort((a, b) => {
       const av = a[sortCol], bv = b[sortCol];
       return sortDir === "asc" ? av - bv : bv - av;
     });
-  }, [period, sortCol, sortDir]);
+  }, [period, sortCol, sortDir, workflowResults, performanceStore.state.employees]);
 
   const assessmentProgressRows = useMemo(() => {
+    if (selectedPeriodId && workflowResults.length) return deptRows.map(row => {
+      const employees=Object.values(performanceStore.state.employees).filter(employee=>employee.department===row.dept);
+      const pendingSelf=employees.filter(employee=>Object.values(performanceStore.state.kpiAssessments).some(record=>record.periodId===selectedPeriodId&&record.employeeId===employee.id&&record.status==="Draft")).length;
+      const pendingSuperior=employees.filter(employee=>Object.values(performanceStore.state.kpiAssessments).some(record=>record.periodId===selectedPeriodId&&record.employeeId===employee.id&&record.status==="Pending Review")).length;
+      const pendingHr=employees.filter(employee=>performanceStore.state.appraisals[employee.id]?.periodId===selectedPeriodId&&performanceStore.state.appraisals[employee.id]?.status==="Pending Review").length;
+      return {dept:row.dept,total:row.total,pendingSelf,pendingSuperior,pendingHr};
+    });
     const configured = DEPT_ASSESSMENT_PROGRESS[period];
     if (configured) return configured;
     return (DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD]).map(row => {
@@ -618,19 +665,23 @@ export function OrgWideEvaluation() {
         pendingHr: Math.max(1, outstanding + 4),
       };
     });
-  }, [period]);
+  }, [period, selectedPeriodId, workflowResults, deptRows, performanceStore.state.employees, performanceStore.state.kpiAssessments, performanceStore.state.appraisals]);
 
   // ── Rec Data ───────────────────────────────────────────────────────────────
-  const recItems   = (APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD])[recTab];
+  const workflowAppraisals = selectedPeriodId ? Object.values(performanceStore.state.appraisals).filter(item=>item.periodId===selectedPeriodId) : [];
+  const recItems   = workflowResults.length ? (["Promotion","Salary Increment","Both","No Recommendation"].map(label=>{const count=workflowAppraisals.filter(item=>(recTab==="manager"?item.managerDecision:item.hrDecision)===label).length;return{label,count,pct:workflowAppraisals.length?count/workflowAppraisals.length*100:0};})) : (APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD])[recTab];
   const maxRecCount = Math.max(...recItems.map(r => r.count));
 
   async function exportSummaryPdf() {
     setIsExporting(true);
     try {
       const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      const reportDeptRows = DEPT_PERF[period] ?? DEPT_PERF[LIVE_PERIOD];
-      const recommendations = APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD];
-      const historyYears = Object.keys(ORG_YEAR_DATA)
+      const reportDeptRows = deptRows;
+      const recommendations = workflowResults.length ? {
+        manager:["Promotion","Salary Increment","Both","No Recommendation"].map(label=>{const count=workflowAppraisals.filter(item=>item.managerDecision===label).length;return{label,count,pct:workflowAppraisals.length?count/workflowAppraisals.length*100:0};}),
+        hr:["Promotion","Salary Increment","Both","No Recommendation"].map(label=>{const count=workflowAppraisals.filter(item=>item.hrDecision===label).length;return{label,count,pct:workflowAppraisals.length?count/workflowAppraisals.length*100:0};}),
+      } : APPRAISAL_REC[period] ?? APPRAISAL_REC[LIVE_PERIOD];
+      const historyYears = [...Object.keys(ORG_YEAR_DATA), ...(workflowResults.length ? [String(periodYear)] : [])]
         .map(Number)
         .filter(year => year <= periodYear)
         .sort((a, b) => a - b)
@@ -638,17 +689,41 @@ export function OrgWideEvaluation() {
         .map(String);
       const organisationHistory = historyYears.map(year => ({
         year,
-        kpi: ORG_YEAR_DATA[year].kpi,
-        attitude: ORG_YEAR_DATA[year].attitude,
-        final: ORG_YEAR_DATA[year].final,
+        kpi: year===String(periodYear)&&workflowResults.length?summary.kpiScore:ORG_YEAR_DATA[year].kpi,
+        attitude: year===String(periodYear)&&workflowResults.length?summary.attScore:ORG_YEAR_DATA[year].attitude,
+        final: year===String(periodYear)&&workflowResults.length?summary.finalScore:ORG_YEAR_DATA[year].final,
       }));
       const departmentHistory = historyYears.map(year => {
-        const row: { year: string; [key: string]: string | number } = { year };
+        const row: { year: string; [key: string]: string | number | undefined } = { year };
         DEPARTMENTS.forEach(department => {
-          row[department] = DEPT_YEAR_DATA[department]?.[year]?.final ?? 0;
+          const activeDepartment = reportDeptRows.find(item => item.dept === department);
+          const value = year === String(periodYear) && workflowResults.length
+            ? activeDepartment?.finalScore
+            : DEPT_YEAR_DATA[department]?.[year]?.final;
+          if (value !== undefined) row[department] = value;
         });
         return row;
       });
+      const distributionFor = (metric: Metric): DistBucket[] => {
+        if (!workflowResults.length) return (SCORE_DIST[period] ?? SCORE_DIST[LIVE_PERIOD])[metric];
+        const values = workflowResults.map(result => metric === "kpi"
+          ? result.kpiPerformanceScore
+          : metric === "attitude"
+            ? result.attitudeEvaluationScore
+            : result.finalAppraisalScore);
+        return ["Below 60", "60–69", "70–79", "80–89", "90–100"].map(range => {
+          const count = values.filter(value => range === "Below 60"
+            ? value < 60
+            : range === "60–69"
+              ? value >= 60 && value < 70
+              : range === "70–79"
+                ? value >= 70 && value < 80
+                : range === "80–89"
+                  ? value >= 80 && value < 90
+                  : value >= 90).length;
+          return { range, count, pct: values.length ? count / values.length * 100 : 0 };
+        });
+      };
 
       // Page 1 - executive summary and organisation-level analytics.
       pdf.setFillColor(...PDF_COLORS.blue);
@@ -694,7 +769,11 @@ export function OrgWideEvaluation() {
       ]);
 
       pdfSectionTitle(pdf, "Score Distribution", 141);
-      const distribution = SCORE_DIST[period] ?? SCORE_DIST[LIVE_PERIOD];
+      const distribution = {
+        kpi: distributionFor("kpi"),
+        attitude: distributionFor("attitude"),
+        final: distributionFor("final"),
+      };
       drawPdfDistribution(pdf, 14, 147, 84, 43, "KPI Performance", distribution.kpi, PDF_COLORS.blue);
       drawPdfDistribution(pdf, 106.5, 147, 84, 43, "Attitude Evaluation", distribution.attitude, PDF_COLORS.teal);
       drawPdfDistribution(pdf, 199, 147, 84, 43, "Final Appraisal", distribution.final, PDF_COLORS.purple);

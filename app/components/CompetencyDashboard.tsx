@@ -283,7 +283,9 @@ export function CompetencyDashboard() {
     return TEAM_IDS.map(id => {
       const emp  = EMPLOYEES[id];
       const meta = EMP_META[id] ?? { dept: "Retail Banking", avatarColor: BLUE };
-      const pd   = resolvePeriodData(id, selectedPeriod);
+      const selectedPeriodId = performanceStore.periods.find(period => period.name === selectedPeriod)?.id;
+      const shared = selectedPeriodId === performanceStore.state.appraisals[id]?.periodId ? performanceStore.state.appraisals[id] : undefined;
+      const pd   = resolvePeriodData(id, selectedPeriod, shared);
       const prev = prevPeriod ? (emp.periods[prevPeriod] ?? null) : null;
       const trendDelta = pd && prev ? round1(pd.finalScore - prev.finalScore) : null;
       // sparkline from last 3 years of trendData
@@ -304,7 +306,7 @@ export function CompetencyDashboard() {
         readyForAppraisal: Boolean(pd?.readyForAppraisal),
       };
     });
-  }, [selectedPeriod, prevPeriod]);
+  }, [selectedPeriod, prevPeriod, performanceStore.state.appraisals, performanceStore.periods]);
 
   // ── Summary card values ─────────────────────────────────────────────────────
   const rowsWithData  = teamRows.filter(r => r.finalScore !== null);
@@ -316,8 +318,19 @@ export function CompetencyDashboard() {
   const selectedYear = parseInt(selectedPeriod.split(" ")[0]);
   const trendData = useMemo(() => {
     const all = TEAM_TREND_ALL.filter(d => parseInt(d.year) <= selectedYear);
+    if (rowsWithData.length && !all.some(row => Number(row.year) === selectedYear)) {
+      all.push({
+        year: String(selectedYear),
+        teamFinal: teamFinalAvg!,
+        teamKpi: teamKpiAvg!,
+        teamAttitude: teamAttAvg!,
+        orgFinal: teamFinalAvg!,
+        orgKpi: teamKpiAvg!,
+        orgAttitude: teamAttAvg!,
+      });
+    }
     return trendYears === 3 ? all.slice(-3) : all.slice(-5);
-  }, [trendYears, selectedYear]);
+  }, [trendYears, selectedYear, rowsWithData.length, teamFinalAvg, teamKpiAvg, teamAttAvg]);
 
   const teamTrendKey = `team${trendMetric.charAt(0).toUpperCase()}${trendMetric.slice(1)}` as
     "teamFinal" | "teamKpi" | "teamAttitude";

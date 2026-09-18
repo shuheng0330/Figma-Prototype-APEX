@@ -44,6 +44,7 @@ interface KpiRow {
   revisedBy?: string;
   revisionReason?: string;
   previousVersions?: KpiVersion[];
+  employeeId?: string;
 }
 
 const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "" };
@@ -664,7 +665,10 @@ export function MyKpiPlan() {
   const defaultPeriodName = performanceStore.periods.find(period => period.id === defaultPeriodId)?.name ?? "2027 Annual KPI Review";
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriodName);
   const planMap = performanceStore.state.employeeKpiPlansByPeriod as Record<string, KpiRow[]>;
-  const kpis = planMap[selectedPeriod] ?? INIT_KPIS;
+  const selectedPeriodRecord = performanceStore.periods.find(period => period.name === selectedPeriod);
+  const kpis = (selectedPeriodRecord
+    ? performanceStore.getEmployeeKpiPlan(selectedPeriodRecord.id, "amir")
+    : []) as KpiRow[];
   const [viewId, setViewId]                 = useState<string | null>(null);
   const [historyId, setHistoryId]           = useState<string | null>(null);
   const [editId, setEditId]                 = useState<string | null>(null);
@@ -674,16 +678,14 @@ export function MyKpiPlan() {
   const [showGuide, setShowGuide]           = useState(false);
   const [submitted, setSubmitted]           = useState(false);
 
-  useEffect(() => {
-    if (!planMap[selectedPeriod]) {
-      performanceStore.setEmployeeKpiPlansByPeriod({ ...planMap, [selectedPeriod]: INIT_KPIS.map(kpi => ({ ...kpi })) });
-    }
-  }, [selectedPeriod, planMap, performanceStore]);
-
   function setKpis(updater: (previous: KpiRow[]) => KpiRow[]) {
-    performanceStore.setEmployeeKpiPlansByPeriod({ ...planMap, [selectedPeriod]: updater(kpis) });
+    const updated = updater(kpis);
+    performanceStore.setEmployeeKpiPlansByPeriod({
+      ...planMap,
+      [selectedPeriod]: updated.filter(kpi => kpi.level === "Individual").map(kpi => ({ ...kpi, employeeId: "amir" })),
+    });
   }
-  const selectedSharedPeriod = performanceStore.periods.find(period => period.name === selectedPeriod);
+  const selectedSharedPeriod = selectedPeriodRecord;
   const isHistorical = selectedSharedPeriod?.status === "Closed";
   const isOpenPeriod = selectedSharedPeriod?.status === "Open";
   const isSetupPastDeadline = Boolean(selectedSharedPeriod && performanceStore.state.effectiveDate > selectedSharedPeriod.deadlines.kpiSetup);
@@ -748,7 +750,7 @@ export function MyKpiPlan() {
   function saveEdit(data: Omit<KpiRow, "id" | "level" | "status" | "returnReason">) {
     if (editIsCreate) {
       const newKpi: KpiRow = {
-        id: `i${Date.now()}`, level: "Individual", status: "Draft", ...data,
+        id: `i${Date.now()}`, level: "Individual", employeeId: "amir", status: "Draft", ...data,
       };
       setKpis(prev => [...prev, newKpi]);
     } else if (editId) {

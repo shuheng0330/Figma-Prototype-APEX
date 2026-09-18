@@ -1,354 +1,124 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, type ReactNode } from "react";
 import {
-  canDeleteReviewPeriod,
-  canEditReviewPeriod,
-  createReviewPeriodSnapshot,
-  REQUIREMENT_GAPS,
-  resolvePeriodStatus,
-  selectLatestPeriodWithResults,
-  validateReviewPeriod,
-  type ReviewPeriod,
-  type ReviewPeriodStatus,
+  calculateAnnualKpiPoint, calculateAttitudeScore, calculateFinalAppraisalScore,
+  calculateKpiPerformanceScore, calculateWeightedKpiScore, canDeleteReviewPeriod,
+  canEditReviewPeriod, createReviewPeriodSnapshot, generateCheckpoints, isReadyForAppraisal,
+  REQUIREMENT_GAPS, resolvePeriodStatus, selectLatestPeriodWithResults, validateReviewPeriod,
+  type ReviewPeriod, type ReviewPeriodStatus,
 } from "./domain";
 
-const STORAGE_KEY = "apex-performance-store-v2";
-export const PERFORMANCE_STORE_VERSION = 5;
-
+const STORAGE_KEY = "apex-performance-store-v7";
+export const PERFORMANCE_STORE_VERSION = 7;
 export type PointMap = Record<string, number | null>;
 export type CommentMap = Record<string, string>;
 export interface StoredEvidenceFile { name: string; size: string }
 export type EvidenceMap = Record<string, StoredEvidenceFile | null>;
 
+export interface EmployeeRecord { id:string; name:string; staffId:string; initials:string; role:string; departmentId:string; department:string; superiorId:string; attitudeFormat:"Manager"|"Sales"|"Others / Non-Sales"; reviewFrequency:"Monthly"|"Quarterly"|"Annually" }
+export interface ScoreDefinition { s5:string; s4:string; s3:string; s2:string; s1:string }
+export interface SharedKpiRecord {
+  id:string; level:"Company"|"Department"|"Individual"; perspective:string; kra:string; name:string; target:string; weightage:number;
+  status:"Draft"|"Published"|"Pending Approval"|"Approved"|"Returned"; scoreDef:ScoreDefinition; departmentId?:string; employeeId?:string;
+  returnReason?:string; overdue?:boolean; version?:number; publishedOn?:string; revisedOn?:string; revisedBy?:string; revisionReason?:string; previousVersions?:Array<Record<string, unknown>>;
+}
+export interface KpiSnapshot extends SharedKpiRecord { version:number }
 export interface KpiAssessmentRecord {
-  id: string;
-  periodId: string;
-  employeeId: string;
-  checkpointId: string;
-  checkpointLabel: string;
-  status: "Draft" | "Pending Review" | "Reviewed";
-  selfPoints: PointMap;
-  selfComments: CommentMap;
-  evidence: EvidenceMap;
-  superiorPoints: PointMap;
-  superiorComments: CommentMap;
-  submittedAt?: string;
-  reviewedAt?: string;
-  completedLate?: boolean;
+  id:string; periodId:string; employeeId:string; checkpointId:string; checkpointLabel:string; checkpointDate?:string; selfDeadline?:string; superiorDeadline?:string;
+  kpiSnapshots?:KpiSnapshot[]; status:"Draft"|"Pending Review"|"Reviewed"; selfPoints:PointMap; selfComments:CommentMap; evidence:EvidenceMap;
+  superiorPoints:PointMap; superiorComments:CommentMap; submittedAt?:string; reviewedAt?:string; completedLate?:boolean; generatedByDemoTool?:boolean;
 }
-
+export interface AttitudeCriterionSnapshot { id:string; criterion:string; description:string }
 export interface AttitudeAssessmentRecord {
-  id: string;
-  periodId: string;
-  employeeId: string;
-  status: "Draft" | "Pending Review" | "Reviewed";
-  selfPoints: PointMap;
-  selfComments: CommentMap;
-  superiorPoints: PointMap;
-  superiorComments: CommentMap;
-  submittedAt?: string;
-  reviewedAt?: string;
-  completedLate?: boolean;
+  id:string; periodId:string; employeeId:string; format?:EmployeeRecord["attitudeFormat"]; criteria?:AttitudeCriterionSnapshot[]; status:"Draft"|"Pending Review"|"Reviewed";
+  selfPoints:PointMap; selfComments:CommentMap; superiorPoints:PointMap; superiorComments:CommentMap; submittedAt?:string; reviewedAt?:string; completedLate?:boolean; generatedByDemoTool?:boolean;
 }
-
-export type StoredRecommendation = "Promotion" | "Salary Increment" | "Both" | "No Recommendation";
+export interface KpiResultItem { kpiId:string; name:string; level:SharedKpiRecord["level"]; target:string; weightage:number; annualPoint:number; kpiScore:number; version:number }
+export interface PerformanceResult { id:string; periodId:string; employeeId:string; calculatedAt:string; kpiPerformanceScore:number; attitudeEvaluationScore:number; finalAppraisalScore:number; kpiResults:KpiResultItem[]; attitudeFormat:EmployeeRecord["attitudeFormat"]; source:"workflow" }
+export type StoredRecommendation = "Promotion"|"Salary Increment"|"Both"|"No Recommendation";
 export interface StoredAppraisal {
-  status: "Draft" | "Pending Review" | "Returned" | "Approved";
-  readyForAppraisal?: boolean;
-  managerDecision: StoredRecommendation | null;
-  justification: string;
-  hrDecision: StoredRecommendation | null;
-  hrApprovalMethod?: "Accepted Superior Recommendation" | "Overridden Recommendation" | null;
-  hrOverrideReason: string;
-  hrReturnReason: string;
-  submittedDate: string;
-  finalDate: string;
+  periodId?:string; employeeId?:string; status:"Draft"|"Pending Review"|"Returned"|"Approved"; readyForAppraisal?:boolean; kpiScore?:number|null; attScore?:number|null; finalScore?:number|null;
+  managerDecision:StoredRecommendation|null; justification:string; hrDecision:StoredRecommendation|null; hrApprovalMethod?:"Accepted Superior Recommendation"|"Overridden Recommendation"|null;
+  hrOverrideReason:string; hrReturnReason:string; submittedDate:string; finalDate:string; submittedBy?:string; reviewedBy?:string;
 }
-
-export interface ResultAvailability {
-  employee: boolean;
-  team: boolean;
-  organisation: boolean;
-}
-
+export interface ResultAvailability { employee:boolean; team:boolean; organisation:boolean }
 export interface PerformanceStoreState {
-  version: number;
-  effectiveDate: string;
-  reviewPeriods: ReviewPeriod[];
-  resultsByPeriod: Record<string, ResultAvailability>;
-  kpiAssessments: Record<string, KpiAssessmentRecord>;
-  attitudeAssessments: Record<string, AttitudeAssessmentRecord>;
-  appraisals: Record<string, StoredAppraisal>;
-  companyKpisByPeriod: Record<string, any[]>;
-  departmentKpisByPeriod: Record<string, any[]>;
-  employeeKpiPlansByPeriod: Record<string, any[]>;
-  attitudeConfigurations: Record<string, any>;
-  resetCounter: number;
+  version:number; effectiveDate:string; reviewPeriods:ReviewPeriod[]; employees:Record<string,EmployeeRecord>; resultsByPeriod:Record<string,ResultAvailability>;
+  kpiAssessments:Record<string,KpiAssessmentRecord>; attitudeAssessments:Record<string,AttitudeAssessmentRecord>; performanceResults:Record<string,PerformanceResult>; appraisals:Record<string,StoredAppraisal>;
+  companyKpisByPeriod:Record<string,any[]>; departmentKpisByPeriod:Record<string,any[]>; employeeKpiPlansByPeriod:Record<string,any[]>; attitudeConfigurations:Record<string,any>; attitudeSnapshotsByPeriod:Record<string,any>; resetCounter:number;
+  kpiPlanSnapshotsByPeriodEmployee:Record<string,KpiSnapshot[]>;
 }
 
-const commonDeadlines = (year: number) => ({
-  kpiSetup: `${year}-01-01`,
-  selfAssessmentDays: 5,
-  superiorAssessmentDays: 5,
-  attitudeSelf: `${year}-12-20`,
-  attitudeSuperior: `${year}-12-27`,
-  superiorAppraisal: `${year + 1}-01-10`,
-  hrReview: `${year + 1}-01-20`,
-});
-
-const commonAllocations = { company: 15, department: 25, individual: 60, kpi: 50, attitude: 50 };
-
-const EMPTY_SELF_POINTS = { c1: null, c2: null, c3: null, d1: null, d2: null, i1: null, i2: null };
-const EMPTY_SELF_COMMENTS = { c1: "", c2: "", c3: "", d1: "", d2: "", i1: "", i2: "" };
-const EMPTY_EVIDENCE = { c1: null, c2: null, c3: null, d1: null, d2: null, i1: null, i2: null };
-const JAN_SELF_POINTS = { c1: 4, c2: 3, c3: 4, d1: 3, d2: 4, i1: 3, i2: 2 };
-const JAN_SELF_COMMENTS = {
-  c1: "Strong start to the year. Company revenue tracking ahead of target.", c2: "", c3: "",
-  d1: "Achieved RM 73,200 against the RM 80,000 target.", d2: "", i1: "",
-  i2: "Cross-sell at 16% for January. Will focus on product pairing in February.",
+const deadlines=(y:number,start=`${y}-01-01`)=>({kpiSetup:start,selfAssessmentDays:5,superiorAssessmentDays:5,attitudeSelf:`${y}-12-20`,attitudeSuperior:`${y}-12-27`,superiorAppraisal:`${y+1}-01-10`,hrReview:`${y+1}-01-20`});
+const allocations={company:15,department:25,individual:60,kpi:50,attitude:50};
+const EMPLOYEES:Record<string,EmployeeRecord>={
+  amir:{id:"amir",name:"Amir Hassan",staffId:"RS-1042",initials:"AH",role:"Retail Sales Executive",departmentId:"retail-sales",department:"Retail Sales",superiorId:"manager-a",attitudeFormat:"Sales",reviewFrequency:"Monthly"},
+  sarah:{id:"sarah",name:"Sarah Chen",staffId:"RS-1045",initials:"SC",role:"Retail Sales Executive",departmentId:"retail-sales",department:"Retail Sales",superiorId:"manager-a",attitudeFormat:"Sales",reviewFrequency:"Monthly"},
+  rizal:{id:"rizal",name:"Rizal Hamdan",staffId:"RS-1051",initials:"RH",role:"Retail Sales Executive",departmentId:"retail-sales",department:"Retail Sales",superiorId:"manager-a",attitudeFormat:"Sales",reviewFrequency:"Monthly"},
+  nurul:{id:"nurul",name:"Nurul Aina",staffId:"RS-1038",initials:"NA",role:"Retail Sales Senior",departmentId:"retail-sales",department:"Retail Sales",superiorId:"manager-a",attitudeFormat:"Sales",reviewFrequency:"Monthly"},
 };
+const appraisal=(periodId:string,employeeId:string,status:StoredAppraisal["status"],ready=false):StoredAppraisal=>({periodId,employeeId,status,readyForAppraisal:ready,kpiScore:null,attScore:null,finalScore:null,managerDecision:status==="Pending Review"?"Salary Increment":status==="Returned"?"No Recommendation":null,justification:status==="Pending Review"?"Consistent performance and positive contribution throughout the review period.":status==="Returned"?"Development support is recommended.":"",hrDecision:null,hrApprovalMethod:null,hrOverrideReason:"",hrReturnReason:status==="Returned"?"Please provide clearer evidence for the recommendation.":"",submittedDate:status==="Pending Review"||status==="Returned"?"15 Jan 2029":"",finalDate:""});
 
-const ATTITUDE_IDS = ["a1", "a2", "a3", "a4", "a5", "a6"];
-const emptyAttitudePoints = () => Object.fromEntries(ATTITUDE_IDS.map(id => [id, null]));
-const emptyAttitudeComments = () => Object.fromEntries(ATTITUDE_IDS.map(id => [id, ""]));
+export function createInitialPerformanceState():PerformanceStoreState{return{
+  version:PERFORMANCE_STORE_VERSION,effectiveDate:"2027-12-15",
+  reviewPeriods:[
+    {id:"2028",name:"2028 Annual KPI Review",configuredStatus:"Upcoming",startDate:"2028-01-31",endDate:"2028-12-31",lastUpdated:"2027-12-15",deadlines:deadlines(2028,"2028-01-31"),allocations,consolidationMethod:"average",roleFrequencies:{"retail-sales-executive":"Monthly"}},
+    {id:"2027",name:"2027 Annual KPI Review",configuredStatus:"Open",startDate:"2027-01-01",endDate:"2027-12-31",lastUpdated:"2026-08-22",deadlines:deadlines(2027),allocations,consolidationMethod:"final",snapshotCreatedAt:"2027-01-01"},
+    {id:"2026",name:"2026 Annual KPI Review",configuredStatus:"Closed",startDate:"2026-01-01",endDate:"2026-12-31",lastUpdated:"2026-01-10",deadlines:deadlines(2026),allocations,consolidationMethod:"final",snapshotCreatedAt:"2026-01-01"},
+    {id:"2025",name:"2025 Annual KPI Review",configuredStatus:"Closed",startDate:"2025-01-01",endDate:"2025-12-31",lastUpdated:"2025-12-28",deadlines:deadlines(2025),allocations,consolidationMethod:"final",snapshotCreatedAt:"2025-01-01"}],
+  employees:EMPLOYEES,resultsByPeriod:{"2028":{employee:false,team:false,organisation:false},"2027":{employee:true,team:true,organisation:true},"2026":{employee:true,team:true,organisation:true},"2025":{employee:true,team:true,organisation:true}},
+  kpiAssessments:{},attitudeAssessments:{},performanceResults:{},appraisals:{amir:appraisal("2028","amir","Draft"),sarah:appraisal("2028","sarah","Draft",true),rizal:appraisal("2028","rizal","Returned",true),nurul:appraisal("2028","nurul","Pending Review",true)},
+  companyKpisByPeriod:{},departmentKpisByPeriod:{},employeeKpiPlansByPeriod:{},attitudeConfigurations:{},attitudeSnapshotsByPeriod:{},kpiPlanSnapshotsByPeriodEmployee:{},resetCounter:0};}
+export const INITIAL_PERFORMANCE_STATE=createInitialPerformanceState();
 
-function createInitialPerformanceState(): PerformanceStoreState {
-  return {
-  version: PERFORMANCE_STORE_VERSION,
-  effectiveDate: "2027-04-10",
-  reviewPeriods: [
-    { id: "2028", name: "2028 Annual KPI Review", configuredStatus: "Upcoming", startDate: "2028-01-01", endDate: "2028-12-31", lastUpdated: "2026-09-10", deadlines: commonDeadlines(2028), allocations: commonAllocations, consolidationMethod: "final" },
-    { id: "2027", name: "2027 Annual KPI Review", configuredStatus: "Upcoming", startDate: "2027-01-01", endDate: "2027-12-31", lastUpdated: "2026-08-22", deadlines: commonDeadlines(2027), allocations: commonAllocations, consolidationMethod: "final" },
-    { id: "2026", name: "2026 Annual KPI Review", configuredStatus: "Closed", startDate: "2026-01-01", endDate: "2026-12-31", lastUpdated: "2026-01-10", deadlines: commonDeadlines(2026), allocations: commonAllocations, consolidationMethod: "final", snapshotCreatedAt: "2026-01-01" },
-    { id: "2025", name: "2025 Annual KPI Review", configuredStatus: "Closed", startDate: "2025-01-01", endDate: "2025-12-31", lastUpdated: "2025-12-28", deadlines: commonDeadlines(2025), allocations: commonAllocations, consolidationMethod: "final", snapshotCreatedAt: "2025-01-01" },
-  ],
-  resultsByPeriod: {
-    "2028": { employee: false, team: false, organisation: false },
-    "2027": { employee: true, team: true, organisation: true },
-    "2026": { employee: true, team: true, organisation: true },
-    "2025": { employee: true, team: true, organisation: true },
-  },
-  kpiAssessments: {
-    "2027:amir:jan": {
-      id: "2027:amir:jan", periodId: "2027", employeeId: "amir", checkpointId: "jan", checkpointLabel: "January 2027",
-      status: "Reviewed", selfPoints: JAN_SELF_POINTS, selfComments: JAN_SELF_COMMENTS,
-      evidence: { ...EMPTY_EVIDENCE, d1: { name: "sales-report-jan-2027.pdf", size: "2.4 MB" } },
-      superiorPoints: { c1: 4, c2: 3, c3: 4, d1: 3, d2: 4, i1: 3, i2: 2 },
-      superiorComments: { ...EMPTY_SELF_COMMENTS }, submittedAt: "2027-02-03", reviewedAt: "2027-02-05",
-    },
-    "2027:amir:feb": {
-      id: "2027:amir:feb", periodId: "2027", employeeId: "amir", checkpointId: "feb", checkpointLabel: "February 2027",
-      status: "Draft", selfPoints: { ...EMPTY_SELF_POINTS }, selfComments: { ...EMPTY_SELF_COMMENTS }, evidence: { ...EMPTY_EVIDENCE },
-      superiorPoints: { ...EMPTY_SELF_POINTS }, superiorComments: { ...EMPTY_SELF_COMMENTS },
-    },
-    "2027:amir:mar": {
-      id: "2027:amir:mar", periodId: "2027", employeeId: "amir", checkpointId: "mar", checkpointLabel: "March 2027",
-      status: "Draft", selfPoints: { ...EMPTY_SELF_POINTS }, selfComments: { ...EMPTY_SELF_COMMENTS }, evidence: { ...EMPTY_EVIDENCE },
-      superiorPoints: { ...EMPTY_SELF_POINTS }, superiorComments: { ...EMPTY_SELF_COMMENTS },
-    },
-  },
-  attitudeAssessments: {
-    "2027:amir": {
-      id: "2027:amir", periodId: "2027", employeeId: "amir", status: "Draft",
-      selfPoints: emptyAttitudePoints(), selfComments: emptyAttitudeComments(),
-      superiorPoints: emptyAttitudePoints(), superiorComments: emptyAttitudeComments(),
-    },
-  },
-  appraisals: {
-    amir: { status: "Draft", readyForAppraisal: true, managerDecision: null, justification: "", hrDecision: null, hrApprovalMethod: null, hrOverrideReason: "", hrReturnReason: "", submittedDate: "", finalDate: "" },
-    sarah: { status: "Draft", managerDecision: "Salary Increment", justification: "Sarah has shown consistent improvement.", hrDecision: null, hrApprovalMethod: null, hrOverrideReason: "", hrReturnReason: "", submittedDate: "", finalDate: "" },
-    rizal: { status: "Pending Review", managerDecision: "No Recommendation", justification: "A structured development plan is proposed.", hrDecision: null, hrApprovalMethod: null, hrOverrideReason: "", hrReturnReason: "", submittedDate: "15 Aug 2027", finalDate: "" },
-    nurul: { status: "Approved", managerDecision: "Promotion", justification: "Consistently exceeds targets.", hrDecision: "Promotion", hrApprovalMethod: "Accepted Superior Recommendation", hrOverrideReason: "", hrReturnReason: "", submittedDate: "10 Aug 2027", finalDate: "20 Aug 2027" },
-  },
-  companyKpisByPeriod: {},
-  departmentKpisByPeriod: {},
-  employeeKpiPlansByPeriod: {},
-  attitudeConfigurations: {},
-  resetCounter: 0,
-  };
+const periodFor=(s:PerformanceStoreState,id:string)=>s.reviewPeriods.find(p=>p.id===id);
+export function getEmployeeKpiPlanFromState(s:PerformanceStoreState,periodId:string,employeeId:string):SharedKpiRecord[]{
+  const p=periodFor(s,periodId),e=s.employees[employeeId]; if(!p||!e)return[];
+  const company=(s.companyKpisByPeriod[p.name]??[]).filter((k:any)=>k.status==="Published").map((k:any)=>({...k,level:"Company",status:"Published"}));
+  const department=(s.departmentKpisByPeriod[p.name]??[]).filter((k:any)=>k.status==="Published"&&(k.departmentId??"retail-sales")===e.departmentId).map((k:any)=>({...k,level:"Department",status:"Published",departmentId:k.departmentId??e.departmentId}));
+  const individual=(s.employeeKpiPlansByPeriod[p.name]??[]).filter((k:any)=>k.level==="Individual"&&(k.employeeId??employeeId)===employeeId).map((k:any)=>({...k,employeeId}));
+  return[...company,...department,...individual] as SharedKpiRecord[];
+}
+export function getConfirmedEmployeeKpiPlan(s:PerformanceStoreState,p:string,e:string):KpiSnapshot[]{const locked=s.kpiPlanSnapshotsByPeriodEmployee[`${p}:${e}`];return locked??getEmployeeKpiPlanFromState(s,p,e).filter(k=>k.status==="Published"||k.status==="Approved").map(k=>({...k,version:k.version??1}));}
+function activeCriteria(config:any,format:EmployeeRecord["attitudeFormat"]):AttitudeCriterionSnapshot[]{if(!config)return[];const shared=(config.sharedCriteria??[]).filter((c:any)=>c.status==="Active");const extra=format==="Manager"?config.managerCriteria:format==="Sales"?config.salesCriteria:config.nonSalesCriteria;return[...shared,...(extra??[]).filter((c:any)=>c.status==="Active")].map((c:any)=>({id:c.id,criterion:c.name,description:c.description}));}
+export function getAttitudeCriteriaFromState(s:PerformanceStoreState,p:string,e:string){const employee=s.employees[e];return employee?activeCriteria(s.attitudeSnapshotsByPeriod[p],employee.attitudeFormat):[];}
+
+export function applyEffectiveDateTransitions(s:PerformanceStoreState,date:string):PerformanceStoreState{
+  let snapshots=s.attitudeSnapshotsByPeriod;
+  let kpiPlans=s.kpiPlanSnapshotsByPeriodEmployee;
+  const periods=s.reviewPeriods.map(p=>{if(p.configuredStatus!=="Upcoming"||date<p.startDate)return p;const cfg=s.attitudeConfigurations[p.name];if(!snapshots[p.id]&&cfg?.configStatus==="Published")snapshots={...snapshots,[p.id]:structuredClone(cfg)};Object.keys(s.employees).forEach(employeeId=>{const key=`${p.id}:${employeeId}`;if(!kpiPlans[key]){const confirmed=getEmployeeKpiPlanFromState(s,p.id,employeeId).filter(k=>k.status==="Published"||k.status==="Approved").map(k=>({...k,version:k.version??1}));kpiPlans={...kpiPlans,[key]:structuredClone(confirmed)};}});return{...p,configuredStatus:"Open" as const,snapshotCreatedAt:p.snapshotCreatedAt??date,snapshot:p.snapshot??{...createReviewPeriodSnapshot(p,date),attitudeConfigurationVersion:cfg?.lastUpdated??"No published configuration"}};});
+  return{...s,effectiveDate:date,reviewPeriods:periods,attitudeSnapshotsByPeriod:snapshots,kpiPlanSnapshotsByPeriodEmployee:kpiPlans};
+}
+const MONTHS=["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+const demoPoint=(k:number,c:number)=>3+((k+c)%3);
+export function prepareEmployeeForAppraisalState(s:PerformanceStoreState,periodId:string,employeeId:string):PerformanceStoreState{
+  const p=periodFor(s,periodId),e=s.employees[employeeId];if(!p||!e||resolvePeriodStatus(p,s.effectiveDate)!=="Open")return s;
+  const kpis=getConfirmedEmployeeKpiPlan(s,periodId,employeeId);if(!kpis.length)return s;
+  const checkpoints=generateCheckpoints(p,e.reviewFrequency),kpiAssessments={...s.kpiAssessments};
+  checkpoints.forEach((cp,ci)=>{const code=e.reviewFrequency==="Monthly"?MONTHS[ci]:cp.id,id=`${periodId}:${employeeId}:${code}`,cur=kpiAssessments[id];if(cur?.status==="Reviewed")return;const self={...(cur?.selfPoints??{})},sup={...(cur?.superiorPoints??{})},sc={...(cur?.selfComments??{})},mc={...(cur?.superiorComments??{})},ev={...(cur?.evidence??{})};kpis.forEach((k,ki)=>{const pt=demoPoint(ki,ci);if(self[k.id]==null)self[k.id]=pt;if(sup[k.id]==null)sup[k.id]=pt;if(sc[k.id]===undefined)sc[k.id]="Prepared with deterministic prototype data.";if(mc[k.id]===undefined)mc[k.id]="Prepared for stakeholder appraisal simulation.";if(ev[k.id]===undefined)ev[k.id]=null;});kpiAssessments[id]={id,periodId,employeeId,checkpointId:code,checkpointLabel:cp.label,checkpointDate:cp.checkpointDate,selfDeadline:cp.selfDeadline,superiorDeadline:cp.superiorDeadline,kpiSnapshots:cur?.kpiSnapshots?.length?cur.kpiSnapshots:structuredClone(kpis),status:"Reviewed",selfPoints:self,selfComments:sc,evidence:ev,superiorPoints:sup,superiorComments:mc,submittedAt:cur?.submittedAt??cp.selfDeadline,reviewedAt:cur?.reviewedAt??cp.superiorDeadline,completedLate:cur?.completedLate??false,generatedByDemoTool:cur?cur.generatedByDemoTool:true};});
+  const attId=`${periodId}:${employeeId}`,curAtt=s.attitudeAssessments[attId],criteria=curAtt?.criteria?.length?curAtt.criteria:getAttitudeCriteriaFromState(s,periodId,employeeId),as={...(curAtt?.selfPoints??{})},ap={...(curAtt?.superiorPoints??{})},ac={...(curAtt?.selfComments??{})},auc={...(curAtt?.superiorComments??{})};criteria.forEach((c,i)=>{const pt=4+(i%2);if(as[c.id]==null)as[c.id]=pt;if(ap[c.id]==null)ap[c.id]=pt;if(ac[c.id]===undefined)ac[c.id]="Prepared with deterministic prototype data.";if(auc[c.id]===undefined)auc[c.id]="Prepared for stakeholder appraisal simulation.";});
+  const attitudeAssessments={...s.attitudeAssessments,[attId]:curAtt?.status==="Reviewed"?curAtt:{id:attId,periodId,employeeId,format:e.attitudeFormat,criteria,status:"Reviewed" as const,selfPoints:as,selfComments:ac,superiorPoints:ap,superiorComments:auc,submittedAt:curAtt?.submittedAt??p.deadlines.attitudeSelf,reviewedAt:curAtt?.reviewedAt??p.deadlines.attitudeSuperior,completedLate:curAtt?.completedLate??false,generatedByDemoTool:curAtt?curAtt.generatedByDemoTool:true}};
+  const reviewed=Object.values(kpiAssessments).filter(r=>r.periodId===periodId&&r.employeeId===employeeId&&r.status==="Reviewed");
+  const kpiResults=kpis.map(k=>{const points=checkpoints.map((cp,i)=>kpiAssessments[`${periodId}:${employeeId}:${e.reviewFrequency==="Monthly"?MONTHS[i]:cp.id}`]?.superiorPoints[k.id]).filter((v):v is number=>typeof v==="number");const annualPoint=calculateAnnualKpiPoint(points,p.consolidationMethod)??0;return{kpiId:k.id,name:k.name,level:k.level,target:k.target,weightage:k.weightage,annualPoint,kpiScore:calculateWeightedKpiScore(annualPoint,k.weightage),version:k.version};});
+  const kpiScore=calculateKpiPerformanceScore(kpiResults),attScore=calculateAttitudeScore(Object.values(attitudeAssessments[attId].superiorPoints).filter((v):v is number=>typeof v==="number"))??0,finalScore=calculateFinalAppraisalScore(kpiScore,attScore,p.allocations.kpi,p.allocations.attitude),ready=isReadyForAppraisal(reviewed.map(r=>r.status),attitudeAssessments[attId].status)&&reviewed.length===checkpoints.length,id=`${periodId}:${employeeId}`;
+  return{...s,kpiAssessments,attitudeAssessments,performanceResults:ready?{...s.performanceResults,[id]:{id,periodId,employeeId,calculatedAt:s.effectiveDate,kpiPerformanceScore:kpiScore,attitudeEvaluationScore:attScore,finalAppraisalScore:finalScore,kpiResults,attitudeFormat:e.attitudeFormat,source:"workflow"}}:s.performanceResults,appraisals:{...s.appraisals,[employeeId]:{...(s.appraisals[employeeId]??appraisal(periodId,employeeId,"Draft")),periodId,employeeId,readyForAppraisal:ready,kpiScore:ready?kpiScore:null,attScore:ready?attScore:null,finalScore:ready?finalScore:null}},resultsByPeriod:ready?{...s.resultsByPeriod,[periodId]:{employee:true,team:true,organisation:true}}:s.resultsByPeriod};
 }
 
-export const INITIAL_PERFORMANCE_STATE: PerformanceStoreState = createInitialPerformanceState();
-
-type Action =
-  | { type: "SET_DATE"; date: string }
-  | { type: "UPSERT_PERIOD"; period: ReviewPeriod }
-  | { type: "PUBLISH_PERIOD"; id: string }
-  | { type: "DELETE_PERIOD"; id: string }
-  | { type: "UPSERT_KPI_ASSESSMENT"; record: KpiAssessmentRecord }
-  | { type: "UPSERT_ATTITUDE_ASSESSMENT"; record: AttitudeAssessmentRecord }
-  | { type: "UPDATE_APPRAISAL"; employeeId: string; patch: Partial<StoredAppraisal> }
-  | { type: "SET_COMPANY_KPIS"; value: Record<string, any[]> }
-  | { type: "SET_DEPARTMENT_KPIS"; value: Record<string, any[]> }
-  | { type: "SET_EMPLOYEE_KPI_PLANS"; value: Record<string, any[]> }
-  | { type: "SET_ATTITUDE_CONFIGURATIONS"; value: Record<string, any> }
-  | { type: "RESET" };
-
-function applyDateTransitions(state: PerformanceStoreState, effectiveDate: string): PerformanceStoreState {
-  return {
-    ...state,
-    effectiveDate,
-    reviewPeriods: state.reviewPeriods.map(period => {
-      if (period.configuredStatus !== "Upcoming" || effectiveDate < period.startDate) return period;
-      return {
-        ...period,
-        configuredStatus: "Open",
-        snapshotCreatedAt: period.snapshotCreatedAt ?? period.startDate,
-        snapshot: period.snapshot ?? createReviewPeriodSnapshot(period, period.startDate),
-      };
-    }),
-  };
+type Action={type:"SET_DATE";date:string}|{type:"UPSERT_PERIOD";period:ReviewPeriod}|{type:"PUBLISH_PERIOD";id:string}|{type:"DELETE_PERIOD";id:string}|{type:"UPSERT_KPI_ASSESSMENT";record:KpiAssessmentRecord}|{type:"UPSERT_ATTITUDE_ASSESSMENT";record:AttitudeAssessmentRecord}|{type:"UPDATE_APPRAISAL";employeeId:string;patch:Partial<StoredAppraisal>}|{type:"SET_COMPANY_KPIS";value:Record<string,any[]>}|{type:"SET_DEPARTMENT_KPIS";value:Record<string,any[]>}|{type:"SET_EMPLOYEE_KPI_PLANS";value:Record<string,any[]>}|{type:"SET_ATTITUDE_CONFIGURATIONS";value:Record<string,any>}|{type:"PREPARE_EMPLOYEE";periodId:string;employeeId:string}|{type:"RESET"};
+function reducer(s:PerformanceStoreState,a:Action):PerformanceStoreState{
+  if(a.type==="RESET"){const f=createInitialPerformanceState();return{...applyEffectiveDateTransitions(f,f.effectiveDate),resetCounter:s.resetCounter+1};}
+  if(a.type==="SET_DATE")return applyEffectiveDateTransitions(s,a.date);
+  if(a.type==="UPSERT_PERIOD"){if(validateReviewPeriod(a.period).length)return s;const old=s.reviewPeriods.find(p=>p.id===a.period.id);if(old&&!canEditReviewPeriod(resolvePeriodStatus(old,s.effectiveDate)))return s;return{...s,reviewPeriods:old?s.reviewPeriods.map(p=>p.id===a.period.id?a.period:p):[a.period,...s.reviewPeriods]};}
+  if(a.type==="PUBLISH_PERIOD"){const p=periodFor(s,a.id);if(!p||validateReviewPeriod(p).length||p.configuredStatus!=="Draft")return s;return{...s,reviewPeriods:s.reviewPeriods.map(x=>x.id===a.id?{...x,configuredStatus:"Upcoming",lastUpdated:s.effectiveDate}:x)};}
+  if(a.type==="DELETE_PERIOD"){const p=periodFor(s,a.id);if(!p||!canDeleteReviewPeriod(resolvePeriodStatus(p,s.effectiveDate)))return s;const by=<T extends{periodId:string}>(r:Record<string,T>)=>Object.fromEntries(Object.entries(r).filter(([,v])=>v.periodId!==a.id));const{[a.id]:_r,...results}=s.resultsByPeriod,{[a.id]:_s,...snaps}=s.attitudeSnapshotsByPeriod;const names=(v:Record<string,any>)=>Object.fromEntries(Object.entries(v).filter(([n])=>n!==p.name));return{...s,reviewPeriods:s.reviewPeriods.filter(x=>x.id!==a.id),resultsByPeriod:results,kpiAssessments:by(s.kpiAssessments),attitudeAssessments:by(s.attitudeAssessments),performanceResults:by(s.performanceResults),companyKpisByPeriod:names(s.companyKpisByPeriod),departmentKpisByPeriod:names(s.departmentKpisByPeriod),employeeKpiPlansByPeriod:names(s.employeeKpiPlansByPeriod),attitudeConfigurations:names(s.attitudeConfigurations),attitudeSnapshotsByPeriod:snaps,kpiPlanSnapshotsByPeriodEmployee:Object.fromEntries(Object.entries(s.kpiPlanSnapshotsByPeriodEmployee).filter(([key])=>!key.startsWith(`${a.id}:`)))};}
+  if(a.type==="UPSERT_KPI_ASSESSMENT")return{...s,kpiAssessments:{...s.kpiAssessments,[a.record.id]:a.record}};
+  if(a.type==="UPSERT_ATTITUDE_ASSESSMENT")return{...s,attitudeAssessments:{...s.attitudeAssessments,[a.record.id]:a.record}};
+  if(a.type==="UPDATE_APPRAISAL"){const c=s.appraisals[a.employeeId];return!c||c.status==="Approved"?s:{...s,appraisals:{...s.appraisals,[a.employeeId]:{...c,...a.patch}}};}
+  if(a.type==="SET_COMPANY_KPIS")return{...s,companyKpisByPeriod:a.value};if(a.type==="SET_DEPARTMENT_KPIS")return{...s,departmentKpisByPeriod:a.value};if(a.type==="SET_EMPLOYEE_KPI_PLANS")return{...s,employeeKpiPlansByPeriod:a.value};if(a.type==="SET_ATTITUDE_CONFIGURATIONS")return{...s,attitudeConfigurations:a.value};if(a.type==="PREPARE_EMPLOYEE")return prepareEmployeeForAppraisalState(s,a.periodId,a.employeeId);return s;
 }
+function load():PerformanceStoreState{if(typeof window==="undefined")return INITIAL_PERFORMANCE_STATE;try{const raw=localStorage.getItem(STORAGE_KEY);if(!raw)return applyEffectiveDateTransitions(createInitialPerformanceState(),INITIAL_PERFORMANCE_STATE.effectiveDate);const parsed=JSON.parse(raw) as PerformanceStoreState;return parsed.version===PERFORMANCE_STORE_VERSION?applyEffectiveDateTransitions(parsed,parsed.effectiveDate):applyEffectiveDateTransitions(createInitialPerformanceState(),INITIAL_PERFORMANCE_STATE.effectiveDate);}catch{return applyEffectiveDateTransitions(createInitialPerformanceState(),INITIAL_PERFORMANCE_STATE.effectiveDate);}}
 
-function reducer(state: PerformanceStoreState, action: Action): PerformanceStoreState {
-  if (action.type === "RESET") {
-    const fresh = createInitialPerformanceState();
-    return { ...applyDateTransitions(fresh, fresh.effectiveDate), resetCounter: state.resetCounter + 1 };
-  }
-  if (action.type === "SET_DATE") return applyDateTransitions(state, action.date);
-  if (action.type === "UPSERT_PERIOD") {
-    const existing = state.reviewPeriods.find(period => period.id === action.period.id);
-    if (existing && !canEditReviewPeriod(resolvePeriodStatus(existing, state.effectiveDate))) return state;
-    const exists = Boolean(existing);
-    const reviewPeriods = exists
-      ? state.reviewPeriods.map(period => period.id === action.period.id ? action.period : period)
-      : [action.period, ...state.reviewPeriods];
-    return { ...state, reviewPeriods };
-  }
-  if (action.type === "PUBLISH_PERIOD") {
-    return {
-      ...state,
-      reviewPeriods: state.reviewPeriods.map(period => period.id === action.id && period.configuredStatus === "Draft"
-        ? { ...period, configuredStatus: "Upcoming", lastUpdated: state.effectiveDate }
-        : period),
-    };
-  }
-  if (action.type === "DELETE_PERIOD") {
-    const period = state.reviewPeriods.find(item => item.id === action.id);
-    if (!period || !canDeleteReviewPeriod(resolvePeriodStatus(period, state.effectiveDate))) return state;
-    const { [action.id]: _removed, ...resultsByPeriod } = state.resultsByPeriod;
-    return { ...state, reviewPeriods: state.reviewPeriods.filter(item => item.id !== action.id), resultsByPeriod };
-  }
-  if (action.type === "UPSERT_KPI_ASSESSMENT") {
-    return { ...state, kpiAssessments: { ...state.kpiAssessments, [action.record.id]: action.record } };
-  }
-  if (action.type === "UPSERT_ATTITUDE_ASSESSMENT") {
-    return { ...state, attitudeAssessments: { ...state.attitudeAssessments, [action.record.id]: action.record } };
-  }
-  if (action.type === "UPDATE_APPRAISAL") {
-    const current = state.appraisals[action.employeeId];
-    if (!current) return state;
-    return { ...state, appraisals: { ...state.appraisals, [action.employeeId]: { ...current, ...action.patch } } };
-  }
-  if (action.type === "SET_COMPANY_KPIS") return { ...state, companyKpisByPeriod: action.value };
-  if (action.type === "SET_DEPARTMENT_KPIS") return { ...state, departmentKpisByPeriod: action.value };
-  if (action.type === "SET_EMPLOYEE_KPI_PLANS") return { ...state, employeeKpiPlansByPeriod: action.value };
-  if (action.type === "SET_ATTITUDE_CONFIGURATIONS") return { ...state, attitudeConfigurations: action.value };
-  return state;
-}
-
-function loadInitialState(): PerformanceStoreState {
-  if (typeof window === "undefined") return INITIAL_PERFORMANCE_STATE;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const fresh = createInitialPerformanceState();
-      return applyDateTransitions(fresh, fresh.effectiveDate);
-    }
-    const parsed = JSON.parse(raw) as PerformanceStoreState;
-    return parsed.version === PERFORMANCE_STORE_VERSION
-      ? applyDateTransitions(parsed, parsed.effectiveDate)
-      : applyDateTransitions(createInitialPerformanceState(), INITIAL_PERFORMANCE_STATE.effectiveDate);
-  } catch {
-    return applyDateTransitions(createInitialPerformanceState(), INITIAL_PERFORMANCE_STATE.effectiveDate);
-  }
-}
-
-interface PerformanceStoreValue {
-  state: PerformanceStoreState;
-  periods: Array<ReviewPeriod & { status: ReviewPeriodStatus }>;
-  requirementGaps: typeof REQUIREMENT_GAPS;
-  setEffectiveDate: (date: string) => void;
-  resetDemoData: () => void;
-  upsertPeriod: (period: ReviewPeriod) => void;
-  publishPeriod: (id: string) => { ok: boolean; errors: ReturnType<typeof validateReviewPeriod> };
-  deletePeriod: (id: string) => void;
-  upsertKpiAssessment: (record: KpiAssessmentRecord) => void;
-  upsertAttitudeAssessment: (record: AttitudeAssessmentRecord) => void;
-  updateAppraisal: (employeeId: string, patch: Partial<StoredAppraisal>) => void;
-  setCompanyKpisByPeriod: (value: Record<string, any[]>) => void;
-  setDepartmentKpisByPeriod: (value: Record<string, any[]>) => void;
-  setEmployeeKpiPlansByPeriod: (value: Record<string, any[]>) => void;
-  setAttitudeConfigurations: (value: Record<string, any>) => void;
-  getPeriod: (id: string) => (ReviewPeriod & { status: ReviewPeriodStatus }) | undefined;
-  getConfigurationDefaultPeriodId: () => string | null;
-  getDashboardDefaultPeriodId: (scope: keyof ResultAvailability) => string | null;
-}
-
-const PerformanceStoreContext = createContext<PerformanceStoreValue | null>(null);
-
-export function PerformanceStoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, loadInitialState);
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
-
-  const value = useMemo<PerformanceStoreValue>(() => {
-    const periods = state.reviewPeriods
-      .map(period => ({ ...period, status: resolvePeriodStatus(period, state.effectiveDate) }))
-      .sort((a, b) => Number(b.id) - Number(a.id));
-    return {
-      state,
-      periods,
-      requirementGaps: REQUIREMENT_GAPS,
-      setEffectiveDate: date => dispatch({ type: "SET_DATE", date }),
-      resetDemoData: () => {
-        Object.keys(window.localStorage).filter(key => key.startsWith("apx3_")).forEach(key => window.localStorage.removeItem(key));
-        dispatch({ type: "RESET" });
-        window.dispatchEvent(new Event("performanceDemoReset"));
-        window.dispatchEvent(new Event("appraisalStatusChange"));
-      },
-      upsertPeriod: period => dispatch({ type: "UPSERT_PERIOD", period }),
-      publishPeriod: id => {
-        const period = state.reviewPeriods.find(item => item.id === id);
-        const errors = period ? validateReviewPeriod(period) : [{ code: "NOT_FOUND", message: "Review Period not found." }];
-        if (!errors.length) dispatch({ type: "PUBLISH_PERIOD", id });
-        return { ok: errors.length === 0, errors };
-      },
-      deletePeriod: id => dispatch({ type: "DELETE_PERIOD", id }),
-      upsertKpiAssessment: record => dispatch({ type: "UPSERT_KPI_ASSESSMENT", record }),
-      upsertAttitudeAssessment: record => dispatch({ type: "UPSERT_ATTITUDE_ASSESSMENT", record }),
-      updateAppraisal: (employeeId, patch) => dispatch({ type: "UPDATE_APPRAISAL", employeeId, patch }),
-      setCompanyKpisByPeriod: value => dispatch({ type: "SET_COMPANY_KPIS", value }),
-      setDepartmentKpisByPeriod: value => dispatch({ type: "SET_DEPARTMENT_KPIS", value }),
-      setEmployeeKpiPlansByPeriod: value => dispatch({ type: "SET_EMPLOYEE_KPI_PLANS", value }),
-      setAttitudeConfigurations: value => dispatch({ type: "SET_ATTITUDE_CONFIGURATIONS", value }),
-      getPeriod: id => periods.find(period => period.id === id),
-      getConfigurationDefaultPeriodId: () => {
-        const upcoming = periods.find(period => period.status === "Upcoming");
-        return upcoming?.id ?? periods.find(period => period.status === "Open")?.id ?? null;
-      },
-      getDashboardDefaultPeriodId: scope => selectLatestPeriodWithResults(periods.map(period => ({
-        periodId: period.id,
-        hasResults: state.resultsByPeriod[period.id]?.[scope] ?? false,
-      }))),
-    };
-  }, [state]);
-
-  return <PerformanceStoreContext.Provider value={value}>{children}</PerformanceStoreContext.Provider>;
-}
-
-export function usePerformanceStore() {
-  const value = useContext(PerformanceStoreContext);
-  if (!value) throw new Error("usePerformanceStore must be used inside PerformanceStoreProvider");
-  return value;
-}
-
-export function usePeriodAccess(periodId: string | null) {
-  const store = usePerformanceStore();
-  const period = periodId ? store.getPeriod(periodId) : undefined;
-  return {
-    period,
-    canEdit: period ? canEditReviewPeriod(period.status) : false,
-    canDelete: period ? canDeleteReviewPeriod(period.status) : false,
-  };
-}
+interface Value{state:PerformanceStoreState;periods:Array<ReviewPeriod&{status:ReviewPeriodStatus}>;requirementGaps:typeof REQUIREMENT_GAPS;setEffectiveDate:(d:string)=>void;resetDemoData:()=>void;upsertPeriod:(p:ReviewPeriod)=>{ok:boolean;errors:ReturnType<typeof validateReviewPeriod>};publishPeriod:(id:string)=>{ok:boolean;errors:ReturnType<typeof validateReviewPeriod>};deletePeriod:(id:string)=>void;upsertKpiAssessment:(r:KpiAssessmentRecord)=>void;upsertAttitudeAssessment:(r:AttitudeAssessmentRecord)=>void;updateAppraisal:(e:string,p:Partial<StoredAppraisal>)=>void;setCompanyKpisByPeriod:(v:Record<string,any[]>)=>void;setDepartmentKpisByPeriod:(v:Record<string,any[]>)=>void;setEmployeeKpiPlansByPeriod:(v:Record<string,any[]>)=>void;setAttitudeConfigurations:(v:Record<string,any>)=>void;prepareEmployeeForAppraisal:(p:string,e:string)=>{ok:boolean;message:string};getEmployeeKpiPlan:(p:string,e:string)=>SharedKpiRecord[];getConfirmedEmployeeKpiPlan:(p:string,e:string)=>KpiSnapshot[];getAttitudeCriteria:(p:string,e:string)=>AttitudeCriterionSnapshot[];getPerformanceResult:(p:string,e:string)=>PerformanceResult|undefined;getPeriod:(id:string)=>(ReviewPeriod&{status:ReviewPeriodStatus})|undefined;getConfigurationDefaultPeriodId:()=>string|null;getDashboardDefaultPeriodId:(s:keyof ResultAvailability)=>string|null}
+const Context=createContext<Value|null>(null);
+export function PerformanceStoreProvider({children}:{children:ReactNode}){const[state,dispatch]=useReducer(reducer,undefined,load);useEffect(()=>localStorage.setItem(STORAGE_KEY,JSON.stringify(state)),[state]);const value=useMemo<Value>(()=>{const periods=state.reviewPeriods.map(p=>({...p,status:resolvePeriodStatus(p,state.effectiveDate)})).sort((a,b)=>Number(b.id)-Number(a.id));return{state,periods,requirementGaps:REQUIREMENT_GAPS,setEffectiveDate:date=>dispatch({type:"SET_DATE",date}),resetDemoData:()=>{Object.keys(localStorage).filter(k=>k.startsWith("apx3_")||k.startsWith("apex-performance-store-")).forEach(k=>localStorage.removeItem(k));dispatch({type:"RESET"});window.dispatchEvent(new Event("performanceDemoReset"));window.dispatchEvent(new Event("appraisalStatusChange"));},upsertPeriod:p=>{const errors=validateReviewPeriod(p);if(!errors.length)dispatch({type:"UPSERT_PERIOD",period:p});return{ok:!errors.length,errors};},publishPeriod:id=>{const p=state.reviewPeriods.find(x=>x.id===id),errors=p?validateReviewPeriod(p):[{code:"NOT_FOUND",message:"Review Period not found."}];if(!errors.length)dispatch({type:"PUBLISH_PERIOD",id});return{ok:!errors.length,errors};},deletePeriod:id=>dispatch({type:"DELETE_PERIOD",id}),upsertKpiAssessment:r=>dispatch({type:"UPSERT_KPI_ASSESSMENT",record:r}),upsertAttitudeAssessment:r=>dispatch({type:"UPSERT_ATTITUDE_ASSESSMENT",record:r}),updateAppraisal:(employeeId,patch)=>dispatch({type:"UPDATE_APPRAISAL",employeeId,patch}),setCompanyKpisByPeriod:v=>dispatch({type:"SET_COMPANY_KPIS",value:v}),setDepartmentKpisByPeriod:v=>dispatch({type:"SET_DEPARTMENT_KPIS",value:v}),setEmployeeKpiPlansByPeriod:v=>dispatch({type:"SET_EMPLOYEE_KPI_PLANS",value:v}),setAttitudeConfigurations:v=>dispatch({type:"SET_ATTITUDE_CONFIGURATIONS",value:v}),prepareEmployeeForAppraisal:(p,e)=>{const period=periods.find(x=>x.id===p);if(!period||period.status!=="Open")return{ok:false,message:"Select an Open Review Period."};if(!getConfirmedEmployeeKpiPlan(state,p,e).length)return{ok:false,message:"The employee needs a confirmed KPI Plan first."};if(!state.attitudeSnapshotsByPeriod[p])return{ok:false,message:"No Published Attitude configuration was snapshotted when this period opened."};dispatch({type:"PREPARE_EMPLOYEE",periodId:p,employeeId:e});return{ok:true,message:"Remaining prerequisites prepared. Existing completed work was preserved."};},getEmployeeKpiPlan:(p,e)=>getEmployeeKpiPlanFromState(state,p,e),getConfirmedEmployeeKpiPlan:(p,e)=>getConfirmedEmployeeKpiPlan(state,p,e),getAttitudeCriteria:(p,e)=>getAttitudeCriteriaFromState(state,p,e),getPerformanceResult:(p,e)=>state.performanceResults[`${p}:${e}`],getPeriod:id=>periods.find(p=>p.id===id),getConfigurationDefaultPeriodId:()=>periods.find(p=>p.status==="Upcoming")?.id??periods.find(p=>p.status==="Open")?.id??null,getDashboardDefaultPeriodId:scope=>selectLatestPeriodWithResults(periods.map(p=>({periodId:p.id,hasResults:state.resultsByPeriod[p.id]?.[scope]??false})))};},[state]);return <Context.Provider value={value}>{children}</Context.Provider>}
+export function usePerformanceStore(){const value=useContext(Context);if(!value)throw new Error("usePerformanceStore must be used inside PerformanceStoreProvider");return value;}
+export function usePeriodAccess(periodId:string|null){const store=usePerformanceStore(),period=periodId?store.getPeriod(periodId):undefined;return{period,canEdit:period?canEditReviewPeriod(period.status):false,canDelete:period?canDeleteReviewPeriod(period.status):false};}

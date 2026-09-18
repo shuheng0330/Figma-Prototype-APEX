@@ -543,7 +543,8 @@ export function ReviewPeriodSetup() {
   }
 
   function handleSaveDraft() {
-    performanceStore.upsertPeriod(buildPeriod(periodStatus === "Upcoming" ? "Upcoming" : "Draft"));
+    const result = performanceStore.upsertPeriod(buildPeriod(periodStatus === "Upcoming" ? "Upcoming" : "Draft"));
+    if (!result.ok) return;
     setSavedDraft(true);
     setTimeout(() => setSavedDraft(false), 2500);
   }
@@ -595,8 +596,9 @@ export function ReviewPeriodSetup() {
             {!readOnly && (
               <>
               <button onClick={handleSaveDraft}
+                disabled={warnings.length > 0}
                 className="px-3 py-2 rounded-md text-[13px] font-medium border transition-colors hover:bg-gray-50"
-                style={{ color:BLUE, borderColor:BLUE }}>
+                style={{ color:warnings.length ? "#9CA3AF" : BLUE, borderColor:warnings.length ? BORDER : BLUE, cursor:warnings.length ? "not-allowed" : "pointer" }}>
                 {savedDraft ? "Saved ✓" : periodStatus === "Upcoming" ? "Save Changes" : "Save Draft"}
               </button>
               {periodStatus === "Draft" && <button

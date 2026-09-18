@@ -52,6 +52,7 @@ interface DeptKpiRow {
   revisedBy?: string;
   revisionReason?: string;
   previousVersions?: KpiVersion[];
+  departmentId?: string;
 }
 
 const EMPTY_SCORE: ScoreDef = { s5: "", s4: "", s3: "", s2: "", s1: "" };
@@ -834,7 +835,7 @@ export function DepartmentKPIs() {
 
   function handleSaveAsDraft(data: EditFormData) {
     if (editIsCreate) {
-      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...data, status: "Draft" };
+      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, departmentId:"retail-sales", ...data, status: "Draft" };
       mutatePeriod(prev => [...prev, newKpi]);
     } else if (editId) {
       mutatePeriod(prev => prev.map(k => k.id === editId ? { ...k, ...data, status: "Draft" } : k));
@@ -890,7 +891,7 @@ export function DepartmentKPIs() {
     if (publishConfirm.isFromTable && publishConfirm.id) {
       mutatePeriod(prev => prev.map(k => k.id === publishConfirm.id ? { ...k, ...publication } : k));
     } else if (editIsCreate) {
-      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, ...publishConfirm.data, ...publication };
+      const newKpi: DeptKpiRow = { id: `d-${Date.now()}`, departmentId:"retail-sales", ...publishConfirm.data, ...publication };
       mutatePeriod(prev => [...prev, newKpi]);
       closeEdit();
     } else if (editId) {

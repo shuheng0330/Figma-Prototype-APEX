@@ -157,11 +157,11 @@ export function validateReviewPeriod(period: ReviewPeriod): DomainValidationErro
   if (period.deadlines.attitudeSelf < period.startDate) {
     errors.push({ code: "ATTITUDE_BEFORE_AVAILABLE", message: "Attitude Self-Assessment cannot be due before the period opens." });
   }
-  if (period.deadlines.attitudeSelf >= period.deadlines.attitudeSuperior) {
-    errors.push({ code: "ATTITUDE_SEQUENCE", message: "Attitude Self-Assessment deadline must be earlier than the Superior deadline." });
+  if (period.deadlines.attitudeSelf > period.deadlines.attitudeSuperior) {
+    errors.push({ code: "ATTITUDE_SEQUENCE", message: "Attitude Self-Assessment Deadline must be on or before the Superior Attitude Evaluation Deadline." });
   }
-  if (period.deadlines.superiorAppraisal >= period.deadlines.hrReview) {
-    errors.push({ code: "APPRAISAL_SEQUENCE", message: "Superior Recommendation deadline must be earlier than the HR Review deadline." });
+  if (period.deadlines.superiorAppraisal > period.deadlines.hrReview) {
+    errors.push({ code: "APPRAISAL_SEQUENCE", message: "Superior Appraisal Recommendation Deadline must be on or before the HR Review Deadline." });
   }
   if (period.deadlines.superiorAppraisal && period.endDate && period.deadlines.superiorAppraisal < period.endDate) {
     errors.push({ code: "APPRAISAL_BEFORE_AVAILABLE", message: "Superior Recommendation deadline cannot be before the final performance interval ends." });

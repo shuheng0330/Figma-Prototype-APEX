@@ -55,15 +55,16 @@ interface KpiItem {
   target: string;
   frequency: "Monthly" | "Quarterly" | "Annually";
   finalScore: number;
+  weightage?: number;
   checkpoints: KpiCheckpoint[];
 }
 
 const businessKpiLevel = (level: string) => (
-  level === "Level 1" ? "Company" : level === "Level 2" ? "Department" : "Individual"
+  level === "Level 1" || level === "Company" ? "Company" : level === "Level 2" || level === "Department" ? "Department" : "Individual"
 );
 
 const kpiWeightage = (kpi: KpiItem) => (
-  kpi.level === "Level 3" ? 20 : kpi.level === "Level 2" ? 15 : 20
+  kpi.weightage ?? (kpi.level === "Level 3" ? 20 : kpi.level === "Level 2" ? 15 : 20)
 );
 
 const annualKpiPoint = (kpi: KpiItem) => kpi.finalScore / 20;
@@ -645,9 +646,6 @@ export function StaffProfileHR() {
   const empId    = id ?? "amir";
   const emp      = EMPLOYEES[empId] ?? EMPLOYEES.amir;
   const meta     = EMP_META[empId] ?? { dept: "Retail Banking", avatarColor: BLUE };
-  const kpis     = KPI_DATA[empId] ?? [];
-  const attitude = ATTITUDE_DATA[empId] ?? null;
-
   const [selectedPeriod, setSelectedPeriod] = useState(returnPeriod);
   const [chartYears,     setChartYears]     = useState<3 | 5>(5);
   const [prevOpen,       setPrevOpen]       = useState(false);
@@ -655,14 +653,35 @@ export function StaffProfileHR() {
   const [showAssessment, setShowAssessment] = useState(false);
   const [showAttitude,   setShowAttitude]   = useState(false);
 
-  const pd = resolvePeriodData(empId, selectedPeriod, selectedPeriod === LIVE_PERIOD ? performanceStore.state.appraisals[empId] : undefined);
-
-  const chartData = useMemo(
-    () => chartYears === 3 ? emp.trendData.slice(-3) : emp.trendData,
-    [chartYears, emp.trendData]
-  );
+  const selectedPeriodRecord = performanceStore.periods.find(period => period.name === selectedPeriod);
+  const workflowResult = selectedPeriodRecord ? performanceStore.getPerformanceResult(selectedPeriodRecord.id, empId) : undefined;
+  const assessmentRecords = selectedPeriodRecord ? Object.values(performanceStore.state.kpiAssessments).filter(record => record.periodId === selectedPeriodRecord.id && record.employeeId === empId) : [];
+  const kpis: KpiItem[] = workflowResult ? workflowResult.kpiResults.map(result => ({
+    id: result.kpiId, name: result.name, level: result.level, target: result.target, frequency: "Monthly", finalScore: result.annualPoint * 20, weightage: result.weightage,
+    checkpoints: assessmentRecords.map(record => ({ label:record.checkpointLabel, status:record.status === "Reviewed" ? "Completed" : "Pending", selfScore:typeof record.selfPoints[result.kpiId] === "number" ? Number(record.selfPoints[result.kpiId]) * 20 : null, superiorScore:typeof record.superiorPoints[result.kpiId] === "number" ? Number(record.superiorPoints[result.kpiId]) * 20 : null, selfComment:record.selfComments[result.kpiId] ?? "", superiorComment:record.superiorComments[result.kpiId] ?? "" })),
+  })) : KPI_DATA[empId] ?? [];
+  const attitudeRecord = selectedPeriodRecord ? performanceStore.state.attitudeAssessments[`${selectedPeriodRecord.id}:${empId}`] : undefined;
+  const attitude: AttitudeData | null = workflowResult && attitudeRecord ? {
+    form:`${workflowResult.attitudeFormat} Form`, superiorScore:workflowResult.attitudeEvaluationScore, status:attitudeRecord.status === "Reviewed" ? "Completed" : "Pending",
+    criteria:(attitudeRecord.criteria ?? []).map(criterion => ({ criterion:criterion.criterion, selfScore:Number(attitudeRecord.selfPoints[criterion.id] ?? 0) * 20, superiorScore:Number(attitudeRecord.superiorPoints[criterion.id] ?? 0) * 20, selfComment:attitudeRecord.selfComments[criterion.id] ?? "", managerComment:attitudeRecord.superiorComments[criterion.id] ?? "" })),
+  } : ATTITUDE_DATA[empId] ?? null;
+  const sharedAppraisal = selectedPeriodRecord?.id === performanceStore.state.appraisals[empId]?.periodId ? performanceStore.state.appraisals[empId] : undefined;
+  const pd = resolvePeriodData(empId, selectedPeriod, sharedAppraisal);
 
   const selectedYear   = parseInt(selectedPeriod.split(" ")[0]);
+  const chartData = useMemo(() => {
+    const data = emp.trendData.filter(point => Number(point.year) <= selectedYear);
+    if (workflowResult && !data.some(point => Number(point.year) === selectedYear)) {
+      data.push({
+        year: String(selectedYear),
+        kpi: workflowResult.kpiPerformanceScore,
+        attitude: workflowResult.attitudeEvaluationScore,
+        final: workflowResult.finalAppraisalScore,
+      });
+    }
+    return chartYears === 3 ? data.slice(-3) : data.slice(-5);
+  }, [chartYears, emp.trendData, selectedYear, workflowResult]);
+
   const prevAppraisals = PERIOD_OPTIONS
     .filter(p => parseInt(p.split(" ")[0]) < selectedYear && emp.periods[p])
     .map(p => ({ period: p, data: emp.periods[p] }));
