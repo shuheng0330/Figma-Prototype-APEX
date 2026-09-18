@@ -153,7 +153,7 @@ export function ReviewPeriods() {
       </div>
 
       {/* ── Table ── */}
-      <div className="bg-white rounded-lg overflow-hidden"
+      <div className="bg-white rounded-lg overflow-x-auto"
         style={{ boxShadow:"0 1px 4px rgba(0,0,0,0.08)", border:`1px solid ${BORDER}` }}>
         <table className="w-full text-[13px]">
           <thead>

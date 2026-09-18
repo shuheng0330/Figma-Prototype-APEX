@@ -4,6 +4,7 @@ import {
   CalendarDays, CalendarRange, User, ClipboardCheck, ClipboardList,
   HelpCircle, UserPlus, Users, Target, Award, ShieldCheck,
   ChevronLeft, ChevronRight, Layers, Building2, SlidersHorizontal,
+  X,
 } from "lucide-react";
 import { getCurrentAccount, pathIsAllowed, type OrganisationalRole } from "../auth";
 
@@ -92,7 +93,12 @@ const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
   trainer: [TRAINING_MANAGEMENT, MY_LEARNING],
 };
 
-interface Props { collapsed: boolean; onToggle: () => void; }
+interface Props {
+  collapsed: boolean;
+  mobileOpen: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+}
 
 function Tooltip({ label }: { label: string }) {
   return (
@@ -109,7 +115,7 @@ function Tooltip({ label }: { label: string }) {
   );
 }
 
-export function ApexSidebar({ collapsed, onToggle }: Props) {
+export function ApexSidebar({ collapsed, mobileOpen, onToggle, onClose }: Props) {
   const location = useLocation();
   const activeId = ROUTE_ACTIVE_ID[location.pathname]
     ?? (location.pathname.startsWith("/performance/final-appraisals/") ? "final-appraisals"
@@ -126,7 +132,8 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
 
   return (
     <aside
-      className="fixed left-0 top-0 bottom-0 bg-white border-r border-gray-100 z-30 flex flex-col overflow-y-auto overflow-x-hidden"
+      id="apex-navigation"
+      className={`apex-sidebar fixed left-0 top-0 bottom-0 bg-white border-r border-gray-100 z-30 flex flex-col overflow-y-auto overflow-x-hidden ${mobileOpen ? "is-mobile-open" : ""}`}
       style={{ width: collapsed ? 64 : 220, transition: "width 0.2s ease" }}
     >
       {/* Logo */}
@@ -141,6 +148,14 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
           <p className="text-[13px] font-extrabold text-[#1A1F2E] tracking-wide leading-none whitespace-nowrap">APEX</p>
           <p className="text-[9px] text-[#9CA3AF] uppercase tracking-widest leading-none mt-0.5 whitespace-nowrap">Career &amp; Learning</p>
         </div>
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={onClose}
+          className="apex-sidebar-close ml-auto -mr-2 hidden h-10 w-10 items-center justify-center rounded-lg text-[#6B7280] hover:bg-gray-50"
+        >
+          <X size={19} />
+        </button>
       </div>
 
       {/* Nav */}
@@ -162,6 +177,7 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
                   <div key={item.id} className="relative group flex justify-center my-0.5 px-2">
                     <Link
                       to={item.path}
+                      onClick={onClose}
                       className="w-10 h-10 flex items-center justify-center rounded-lg transition-colors"
                       style={active ? { backgroundColor: "#E8FAF7" } : { backgroundColor: "transparent" }}
                       onMouseEnter={e => { if (!active) (e.currentTarget as HTMLAnchorElement).style.backgroundColor = "#F9FAFB"; }}
@@ -179,6 +195,7 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
                 <Link
                   key={`${section.title}-${item.id}`}
                   to={item.path}
+                  onClick={onClose}
                   className={`flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-[13px] transition-all duration-100 border-l-[3px] ${
                     active
                       ? "border-l-[#00C9A7] bg-[#E8FAF7] text-[#00C9A7] font-semibold"
@@ -199,7 +216,7 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
         {collapsed ? (
           <>
             <div className="relative group flex justify-center my-0.5 px-2">
-              <Link to="/login" className="w-10 h-10 flex items-center justify-center rounded-lg text-[#9CA3AF] hover:bg-gray-50 transition-colors">
+              <Link to="/login" onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-lg text-[#9CA3AF] hover:bg-gray-50 transition-colors">
                 <LogOut size={17} strokeWidth={1.8} />
               </Link>
               <div className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 z-50">
@@ -209,7 +226,7 @@ export function ApexSidebar({ collapsed, onToggle }: Props) {
           </>
         ) : (
           <>
-            <Link to="/login" className="flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-[13px] text-[#6B7280] hover:bg-gray-50 hover:text-[#1A1F2E] border-l-[3px] border-l-transparent transition-all">
+            <Link to="/login" onClick={onClose} className="flex items-center gap-3 mx-2 px-3 py-2 rounded-md text-[13px] text-[#6B7280] hover:bg-gray-50 hover:text-[#1A1F2E] border-l-[3px] border-l-transparent transition-all">
               <LogOut size={15} className="text-[#9CA3AF]" strokeWidth={1.8} />
               <span>Sign Out</span>
             </Link>
