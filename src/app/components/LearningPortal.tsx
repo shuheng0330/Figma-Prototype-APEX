@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Search,
   ChevronRight,
@@ -13,31 +14,42 @@ import {
   ArrowLeft,
   AlertTriangle,
   RotateCcw,
+  CalendarDays,
+  MapPin,
+  Ticket,
+  LayoutGrid,
+  Tag,
+  Zap,
+  Bell,
+  Inbox,
+  Plus,
+  Trash2,
+  Settings2,
+  BookOpen as BookIcon,
 } from "lucide-react";
 import {
   ALL_MODULES, MODULE_BLOCKS, ALL_QUIZZES, MODULE_QUIZ,
   moduleStatus, quizStatus,
   type Block, type ModuleQuiz, type CourseModule,
 } from "../courseStore";
+import { useRole, can } from "../access";
+import {
+  COURSES, SESSIONS, CATEGORIES, CATEGORY_PALETTE, catStyle, categoryById,
+  activeCategories, coursesInCategory, addCategory, updateCategory, retireCategory,
+  toggleCourseCategory, setPrimaryCategory,
+  STATUS_GROUPS, STATUS_GROUP_STYLE, ROLE_IDENTITY, statusGroupOf, staffById,
+  seatCount, waitCount, myReg, fmtDateShort, fmtDate, daysUntil, useStoreVersion,
+  immediateAssignments,
+  type PortalCourse, type DocType, type OfflineSession, type CourseStatusGroup,
+} from "../trainingStore";
 
 const TEAL = "#00C9A7";
 
-type BadgeType = "PPT" | "PDF" | "Video" | "Word";
+type BadgeType = DocType;
 type Filter = "All" | "Mandatory" | "Optional" | "In Progress" | "Completed";
 
-interface Course {
-  id: string;
-  title: string;
-  dept: string;
-  types: BadgeType[];
-  duration: string;
-  progress: number;
-  mandatory: boolean;
-  from: string;
-  to: string;
-  emoji: string;
-  sopId?: string;
-}
+/** The portal renders the shared catalogue straight from the training store. */
+type Course = PortalCourse;
 
 interface SlideData {
   type: "title" | "agenda" | "content" | "callout" | "table" | "summary";
@@ -76,26 +88,7 @@ const OUTCOMES = [
   "Document compliance records accurately",
 ];
 
-const COURSES: Course[] = [
-  { id: "m1", title: "Data Privacy & Compliance", dept: "IT", types: ["PDF", "Video"], duration: "45 min", progress: 100, mandatory: true, from: "#1E293B", to: "#0F172A", emoji: "🔒", sopId: "s3" },
-  { id: "m2", title: "Workplace Safety Essentials", dept: "HR", types: ["PPT", "Video"], duration: "60 min", progress: 0, mandatory: true, from: "#7F1D1D", to: "#450A0A", emoji: "⚠️" },
-  { id: "m3", title: "Anti-Bribery & Ethics Policy", dept: "Compliance", types: ["PDF"], duration: "30 min", progress: 0, mandatory: true, from: "#4C1D95", to: "#2E1065", emoji: "⚖️" },
-  { id: "m4", title: "Emergency Response Protocol", dept: "Operations", types: ["Video", "PPT"], duration: "50 min", progress: 20, mandatory: true, from: "#78350F", to: "#451A03", emoji: "🚨" },
-  { id: "m5", title: "Information Security Awareness", dept: "IT", types: ["PDF", "PPT"], duration: "40 min", progress: 0, mandatory: true, from: "#0C4A6E", to: "#082F49", emoji: "🛡️" },
-  { id: "c1", title: "AC Installation Manual", dept: "Engineering", types: ["PDF", "Video", "PPT"], duration: "90 min", progress: 60, mandatory: false, from: "#064E3B", to: "#022C22", emoji: "🔧", sopId: "s1" },
-  { id: "c2", title: "Customer Handling Techniques", dept: "Sales", types: ["Video"], duration: "35 min", progress: 45, mandatory: false, from: "#831843", to: "#500724", emoji: "🤝", sopId: "s2" },
-  { id: "c3", title: "Project Management Basics", dept: "Operations", types: ["PPT", "Word"], duration: "55 min", progress: 80, mandatory: false, from: "#14532D", to: "#052E16", emoji: "📋" },
-  { id: "c4", title: "Refrigerant Handling R410A", dept: "Engineering", types: ["PDF", "Video"], duration: "40 min", progress: 30, mandatory: false, from: "#065F46", to: "#022C22", emoji: "❄️" },
-  { id: "o1", title: "Advanced Excel for Finance", dept: "Finance", types: ["PPT", "Video"], duration: "120 min", progress: 0, mandatory: false, from: "#166534", to: "#052E16", emoji: "📊" },
-  { id: "o2", title: "Presentation & Communication", dept: "HR", types: ["Video", "PPT"], duration: "70 min", progress: 0, mandatory: false, from: "#7C2D12", to: "#431407", emoji: "🎤" },
-  { id: "o3", title: "Lean Six Sigma Introduction", dept: "Operations", types: ["PDF", "Word"], duration: "85 min", progress: 0, mandatory: false, from: "#1E1B4B", to: "#0D0B30", emoji: "📐" },
-  { id: "o4", title: "Leadership Fundamentals", dept: "HR", types: ["Video"], duration: "45 min", progress: 0, mandatory: false, from: "#134E4A", to: "#042F2E", emoji: "🌟" },
-  { id: "d1", title: "HVAC System Overview", dept: "Engineering", types: ["Video", "PDF"], duration: "75 min", progress: 0, mandatory: false, from: "#0F3460", to: "#081D40", emoji: "💨" },
-  { id: "d2", title: "Electrical Safety Standards", dept: "Engineering", types: ["PPT"], duration: "55 min", progress: 0, mandatory: false, from: "#1E3A5F", to: "#0A1F3A", emoji: "⚡" },
-  { id: "d3", title: "Tools & Equipment Safety", dept: "Engineering", types: ["Video", "PPT"], duration: "30 min", progress: 0, mandatory: false, from: "#292524", to: "#1C1917", emoji: "🛠️" },
-];
 
-const FEATURED = COURSES.find(c => c.id === "c1")!;
 const FILTERS: Filter[] = ["All", "Mandatory", "Optional", "In Progress", "Completed"];
 
 function getSlides(course: Course): SlideData[] {
@@ -1327,6 +1320,15 @@ function CourseCard({ course, onClick }: { course: Course; onClick: () => void }
             </span>
           )}
         </div>
+        {course.assignment && (
+          <div className="absolute bottom-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded"
+            style={{ backgroundColor: course.assignment.mode === "immediate" ? "rgba(220,38,38,0.9)" : "rgba(8,145,178,0.9)" }}>
+            <Inbox size={8} className="text-white" />
+            <span className="text-[8px] font-bold uppercase tracking-wide text-white">
+              {course.assignment.mode === "immediate" ? "Start now" : "Assigned"}
+            </span>
+          </div>
+        )}
         <div className="absolute top-2 right-2">
           <div className="relative" style={{ width: 30, height: 30 }}>
             <ProgressRing progress={course.progress} size={30} />
@@ -1364,12 +1366,28 @@ function CourseCard({ course, onClick }: { course: Course; onClick: () => void }
         <p className="text-[12px] font-bold text-[#1A1F2E] leading-snug mb-1.5 line-clamp-2" style={{ minHeight: 32 }}>
           {course.title}
         </p>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 text-[#9CA3AF]">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex items-center gap-1 text-[#9CA3AF] shrink-0">
             <Clock size={10} />
             <span className="text-[10px]">{course.duration}</span>
           </div>
-          <span className="text-[10px] text-[#9CA3AF]">{course.dept}</span>
+          <div className="flex items-center gap-1 min-w-0 justify-end">
+            {course.categoryIds.slice(0, 2).map(id => {
+              const cat = categoryById(id);
+              return (
+                <span key={id} className="px-1.5 py-0.5 rounded text-[9px] font-bold truncate"
+                  style={{ color: cat.color, backgroundColor: cat.bg }}>
+                  {cat.name}
+                </span>
+              );
+            })}
+            {course.categoryIds.length > 2 && (
+              <span className="px-1 py-0.5 rounded text-[9px] font-bold shrink-0"
+                style={{ color: "#9CA3AF", backgroundColor: "#F3F4F6" }}>
+                +{course.categoryIds.length - 2}
+              </span>
+            )}
+          </div>
         </div>
         {active && (
           <div className="mt-2 w-full bg-gray-100 rounded-full" style={{ height: 3 }}>
@@ -1384,48 +1402,436 @@ function CourseCard({ course, onClick }: { course: Course; onClick: () => void }
   );
 }
 
-// ── Rail ──────────────────────────────────────────────────────────────────────
+// Cards shown per group before "See all".
 const PREVIEW = 4;
 
-function Rail({ title, courses, onSelect }: { title: string; courses: Course[]; onSelect: (c: Course) => void }) {
-  const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? courses : courses.slice(0, PREVIEW);
-  const hasMore = courses.length > PREVIEW;
-
-  if (courses.length === 0) return null;
+// ── Assigned to start immediately ─────────────────────────────────────────────
+function StartNowSection({ onSelect }: { onSelect: (c: Course) => void }) {
+  const urgent = immediateAssignments();
+  if (!urgent.length) return null;
 
   return (
-    <div className="mb-6 px-6">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-[14px] font-bold text-[#1A1F2E]">{title}</h2>
-        {hasMore && (
-          <button
-            onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-0.5 text-[12px] font-semibold hover:opacity-70 transition-opacity"
-            style={{ color: TEAL }}
-          >
-            {expanded ? "Show less" : "See all"}
-            <ChevronRight
-              size={13}
-              style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.2s" }}
-            />
-          </button>
-        )}
+    <div className="px-6 mb-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Zap size={15} style={{ color: "#DC2626" }} />
+        <h2 className="text-[14px] font-bold text-[#1A1F2E]">Start now — assigned to you</h2>
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: "#FEE2E2", color: "#DC2626" }}>
+          {urgent.length} to begin
+        </span>
       </div>
-      <div className="grid grid-cols-4 gap-4">
-        {shown.map(c => (
-          <CourseCard key={c.id} course={c} onClick={() => onSelect(c)} />
-        ))}
+
+      <div className="space-y-2.5">
+        {urgent.map(c => {
+          const a = c.assignment!;
+          const left = daysUntil(a.deadline);
+          const overdue = left < 0;
+          return (
+            <div
+              key={c.id}
+              className="apex-learning-featured flex items-stretch bg-white rounded-xl overflow-hidden border"
+              style={{ borderColor: overdue ? "#FCA5A5" : "#FECACA", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}
+            >
+              <div className="w-1 shrink-0" style={{ backgroundColor: overdue ? "#991B1B" : "#DC2626" }} />
+
+              <div className="apex-learning-featured-body flex items-center gap-4 flex-1 px-4 py-3 min-w-0">
+                <div
+                  className="rounded-lg shrink-0 flex items-center justify-center"
+                  style={{ width: 52, height: 52, background: `linear-gradient(135deg, ${c.from}, ${c.to})` }}
+                >
+                  <span className="text-2xl opacity-60 select-none">{c.emoji}</span>
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold"
+                      style={{ backgroundColor: "#FEE2E2", color: "#DC2626" }}>
+                      <Bell size={8} /> Start immediately
+                    </span>
+                    {a.mandatory && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor: "#FEF3C7", color: "#B45309" }}>
+                        Mandatory
+                      </span>
+                    )}
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold"
+                      style={{ color: categoryById(c.categoryIds[0]).color, backgroundColor: categoryById(c.categoryIds[0]).bg }}>
+                      {categoryById(c.categoryIds[0]).name}
+                    </span>
+                  </div>
+
+                  <p className="text-[13px] font-bold text-[#1A1F2E] truncate">{c.title}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: "#9CA3AF" }}>
+                    Assigned {fmtDate(a.assignedOn)} · {a.daysWithin} days to complete · due {fmtDate(a.deadline)}
+                    {c.progress > 0 ? ` · ${c.progress}% done` : ""}
+                  </p>
+                </div>
+
+                <div className="shrink-0 text-right mr-3">
+                  <p className="text-[15px] font-extrabold leading-none" style={{ color: overdue ? "#991B1B" : "#DC2626" }}>
+                    {overdue ? "Overdue" : `${left}d`}
+                  </p>
+                  <p className="text-[9px] mt-1" style={{ color: "#9CA3AF" }}>{overdue ? "past due" : "remaining"}</p>
+                </div>
+
+                <button
+                  onClick={() => onSelect(c)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold text-white shrink-0 transition-opacity hover:opacity-90"
+                  style={{ backgroundColor: "#DC2626" }}
+                >
+                  <Play size={11} fill="currentColor" /> {c.progress > 0 ? "Continue" : "Start now"}
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ── Learning Portal ───────────────────────────────────────────────────────────
+// ── One offline session card ──────────────────────────────────────────────────
+function OfflineSessionCard({ s, meId }: { s: OfflineSession; meId: string }) {
+  const navigate = useNavigate();
+  const trainer = staffById(s.trainerId);
+  const seats = seatCount(s.id);
+  const waiting = waitCount(s.id);
+  const full = seats >= s.capacity;
+  const mine = myReg(s.id, meId);
+  const cat = catStyle(s.topic);
+  const isSharing = s.kind === "Sharing Session";
+  const left = s.capacity - seats;
+
+  return (
+    <button
+      onClick={() => navigate(`/register/${s.id}`)}
+      className="text-left bg-white rounded-xl overflow-hidden border transition-all hover:-translate-y-0.5"
+      style={{ borderColor: "#F0F1F4", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}
+    >
+      <div className="flex items-stretch">
+        {/* Date block */}
+        <div className="w-[62px] shrink-0 flex flex-col items-center justify-center py-3" style={{ backgroundColor: isSharing ? "#FFFBEB" : "#F0FDFA" }}>
+          <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: isSharing ? "#B45309" : "#0F766E" }}>
+            {fmtDateShort(s.date).split(" ")[1]}
+          </span>
+          <span className="text-[20px] font-extrabold leading-none mt-0.5" style={{ color: isSharing ? "#92400E" : "#065F46" }}>
+            {fmtDateShort(s.date).split(" ")[0]}
+          </span>
+          <span className="text-[9px] mt-1" style={{ color: "#9CA3AF" }}>{daysUntil(s.date)}d</span>
+        </div>
+
+        <div className="flex-1 min-w-0 px-3.5 py-3">
+          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ color: cat.color, backgroundColor: cat.bg }}>
+              {cat.name}
+            </span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ color: "#0F766E", backgroundColor: "#F0FDFA" }}>
+              Open to register
+            </span>
+            {isSharing && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ color: "#B45309", backgroundColor: "#FEF3C7" }}>
+                <Sparkles size={8} /> Sharing
+              </span>
+            )}
+            {s.mandatory && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ color: "#DC2626", backgroundColor: "#FEE2E2" }}>
+                Mandatory
+              </span>
+            )}
+          </div>
+
+          <p className="text-[12px] font-bold text-[#1A1F2E] leading-snug line-clamp-2 mb-1.5" style={{ minHeight: 30 }}>
+            {s.title}
+          </p>
+
+          <div className="flex items-center gap-2.5 mb-2 text-[10px]" style={{ color: "#9CA3AF" }}>
+            <span className="flex items-center gap-1"><Clock size={9} /> {s.time.split(" – ")[0]}</span>
+            <span className="flex items-center gap-1 truncate"><MapPin size={9} /> {s.venue.split(",")[0]}</span>
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white shrink-0" style={{ backgroundColor: trainer?.color ?? "#9CA3AF" }}>
+                {trainer?.initials}
+              </div>
+              <span className="text-[10px] truncate" style={{ color: "#6B7280" }}>{trainer?.name}</span>
+            </div>
+
+            {mine ? (
+              <span className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold shrink-0"
+                style={mine.status === "waitlisted"
+                  ? { color: "#92400E", backgroundColor: "#FEF3C7" }
+                  : { color: "#065F46", backgroundColor: "#D1FAE5" }}>
+                {mine.status === "waitlisted" ? <><Ticket size={9} /> Waitlisted</> : <><CheckCircle size={9} /> Registered</>}
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold shrink-0"
+                style={full ? { color: "#B45309", backgroundColor: "#FFFBEB" } : { color: "#1A1F2E", backgroundColor: TEAL }}>
+                {full ? <><Ticket size={9} /> Join waitlist</> : <>Register <ChevronRight size={9} /></>}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-2">
+            <div className="rounded-full overflow-hidden" style={{ height: 3, backgroundColor: "#F3F4F6" }}>
+              <div className="rounded-full" style={{ height: 3, width: `${Math.min(100, (seats / s.capacity) * 100)}%`, backgroundColor: full ? "#DC2626" : TEAL }} />
+            </div>
+            <p className="text-[9px] mt-1" style={{ color: full ? "#DC2626" : "#9CA3AF" }}>
+              {full ? `Full · ${waiting} waiting` : `${left} of ${s.capacity} seats left`}
+            </p>
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ── Offline training open for registration ────────────────────────────────────
+function OfflineTrainingSection({ meId, sessions }: { meId: string; sessions: OfflineSession[] }) {
+  const navigate = useNavigate();
+  if (!sessions.length) return null;
+
+  return (
+    <div className="px-6 mb-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays size={15} style={{ color: TEAL }} />
+          <h2 className="text-[14px] font-bold text-[#1A1F2E]">Offline training — open for registration</h2>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ backgroundColor: "#E8FAF7", color: "#047857" }}>
+            {sessions.length} upcoming
+          </span>
+        </div>
+        <button onClick={() => navigate("/calendar")} className="flex items-center gap-0.5 text-[12px] font-semibold hover:opacity-70" style={{ color: TEAL }}>
+          Full calendar <ChevronRight size={13} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {sessions.slice(0, 3).map(s => <OfflineSessionCard key={s.id} s={s} meId={meId} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Category manager ──────────────────────────────────────────────────────────
+function CategoryManager({ onClose }: { onClose: () => void }) {
+  useStoreVersion();
+  const [selected, setSelected] = useState(CATEGORIES[0]?.id ?? "");
+  const [newName, setNewName] = useState("");
+  const [newEmoji, setNewEmoji] = useState("🏷️");
+  const [newColor, setNewColor] = useState(0);
+
+  const cat = categoryById(selected);
+  const labelled = coursesInCategory(selected);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-[860px] max-h-[88vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <Tag size={15} style={{ color: TEAL }} />
+              <h2 className="text-[15px] font-extrabold text-[#1A1F2E]">Course categories</h2>
+            </div>
+            <p className="text-[11px] text-[#9CA3AF] mt-1">
+              Create your own labels, rename or recolour them, and tag courses. Learners filter the portal by these.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#1A1F2E]"><X size={16} /></button>
+        </div>
+
+        <div className="grid grid-cols-[280px_1fr] flex-1 overflow-hidden">
+
+          {/* Category list + create */}
+          <div className="border-r border-gray-100 overflow-y-auto p-3">
+            {CATEGORIES.map(c => {
+              const active = c.id === selected;
+              const count = coursesInCategory(c.id).length;
+              return (
+                <button key={c.id} onClick={() => setSelected(c.id)}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg mb-1 text-left transition-colors"
+                  style={{ backgroundColor: active ? c.bg : "transparent", opacity: c.retired ? 0.5 : 1 }}>
+                  <span className="text-[14px]">{c.emoji}</span>
+                  <span className="text-[12px] font-semibold flex-1 truncate" style={{ color: active ? c.color : "#1A1F2E" }}>
+                    {c.name}
+                  </span>
+                  {c.custom && (
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold" style={{ color: c.color, backgroundColor: c.bg }}>
+                      custom
+                    </span>
+                  )}
+                  <span className="text-[10px]" style={{ color: "#9CA3AF" }}>{count}</span>
+                </button>
+              );
+            })}
+
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "#9CA3AF" }}>New category</p>
+              <div className="flex items-center gap-2 mb-2">
+                <input value={newEmoji} onChange={e => setNewEmoji(e.target.value.slice(0, 2))}
+                  className="w-10 text-center px-1 py-1.5 rounded-lg text-[14px] focus:outline-none"
+                  style={{ border: "1px solid #E5E7EB" }} />
+                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Aircon Specialist"
+                  className="flex-1 px-2.5 py-1.5 rounded-lg text-[12px] focus:outline-none"
+                  style={{ border: "1px solid #E5E7EB", color: "#1A1F2E" }} />
+              </div>
+              <div className="flex items-center gap-1 flex-wrap mb-2">
+                {CATEGORY_PALETTE.map((p, i) => (
+                  <button key={p.color} onClick={() => setNewColor(i)}
+                    className="w-5 h-5 rounded-md"
+                    style={{ backgroundColor: p.color, outline: newColor === i ? `2px solid ${p.color}` : "none", outlineOffset: 2 }} />
+                ))}
+              </div>
+              <button
+                disabled={!newName.trim()}
+                onClick={() => {
+                  const id = addCategory(newName, CATEGORY_PALETTE[newColor].color, CATEGORY_PALETTE[newColor].bg, newEmoji);
+                  setSelected(id); setNewName("");
+                }}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[11px] font-bold text-white"
+                style={{ backgroundColor: newName.trim() ? TEAL : "#D1D5DB" }}>
+                <Plus size={11} /> Add category
+              </button>
+            </div>
+          </div>
+
+          {/* Selected category detail */}
+          <div className="overflow-y-auto p-5">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-9 h-9 rounded-lg flex items-center justify-center text-[16px]" style={{ backgroundColor: cat.bg }}>
+                {cat.emoji}
+              </span>
+              <input
+                value={cat.name}
+                onChange={e => updateCategory(cat.id, { name: e.target.value })}
+                className="text-[15px] font-extrabold px-2 py-1 rounded-lg focus:outline-none"
+                style={{ color: "#1A1F2E", border: "1px solid transparent", backgroundColor: "#F9FAFB" }}
+              />
+              <div className="ml-auto flex items-center gap-1.5">
+                {CATEGORY_PALETTE.map(p => (
+                  <button key={p.color} onClick={() => updateCategory(cat.id, { color: p.color, bg: p.bg })}
+                    className="w-5 h-5 rounded-md"
+                    style={{ backgroundColor: p.color, outline: cat.color === p.color ? `2px solid ${p.color}` : "none", outlineOffset: 2 }} />
+                ))}
+                <button
+                  onClick={() => { retireCategory(cat.id); setSelected(CATEGORIES[0]?.id ?? ""); }}
+                  className="flex items-center gap-1 ml-2 px-2.5 py-1.5 rounded-lg text-[10px] font-bold"
+                  style={{ color: "#DC2626", backgroundColor: "#FEF2F2" }}>
+                  <Trash2 size={10} /> {cat.custom ? "Delete" : cat.retired ? "Restore" : "Hide"}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: "#9CA3AF" }}>
+              Courses labelled ({labelled.length}) — click to add or remove
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {COURSES.map(c => {
+                const on = c.categoryIds.includes(cat.id);
+                const primary = c.categoryIds[0] === cat.id;
+                return (
+                  <button key={c.id} onClick={() => toggleCourseCategory(c.id, cat.id)}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all"
+                    style={{ borderColor: on ? cat.color : "#E5E7EB", backgroundColor: on ? cat.bg : "white" }}>
+                    <span className="text-[14px]">{c.emoji}</span>
+                    <span className="text-[11px] font-semibold flex-1 truncate" style={{ color: "#1A1F2E" }}>{c.title}</span>
+                    {primary && (
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold shrink-0" style={{ color: cat.color, backgroundColor: "white" }}>
+                        primary
+                      </span>
+                    )}
+                    {on
+                      ? <CheckCircle size={12} className="shrink-0" style={{ color: cat.color }} />
+                      : <Plus size={12} className="shrink-0" style={{ color: "#D1D5DB" }} />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {labelled.length > 0 && (
+              <>
+                <p className="text-[10px] font-bold uppercase tracking-wider mt-5 mb-2" style={{ color: "#9CA3AF" }}>
+                  Set as primary label
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {labelled.map(c => (
+                    <button key={c.id} onClick={() => setPrimaryCategory(c.id, cat.id)}
+                      className="px-2 py-1 rounded-full text-[10px] font-semibold border"
+                      style={c.categoryIds[0] === cat.id
+                        ? { borderColor: cat.color, color: cat.color, backgroundColor: cat.bg }
+                        : { borderColor: "#E5E7EB", color: "#6B7280", backgroundColor: "white" }}>
+                      {c.emoji} {c.title}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 py-3.5 border-t border-gray-100 flex items-center justify-between shrink-0">
+          <p className="text-[11px] text-[#9CA3AF]">
+            Default categories can be hidden; custom ones can be deleted. Changes apply to the portal immediately.
+          </p>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-bold text-white" style={{ backgroundColor: TEAL }}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Grouped catalogue section ─────────────────────────────────────────────────
+function GroupSection({
+  label, sub, color, bg, courses, onSelect,
+}: {
+  label: string; sub: string; color: string; bg: string;
+  courses: Course[]; onSelect: (c: Course) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (!courses.length) return null;
+  const shown = expanded ? courses : courses.slice(0, PREVIEW);
+
+  return (
+    <div className="mb-5 px-6">
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="px-2.5 py-1 rounded-md text-[11px] font-extrabold" style={{ color, backgroundColor: bg }}>
+            {label}
+          </span>
+          <span className="text-[11px]" style={{ color: "#9CA3AF" }}>{courses.length} · {sub}</span>
+        </div>
+        {courses.length > PREVIEW && (
+          <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-0.5 text-[12px] font-semibold hover:opacity-70" style={{ color: TEAL }}>
+            {expanded ? "Show less" : `See all ${courses.length}`}
+            <ChevronRight size={13} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} />
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-4 gap-4">
+        {shown.map(c => <CourseCard key={c.id} course={c} onClick={() => onSelect(c)} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Learning Portal — "My Learnings" home ─────────────────────────────────────
+type Source = "all" | "assigned" | "open";
+
 export function LearningPortal() {
+  const role = useRole();
+  useStoreVersion();
+  const meId = ROLE_IDENTITY[role] ?? "E001";
+  const me = staffById(meId);
+  const canManageCategories = can(role, "materials") || can(role, "assign-training");
+
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("All");
+  const [groupBy, setGroupBy] = useState<"status" | "category">("status");
+  const [source, setSource] = useState<Source>("all");
+  const [activeCats, setActiveCats] = useState<string[]>([]);
+  const [showCats, setShowCats] = useState(false);
 
   if (selectedCourse) {
     if (selectedCourse.sopId) {
@@ -1434,12 +1840,25 @@ export function LearningPortal() {
     return <CourseDetail course={selectedCourse} onBack={() => setSelectedCourse(null)} />;
   }
 
-  const showRails = filter === "All" && !search.trim();
+  const q = search.toLowerCase().trim();
+  const cats = activeCategories();
+
+  const openSessions = SESSIONS
+    .filter(s => s.registrationOpen && daysUntil(s.date) >= 0)
+    .filter(s => !q || s.title.toLowerCase().includes(q) || s.venue.toLowerCase().includes(q))
+    .filter(s => !activeCats.length || activeCats.includes(s.topic))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const assignedCourses = COURSES.filter(c => c.assignment);
 
   const filtered = COURSES.filter(c => {
-    const q = search.toLowerCase().trim();
-    const matchSearch = !q || c.title.toLowerCase().includes(q) || c.dept.toLowerCase().includes(q);
+    if (source === "assigned" && !c.assignment) return false;
+    const matchSearch = !q
+      || c.title.toLowerCase().includes(q)
+      || c.dept.toLowerCase().includes(q)
+      || c.categoryIds.some(id => categoryById(id).name.toLowerCase().includes(q));
     if (!matchSearch) return false;
+    if (activeCats.length && !c.categoryIds.some(id => activeCats.includes(id))) return false;
     switch (filter) {
       case "Mandatory":   return c.mandatory;
       case "Optional":    return !c.mandatory;
@@ -1449,180 +1868,241 @@ export function LearningPortal() {
     }
   });
 
-  const mandatory  = COURSES.filter(c => c.mandatory);
-  const inProgress = COURSES.filter(c => c.progress > 0 && c.progress < 100);
-  const optional   = COURSES.filter(c => !c.mandatory && c.progress === 0);
-  const byDept     = COURSES.filter(c => c.dept === "Engineering");
+  const startNowCount    = immediateAssignments().length;
+  const mandatoryPending = COURSES.filter(c => c.mandatory && c.progress < 100).length;
+  const inProgressCount  = COURSES.filter(c => c.progress > 0 && c.progress < 100).length;
+  const completedCount   = COURSES.filter(c => c.progress >= 100).length;
+
+  const SOURCES: { id: Source; label: string; count: number; icon: React.ElementType }[] = [
+    { id: "all",      label: "All learning",        count: COURSES.length + openSessions.length, icon: LayoutGrid },
+    { id: "assigned", label: "Assigned training",   count: assignedCourses.length,               icon: Inbox      },
+    { id: "open",     label: "Open for registration", count: openSessions.length,                icon: CalendarDays },
+  ];
+
+  const byStatus = STATUS_GROUPS.map(g => ({ key: g, courses: filtered.filter(c => statusGroupOf(c) === g) }));
+  const byCategory = cats.map(c => ({ cat: c, courses: filtered.filter(x => x.categoryIds.includes(c.id)) }));
 
   return (
     <div className="flex flex-col bg-[#F4F6F9]" style={{ height: "calc(100vh - 56px)" }}>
 
-      {/* ── Page header + search toolbar ────────────────────────────────── */}
+      {/* ── Header + toolbar ─────────────────────────────────────────────── */}
       <div className="bg-white border-b border-gray-100 shrink-0 px-6 pt-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-start justify-between mb-4">
           <div>
-            <h1 className="text-[19px] font-extrabold text-[#1A1F2E] leading-none">Learning Portal</h1>
-            <p className="text-[12px] mt-1" style={{ color: "#9CA3AF" }}>
-              {inProgress.length} in progress&nbsp;&nbsp;·&nbsp;&nbsp;{mandatory.filter(c => c.progress < 100).length} mandatory pending
+            <h1 className="text-[19px] font-extrabold text-[#1A1F2E] leading-none">My Learnings</h1>
+            <p className="text-[12px] mt-1.5" style={{ color: "#9CA3AF" }}>
+              {me?.name ?? "Welcome"} · {me?.position ?? ""}
             </p>
           </div>
-          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full" style={{ backgroundColor: "#ECFDF5", color: "#059669" }}>
-            {COURSES.length} courses available
-          </span>
+          <div className="flex items-center gap-2">
+            {[
+              { label: "Start now",         value: startNowCount,    color: "#DC2626", bg: "#FEF2F2" },
+              { label: "Mandatory pending", value: mandatoryPending, color: "#B45309", bg: "#FFFBEB" },
+              { label: "In progress",       value: inProgressCount,  color: "#0891B2", bg: "#ECFEFF" },
+              { label: "Completed",         value: completedCount,   color: "#059669", bg: "#ECFDF5" },
+              { label: "Open sessions",     value: openSessions.length, color: "#1D4ED8", bg: "#EFF6FF" },
+            ].map(s => (
+              <div key={s.label} className="px-3 py-2 rounded-lg text-center" style={{ backgroundColor: s.bg, minWidth: 88 }}>
+                <p className="text-[17px] font-extrabold leading-none" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-[9px] font-semibold uppercase tracking-wide mt-1" style={{ color: s.color, opacity: 0.8 }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {/* Search + filter row */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative shrink-0" style={{ width: 280 }}>
+        {/* Row 1 — search · source · group by */}
+        <div className="flex items-center gap-3 flex-wrap mb-2.5">
+          <div className="relative shrink-0" style={{ width: 240 }}>
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: "#9CA3AF" }} />
             <input
               type="text"
-              placeholder="Search courses, topics, departments…"
+              placeholder="Search courses, categories…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-9 pr-8 py-2 rounded-lg text-[13px] focus:outline-none transition-colors"
-              style={{
-                color: "#1A1F2E",
-                backgroundColor: "#F4F6F9",
-                border: "1px solid #E5E7EB",
-              }}
+              style={{ color: "#1A1F2E", backgroundColor: "#F4F6F9", border: "1px solid #E5E7EB" }}
               onFocus={e => { e.currentTarget.style.borderColor = TEAL; e.currentTarget.style.backgroundColor = "#fff"; }}
               onBlur={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.backgroundColor = "#F4F6F9"; }}
             />
             {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors"
-                style={{ color: "#9CA3AF" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#374151"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "#9CA3AF"; }}
-              >
+              <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{ color: "#9CA3AF" }}>
                 <X size={12} />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {FILTERS.map(f => (
+          {/* Source segment — assigned vs open for registration */}
+          <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "#F4F6F9", border: "1px solid #E5E7EB" }}>
+            {SOURCES.map(({ id, label, count, icon: Icon }) => (
               <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all"
-                style={filter === f
-                  ? { backgroundColor: TEAL, color: "#1A1F2E", borderColor: TEAL }
-                  : { backgroundColor: "white", color: "#6B7280", borderColor: "#E5E7EB" }}
+                key={id}
+                onClick={() => setSource(id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all"
+                style={source === id
+                  ? { backgroundColor: "white", color: "#1A1F2E", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+                  : { backgroundColor: "transparent", color: "#9CA3AF" }}
               >
-                {f}
+                <Icon size={11} /> {label}
+                <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+                  style={source === id ? { backgroundColor: "#E8FAF7", color: "#047857" } : { backgroundColor: "#EBEDF0", color: "#9CA3AF" }}>
+                  {count}
+                </span>
               </button>
             ))}
           </div>
+
+          {source !== "open" && (
+            <div className="ml-auto flex items-center gap-1 p-0.5 rounded-lg" style={{ backgroundColor: "#F4F6F9", border: "1px solid #E5E7EB" }}>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2" style={{ color: "#9CA3AF" }}>Group by</span>
+              {([
+                { id: "status", label: "Status", icon: LayoutGrid },
+                { id: "category", label: "Category", icon: Tag },
+              ] as const).map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => setGroupBy(id)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-semibold transition-all"
+                  style={groupBy === id
+                    ? { backgroundColor: "white", color: "#1A1F2E", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+                    : { backgroundColor: "transparent", color: "#9CA3AF" }}
+                >
+                  <Icon size={11} /> {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Row 2 — status pills + category labels */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {source !== "open" && FILTERS.map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all"
+              style={filter === f
+                ? { backgroundColor: TEAL, color: "#1A1F2E", borderColor: TEAL }
+                : { backgroundColor: "white", color: "#6B7280", borderColor: "#E5E7EB" }}
+            >
+              {f}
+            </button>
+          ))}
+
+          {source !== "open" && <span className="w-px h-5 mx-1" style={{ backgroundColor: "#E5E7EB" }} />}
+
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#B0B8C8" }}>Categories</span>
+          {cats.map(c => {
+            const on = activeCats.includes(c.id);
+            return (
+              <button
+                key={c.id}
+                onClick={() => setActiveCats(a => on ? a.filter(x => x !== c.id) : [...a, c.id])}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-semibold border transition-all"
+                style={on
+                  ? { backgroundColor: c.bg, color: c.color, borderColor: c.color }
+                  : { backgroundColor: "white", color: "#6B7280", borderColor: "#E5E7EB" }}
+              >
+                <span>{c.emoji}</span> {c.name}
+              </button>
+            );
+          })}
+          {activeCats.length > 0 && (
+            <button onClick={() => setActiveCats([])} className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: "#9CA3AF" }}>
+              <X size={11} /> Clear
+            </button>
+          )}
+          {canManageCategories && (
+            <button
+              onClick={() => setShowCats(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] font-bold border border-dashed transition-colors"
+              style={{ color: TEAL, borderColor: "#A7F3D0", backgroundColor: "white" }}
+            >
+              <Settings2 size={11} /> Manage categories
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ── Recommended for you — compact strip ─────────────────────────── */}
-      <div
-        className="apex-learning-featured mx-6 mt-4 mb-1 rounded-xl bg-white border border-gray-100 flex items-stretch overflow-hidden shrink-0 cursor-pointer"
-        style={{ minHeight: 132, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}
-        onClick={() => setSelectedCourse(FEATURED)}
-      >
-        {/* Left TEAL accent bar */}
-        <div className="w-1 shrink-0" style={{ backgroundColor: TEAL }} />
-
-        <div className="apex-learning-featured-body flex items-center flex-1 gap-5 px-5 py-4">
-          {/* Thumbnail */}
-          <div
-            className="rounded-xl overflow-hidden shrink-0 relative flex items-center justify-center"
-            style={{ width: 104, height: 76, background: `linear-gradient(135deg, ${FEATURED.from} 0%, ${FEATURED.to} 100%)` }}
-          >
-            <span className="text-4xl opacity-40 select-none" style={{ userSelect: "none" }}>{FEATURED.emoji}</span>
-            <div className="absolute top-1.5 left-1.5 flex gap-1">
-              {FEATURED.types.slice(0, 2).map(t => (
-                <span key={t} className="px-1 py-0.5 rounded-sm text-[8px] font-bold uppercase"
-                  style={{ backgroundColor: TYPE_STYLE[t].bg, color: TYPE_STYLE[t].color }}>
-                  {t}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Info block */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Sparkles size={10} style={{ color: TEAL }} />
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: TEAL }}>
-                Recommended for you
-              </span>
-            </div>
-            <p className="text-[14px] font-bold text-[#1A1F2E] truncate mb-2">{FEATURED.title}</p>
-            <div className="flex items-center gap-2 mb-2.5 flex-wrap">
-              {FEATURED.types.map(t => (
-                <span key={t} className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide"
-                  style={{ backgroundColor: TYPE_BADGE_LIGHT[t].bg, color: TYPE_BADGE_LIGHT[t].color }}>
-                  {t}
-                </span>
-              ))}
-              <span className="flex items-center gap-1 text-[11px]" style={{ color: "#9CA3AF" }}>
-                <Clock size={10} /> {FEATURED.duration}
-              </span>
-              <span className="text-[11px]" style={{ color: "#9CA3AF" }}>{FEATURED.dept}</span>
-            </div>
-            {/* Progress bar */}
-            <div className="flex items-center gap-2.5">
-              <div className="flex-1 rounded-full" style={{ height: 5, backgroundColor: "#E5E7EB" }}>
-                <div
-                  className="rounded-full transition-all"
-                  style={{ height: 5, width: `${FEATURED.progress}%`, backgroundColor: TEAL }}
-                />
-              </div>
-              <span className="text-[11px] font-bold shrink-0" style={{ color: TEAL }}>
-                {FEATURED.progress}%
-              </span>
-            </div>
-          </div>
-
-          {/* Resume button */}
-          <button
-            onClick={e => { e.stopPropagation(); setSelectedCourse(FEATURED); }}
-            className="apex-learning-featured-action flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-bold shrink-0 transition-opacity hover:opacity-85"
-            style={{ backgroundColor: TEAL, color: "#1A1F2E" }}
-          >
-            <Play size={11} fill="currentColor" /> Resume
-          </button>
-        </div>
-      </div>
-
-      {/* ── Catalog ───────────────────────────────────────────────────────── */}
+      {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto py-4">
-        {showRails ? (
-          <>
-            <Rail title="My Learning Path"             courses={inProgress} onSelect={setSelectedCourse} />
-            <Rail title="Mandatory for You"            courses={mandatory}  onSelect={setSelectedCourse} />
-            <Rail title="Optional Courses"             courses={optional}   onSelect={setSelectedCourse} />
-            <Rail title="By Department — Engineering"  courses={byDept}     onSelect={setSelectedCourse} />
-          </>
-        ) : (
+
+        {source === "open" ? (
+          /* ── Open for registration ─────────────────────────────────── */
           <div className="px-6">
-            <p className="text-[12px] mb-5" style={{ color: "#9CA3AF" }}>
-              {filtered.length} course{filtered.length !== 1 ? "s" : ""}
-              {search.trim() ? ` matching "${search.trim()}"` : ""}
-              {filter !== "All" ? ` · ${filter}` : ""}
-            </p>
-            {filtered.length > 0 ? (
-              <div className="grid grid-cols-4 gap-4">
-                {filtered.map(c => (
-                  <CourseCard key={c.id} course={c} onClick={() => setSelectedCourse(c)} />
-                ))}
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarDays size={15} style={{ color: TEAL }} />
+              <h2 className="text-[14px] font-bold text-[#1A1F2E]">Open for registration</h2>
+              <span className="text-[11px]" style={{ color: "#9CA3AF" }}>
+                {openSessions.length} session{openSessions.length !== 1 ? "s" : ""} you can sign up for
+                {activeCats.length ? ` · ${activeCats.length} category filter${activeCats.length > 1 ? "s" : ""}` : ""}
+              </span>
+            </div>
+            {openSessions.length ? (
+              <div className="grid grid-cols-3 gap-3">
+                {openSessions.map(s => <OfflineSessionCard key={s.id} s={s} meId={meId} />)}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20">
-                <BookOpen size={40} className="mb-3" style={{ color: "#D1D5DB" }} />
-                <p className="text-[14px] font-semibold" style={{ color: "#9CA3AF" }}>No courses found</p>
-                <p className="text-[12px] mt-1" style={{ color: "#C4C9D4" }}>Try a different search term or filter</p>
+                <CalendarDays size={40} className="mb-3" style={{ color: "#D1D5DB" }} />
+                <p className="text-[14px] font-semibold" style={{ color: "#9CA3AF" }}>Nothing open for registration</p>
+                <p className="text-[12px] mt-1" style={{ color: "#C4C9D4" }}>Try clearing the category filter</p>
               </div>
             )}
           </div>
+        ) : (
+          <>
+            <StartNowSection onSelect={setSelectedCourse} />
+
+            {source === "all" && <OfflineTrainingSection meId={meId} sessions={openSessions} />}
+
+            <div className="px-6 mb-2 flex items-center gap-2 flex-wrap">
+              {source === "assigned" ? <Inbox size={15} style={{ color: "#6B7280" }} /> : <BookIcon size={15} style={{ color: "#6B7280" }} />}
+              <h2 className="text-[14px] font-bold text-[#1A1F2E]">
+                {source === "assigned" ? "Assigned training" : "Course catalogue"}
+              </h2>
+              <span className="text-[11px]" style={{ color: "#9CA3AF" }}>
+                {filtered.length} course{filtered.length !== 1 ? "s" : ""}
+                {q ? ` matching "${search.trim()}"` : ""}
+                {filter !== "All" ? ` · ${filter}` : ""} · grouped by {groupBy}
+              </span>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <BookIcon size={40} className="mb-3" style={{ color: "#D1D5DB" }} />
+                <p className="text-[14px] font-semibold" style={{ color: "#9CA3AF" }}>No courses found</p>
+                <p className="text-[12px] mt-1" style={{ color: "#C4C9D4" }}>Try a different search, status or category</p>
+              </div>
+            ) : groupBy === "status" ? (
+              byStatus.map(({ key, courses }) => (
+                <GroupSection
+                  key={key}
+                  label={key}
+                  sub={STATUS_GROUP_STYLE[key as CourseStatusGroup].note}
+                  color={STATUS_GROUP_STYLE[key as CourseStatusGroup].color}
+                  bg={STATUS_GROUP_STYLE[key as CourseStatusGroup].bg}
+                  courses={courses}
+                  onSelect={setSelectedCourse}
+                />
+              ))
+            ) : (
+              byCategory.map(({ cat, courses }) => (
+                <GroupSection
+                  key={cat.id}
+                  label={`${cat.emoji} ${cat.name}`}
+                  sub={`${courses.filter(c => c.mandatory).length} mandatory · ${courses.filter(c => c.progress >= 100).length} completed`}
+                  color={cat.color}
+                  bg={cat.bg}
+                  courses={courses}
+                  onSelect={setSelectedCourse}
+                />
+              ))
+            )}
+          </>
         )}
       </div>
+
+      {showCats && <CategoryManager onClose={() => setShowCats(false)} />}
     </div>
   );
 }

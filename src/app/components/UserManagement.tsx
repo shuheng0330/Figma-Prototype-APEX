@@ -1,40 +1,60 @@
 import { useState } from "react";
-import { UserPlus, Edit2, UserX, X } from "lucide-react";
+import { Link } from "react-router";
+import { UserPlus, Edit2, UserX, X, Presentation, ShieldCheck, Check, ChevronRight } from "lucide-react";
+import { useRole, canEdit, ROLE_META } from "../access";
+import { STAFF, grantTrainer, useStoreVersion } from "../trainingStore";
 
 const TEAL = "#00C9A7";
 
 interface User {
   id: string; name: string; email: string;
-  role: "Admin" | "Trainer" | "Staff";
+  role: "Admin" | "HR" | "Manager" | "Trainer" | "Staff";
   department: string; status: "Active" | "Inactive";
 }
 
-const MOCK: User[] = [
-  { id: "1", name: "John Admin", email: "admin@company.com", role: "Admin", department: "IT", status: "Active" },
-  { id: "2", name: "Jane Trainer", email: "trainer@company.com", role: "Trainer", department: "HR", status: "Active" },
-  { id: "3", name: "Sarah Johnson", email: "sarah@company.com", role: "Staff", department: "IT", status: "Active" },
-  { id: "4", name: "Michael Chen", email: "michael@company.com", role: "Staff", department: "Sales", status: "Active" },
-  { id: "5", name: "Emily Rodriguez", email: "emily@company.com", role: "Trainer", department: "Finance", status: "Active" },
-  { id: "6", name: "David Kim", email: "david@company.com", role: "Staff", department: "Operations", status: "Inactive" },
-  { id: "7", name: "Jessica Liu", email: "jessica@company.com", role: "Staff", department: "IT", status: "Active" },
-  { id: "8", name: "Robert Taylor", email: "robert@company.com", role: "Trainer", department: "Operations", status: "Active" },
+const EXTRA_ACCOUNTS: User[] = [
+  { id: "A1", name: "John Admin", email: "admin@company.com", role: "Admin", department: "IT", status: "Active" },
 ];
 
-const ROLE_STYLE = {
+const ROLE_STYLE: Record<User["role"], { color: string; bg: string }> = {
   Admin:   { color: "#7C3AED", bg: "#F3E8FF" },
-  Trainer: { color: TEAL,     bg: "#E8FAF7" },
+  HR:      { color: "#0891B2", bg: "#ECFEFF" },
+  Manager: { color: "#3B82F6", bg: "#EFF6FF" },
+  Trainer: { color: TEAL,      bg: "#E8FAF7" },
   Staff:   { color: "#6B7280", bg: "#F3F4F6" },
 };
+
+/** Maps a staff record onto a system account row. */
+function roleOf(dept: string, position: string, isTrainer: boolean): User["role"] {
+  if (dept === "HR") return "HR";
+  if (position.startsWith("Head") || position.includes("Manager")) return "Manager";
+  return isTrainer ? "Trainer" : "Staff";
+}
 const STATUS_STYLE = {
   Active:   { color: "#059669", bg: "#ECFDF5" },
   Inactive: { color: "#DC2626", bg: "#FEE2E2" },
 };
 
 export function UserManagement() {
-  const [users] = useState<User[]>(MOCK);
+  const role = useRole();
+  useStoreVersion();
+  const mayGrant = canEdit(role, "users");
   const [showModal, setShowModal] = useState(false);
 
+  const users: User[] = [
+    ...EXTRA_ACCOUNTS,
+    ...STAFF.map(s => ({
+      id: s.id,
+      name: s.name,
+      email: `${s.name.split(" ")[0].toLowerCase()}@company.com`,
+      role: roleOf(s.dept, s.position, s.isTrainer),
+      department: s.dept,
+      status: "Active" as const,
+    })),
+  ];
+
   const active = users.filter(u => u.status === "Active").length;
+  const trainers = STAFF.filter(s => s.isTrainer).length;
 
   return (
     <div className="p-6">
@@ -53,12 +73,26 @@ export function UserManagement() {
         </button>
       </div>
 
+      {/* Permission note */}
+      <div className="rounded-xl px-5 py-3.5 mb-4 flex items-start gap-2.5" style={{ backgroundColor: mayGrant ? "#F3E8FF" : "#F9FAFB" }}>
+        <ShieldCheck size={14} className="mt-0.5 shrink-0" style={{ color: mayGrant ? "#7C3AED" : "#9CA3AF" }} />
+        <p className="text-[12px] leading-relaxed" style={{ color: mayGrant ? "#5B21B6" : "#6B7280" }}>
+          {mayGrant
+            ? `${ROLE_META[role].label}: you grant the volunteer trainer permission below. A trainer can create sessions and materials, but can only edit and assign the materials they created themselves.`
+            : "Only Super Admin and HR can grant the volunteer trainer permission."}
+        </p>
+        <Link to="/access" className="ml-auto flex items-center gap-1 text-[11px] font-bold shrink-0" style={{ color: "#7C3AED" }}>
+          Role matrix <ChevronRight size={11} />
+        </Link>
+      </div>
+
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-5">
+      <div className="grid grid-cols-4 gap-4 mb-5">
         {[
           { label: "Total Users", value: users.length, color: "#1A1F2E" },
           { label: "Active Users", value: active, color: "#059669" },
-          { label: "Inactive Users", value: users.length - active, color: "#DC2626" },
+          { label: "Volunteer Trainers", value: trainers, color: TEAL },
+          { label: "Roles Configured", value: 5, color: "#7C3AED" },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-lg px-5 py-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.08)" }}>
             <p className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wide mb-1">{s.label}</p>
@@ -72,7 +106,7 @@ export function UserManagement() {
         {/* Filters */}
         <div className="apex-mobile-filters flex gap-2 px-5 py-3.5 border-b border-gray-100">
           {[
-            { label: "All Roles", options: ["All Roles", "Admin", "Trainer", "Staff"] },
+            { label: "All Roles", options: ["All Roles", "Admin", "HR", "Manager", "Trainer", "Staff"] },
             { label: "All Departments", options: ["All Departments", "IT", "HR", "Sales", "Finance", "Operations"] },
             { label: "All Status", options: ["All Status", "Active", "Inactive"] },
           ].map(f => (
@@ -87,7 +121,7 @@ export function UserManagement() {
           <table className="w-full">
             <thead>
               <tr className="bg-[#F9FAFB]">
-                {["Name", "Email", "Role", "Department", "Status", "Actions"].map(h => (
+                {["Name", "Email", "Role", "Department", "Trainer Permission", "Status", "Actions"].map(h => (
                   <th key={h} className="px-5 py-3 text-left text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wide border-b border-gray-100">
                     {h}
                   </th>
@@ -114,6 +148,24 @@ export function UserManagement() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-[12px] text-[#6B7280]">{u.department}</td>
+                  <td className="px-5 py-3.5">
+                    {STAFF.some(st => st.id === u.id) ? (
+                      <button
+                        disabled={!mayGrant}
+                        onClick={() => grantTrainer(u.id, !STAFF.find(st => st.id === u.id)?.isTrainer)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold transition-colors"
+                        style={STAFF.find(st => st.id === u.id)?.isTrainer
+                          ? { backgroundColor: TEAL, color: "white", cursor: mayGrant ? "pointer" : "default" }
+                          : { backgroundColor: "#F3F4F6", color: "#9CA3AF", cursor: mayGrant ? "pointer" : "default" }}
+                      >
+                        {STAFF.find(st => st.id === u.id)?.isTrainer
+                          ? <><Check size={10} /> Granted</>
+                          : <><Presentation size={10} /> Grant</>}
+                      </button>
+                    ) : (
+                      <span className="text-[11px]" style={{ color: "#C4C9D4" }}>—</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5">
                     <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
                       style={{ color: STATUS_STYLE[u.status].color, backgroundColor: STATUS_STYLE[u.status].bg }}>
@@ -159,8 +211,8 @@ export function UserManagement() {
                 </div>
               ))}
               {[
-                { label: "Role", opts: ["Select role", "Admin", "Trainer", "Staff"] },
-                { label: "Department", opts: ["Select department", "IT", "HR", "Sales", "Finance", "Operations"] },
+                { label: "Role", opts: ["Select role", "Super Admin", "HR", "Manager", "Trainer", "Staff"] },
+                { label: "Department", opts: ["Select department", "Engineering", "Sales", "Service", "IT", "HR", "Finance"] },
               ].map(f => (
                 <div key={f.label}>
                   <label className="block text-[11px] font-bold text-[#6B7280] uppercase tracking-wide mb-1.5">{f.label}</label>

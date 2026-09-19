@@ -3,8 +3,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Respo
 import {
   Users, Award, Filter, ChevronDown, Eye, Download,
   CheckCircle, XCircle, Clock, Plus, ArrowUp, ArrowDown,
-  ArrowUpDown, Columns, X, AlertTriangle,
+  ArrowUpDown, Columns, X, AlertTriangle, Sparkles,
 } from "lucide-react";
+
+import { TrainerDashboard } from "./TrainerDashboard";
+import { SharingSessions } from "./SharingSessions";
+import { useRole, can } from "../access";
 
 const TEAL = "#00C9A7";
 
@@ -279,7 +283,14 @@ function LogExternalModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+type ScoreTab = "staff" | "trainers" | "sharing";
+
 export function TrainingScoreboard() {
+  const role = useRole();
+  /** Trainer effectiveness lives here as a second tab. */
+  const showTrainerTab = can(role, "trainer-dashboard");
+  const [tab, setTab] = useState<ScoreTab>("staff");
+
   // ── Filters ──────────────────────────────────────────────────────────────
   const [filterDept, setFilterDept]     = useState("All");
   const [filterSOP, setFilterSOP]       = useState("All");
@@ -426,6 +437,62 @@ export function TrainingScoreboard() {
     );
   }
 
+  // ── Tab strip ──────────────────────────────────────────────────────────────
+  const Tabs = () => (
+    showTrainerTab ? (
+      <div className="flex items-center gap-1 p-0.5 rounded-lg w-fit" style={{ backgroundColor: "#F4F6F9", border: "1px solid #E5E7EB" }}>
+        {([
+          { id: "staff" as const,    label: "Staff Performance",     icon: Users },
+          { id: "trainers" as const, label: "Trainer Effectiveness", icon: Award },
+          { id: "sharing" as const,  label: "Staff Sharing",         icon: Sparkles },
+        ]).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[12px] font-semibold transition-all"
+            style={tab === id
+              ? { backgroundColor: "white", color: "#1A1F2E", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }
+              : { backgroundColor: "transparent", color: "#9CA3AF" }}
+          >
+            <Icon size={12} /> {label}
+          </button>
+        ))}
+      </div>
+    ) : null
+  );
+
+  // ── Staff sharing tab ──────────────────────────────────────────────────────
+  if (tab === "sharing" && showTrainerTab) {
+    return (
+      <div className="p-6 space-y-5">
+        <div>
+          <h1 className="text-[20px] font-bold text-[#1A1F2E]">Training Scoreboard</h1>
+          <p className="text-[13px] text-[#9CA3AF] mt-0.5">
+            Staff sharing sessions — how many were held and how many staff took part
+          </p>
+        </div>
+        <Tabs />
+        <SharingSessions embedded />
+      </div>
+    );
+  }
+
+  // ── Trainer effectiveness tab ──────────────────────────────────────────────
+  if (tab === "trainers" && showTrainerTab) {
+    return (
+      <div className="p-6 space-y-5">
+        <div>
+          <h1 className="text-[20px] font-bold text-[#1A1F2E]">Training Scoreboard</h1>
+          <p className="text-[13px] text-[#9CA3AF] mt-0.5">
+            Trainer effectiveness — headcount and average quiz scores per session
+          </p>
+        </div>
+        <Tabs />
+        <TrainerDashboard embedded />
+      </div>
+    );
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
@@ -448,6 +515,8 @@ export function TrainingScoreboard() {
           </button>
         </div>
       </div>
+
+      <Tabs />
 
       {/* ── Success toast ─────────────────────────────────────────────── */}
       {logSuccess && (

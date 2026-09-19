@@ -6,6 +6,13 @@ import {
   Plus, X, Lock, Eye, Target, Flag, TrendingUp,
 } from "lucide-react";
 
+import { useRole } from "../access";
+import {
+  ROLE_IDENTITY, IDPS, PATH_TEMPLATES, GOAL_STATE_STYLE,
+  staffById, courseById, completedSessionsFor, pendingSessionsFor,
+  useStoreVersion, fmtDate as fmtStoreDate,
+} from "../trainingStore";
+
 const TEAL   = "#00C9A7";
 const GREEN  = "#059669";
 const AMBER  = "#D97706";
@@ -43,7 +50,7 @@ interface DevGoal {
 }
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
-const RECORDS: TrainingRecord[] = [
+const MOCK_RECORDS: TrainingRecord[] = [
   { id:  1, date:"2026-08-15", title:"Data Privacy & Compliance",          type:"Mandatory", source:"E-Learning", score:94,   status:"Completed",   hours:5  },
   { id:  2, date:"2026-08-02", title:"AC Installation Manual — Module 3",  type:"Technical", source:"E-Learning", score:78,   status:"Completed",   hours:3  },
   { id:  3, date:"2026-07-25", title:"Workplace Safety Workshop",           type:"Mandatory", source:"Physical",   score:null, status:"Completed",   hours:8  },
@@ -61,6 +68,46 @@ const RECORDS: TrainingRecord[] = [
   { id: 15, date:"2026-01-20", title:"Company Policy Induction",            type:"Mandatory", source:"E-Learning", score:96,   status:"Completed",   hours:3  },
 ];
 
+
+// ── Live record helpers ───────────────────────────────────────────────────────
+/** The signed-in employee for the current role. */
+function useMe() {
+  const role = useRole();
+  useStoreVersion();
+  const id = ROLE_IDENTITY[role] ?? "E001";
+  return { id, role, staff: staffById(id) };
+}
+
+/**
+ * A calendar session becomes a training record only when the participant both
+ * registered AND had attendance recorded. Registered-but-unconfirmed sessions
+ * stay "In Progress" so they never inflate the completion count.
+ */
+function useTrainingRecords(staffId: string): TrainingRecord[] {
+  useStoreVersion();
+  const confirmed: TrainingRecord[] = completedSessionsFor(staffId).map((x, i) => ({
+    id: 1000 + i,
+    date: x.session.date,
+    title: x.session.title,
+    type: x.session.mandatory ? "Mandatory" : x.session.kind === "Sharing Session" ? "Optional" : "Technical",
+    source: x.session.kind === "Hybrid" ? "Hybrid" : "Physical",
+    score: x.reg.quizScore ?? null,
+    status: "Completed",
+    hours: 4,
+  }));
+  const awaiting: TrainingRecord[] = pendingSessionsFor(staffId).map((x, i) => ({
+    id: 2000 + i,
+    date: x.session.date,
+    title: x.session.title,
+    type: x.session.mandatory ? "Mandatory" : "Optional",
+    source: x.session.kind === "Hybrid" ? "Hybrid" : "Physical",
+    score: null,
+    status: "In Progress",
+    hours: 4,
+  }));
+  return [...confirmed, ...awaiting, ...MOCK_RECORDS].sort((a, b) => b.date.localeCompare(a.date));
+}
+
 const CERTIFICATES: Certificate[] = [
   { name:"HVAC Installation & Servicing — Level 2", body:"CIDB Malaysia",      issued:"20 Apr 2026", expires:"20 Apr 2028", status:"Valid"         },
   { name:"ISO 9001:2015 Internal Auditor",           body:"BSI Group",          issued:"30 Jun 2026", expires:"15 Sep 2026", status:"Expiring Soon" },
@@ -68,26 +115,8 @@ const CERTIFICATES: Certificate[] = [
   { name:"First Aid & CPR Level 1",                  body:"St. John Ambulance", issued:"05 Mar 2024", expires:"05 Mar 2026", status:"Expired"       },
 ];
 
-const IDP = {
-  owner:"Ahmad Samsudin", period:"Jan 2026 — Dec 2026",
-  reviewDate:"15 Oct 2026", progress:62, goalsTotal:5, goalsCompleted:3,
-};
 
-const LEARNING_PATH: PathStep[] = [
-  { step:1, title:"HVAC Fundamentals",                      duration:"4h",  status:"completed", completedDate:"10 Mar 2026" },
-  { step:2, title:"Refrigerant Systems & Handling",         duration:"6h",  status:"completed", completedDate:"28 Apr 2026" },
-  { step:3, title:"Advanced HVAC Troubleshooting",          duration:"8h",  status:"current",   progress:45 },
-  { step:4, title:"HVAC Design & Load Calculation",         duration:"10h", status:"locked" },
-  { step:5, title:"HVAC Professional Certification Prep",  duration:"12h", status:"locked" },
-];
 
-const DEV_GOALS: DevGoal[] = [
-  { title:"Complete Advanced HVAC Certification",     targetDate:"31 Dec 2026", competency:"Technical Skills",    progress:75,  color:TEAL   },
-  { title:"Improve Customer Communication Score",     targetDate:"30 Sep 2026", competency:"Customer Service",    progress:60,  color:BLUE   },
-  { title:"Lead 2 Installation Projects as Senior",   targetDate:"31 Oct 2026", competency:"Leadership",          progress:100, color:GREEN  },
-  { title:"Achieve Full Safety Compliance Training",  targetDate:"31 Aug 2026", competency:"Safety Compliance",   progress:40,  color:AMBER  },
-  { title:"Complete ISO 9001 Internal Audit Refresher", targetDate:"15 Nov 2026", competency:"Quality Management", progress:20, color:PURPLE },
-];
 
 const COMPETENCY_OPTIONS = [
   "Customer Service","Technical Skills","Leadership","Communication",
@@ -391,6 +420,9 @@ function LogExternalTrainingModal({ onClose }: { onClose:()=>void }) {
 
 // ── Training History Tab ──────────────────────────────────────────────────────
 function TrainingHistoryTab() {
+  const me = useMe();
+  const RECORDS = useTrainingRecords(me.id);
+  const pendingCount = pendingSessionsFor(me.id).length;
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo]     = useState("");
   const [source, setSource]     = useState("All");
@@ -475,6 +507,17 @@ function TrainingHistoryTab() {
         <StatTile icon={AlertCircle} value={String(mandatoryOutstanding)} label="Mandatory Outstanding" sub="Requires attention" iconBg="#FEF2F2" iconColor={RED}/>
         <StatTile icon={Award} value={String(activeCerts)} label="Certificates" sub="Active & valid" iconBg="#FDF4FF" iconColor={PURPLE}/>
       </div>
+
+      {/* Attendance rule — registration alone is not a record */}
+      {pendingCount > 0 && (
+        <div className="rounded-lg px-4 py-3 flex items-start gap-2.5" style={{ backgroundColor:"#FFFBEB" }}>
+          <AlertCircle size={13} className="mt-0.5 shrink-0" style={{ color:AMBER }}/>
+          <p className="text-[11px] leading-relaxed" style={{ color:"#92400E" }}>
+            <b>{pendingCount}</b> registered session{pendingCount===1?"":"s"} not yet counted as completed — a
+            session only enters your record once the trainer records your attendance on the day.
+          </p>
+        </div>
+      )}
 
       {/* Training records table */}
       <div className="bg-white rounded-lg overflow-hidden" style={{ boxShadow:"0 1px 4px rgba(0,0,0,0.07)" }}>
@@ -577,6 +620,31 @@ function TrainingHistoryTab() {
 
 // ── Learning Plan Tab ─────────────────────────────────────────────────────────
 function LearningPlanTab() {
+  const me = useMe();
+  const storeIdp = IDPS.find(i => i.staffId === me.id);
+  const goals = storeIdp?.goals ?? [];
+  const template = storeIdp?.pathTemplateId
+    ? PATH_TEMPLATES.find(t => t.id === storeIdp.pathTemplateId)
+    : undefined;
+  const hrOwner = storeIdp ? staffById(storeIdp.hrOwnerId) : undefined;
+  const superior = storeIdp ? staffById(storeIdp.superiorId) : undefined;
+  const goalsCompleted = goals.filter(g => g.progress >= 100).length;
+  const idpProgress = goals.length
+    ? Math.round(goals.reduce((a, g) => a + g.progress, 0) / goals.length)
+    : 0;
+  /** Path steps, with status derived from the learner progress on each course. */
+  const PATH: PathStep[] = (template?.steps ?? []).map((st, i) => {
+    const c = courseById(st.courseId);
+    const done = (c?.progress ?? 0) >= 100;
+    const active = (c?.progress ?? 0) > 0 && !done;
+    return {
+      step: i + 1,
+      title: c?.title ?? st.courseId,
+      duration: c?.duration ?? "—",
+      status: done ? "completed" : active ? "current" : "locked",
+      progress: active ? c?.progress : undefined,
+    };
+  });
   return (
     <div className="space-y-5">
 
@@ -597,10 +665,10 @@ function LearningPlanTab() {
           {/* Left: details grid */}
           <div className="flex-1 grid grid-cols-2 gap-x-8 gap-y-4">
             {[
-              { label:"Plan Owner",   val:IDP.owner },
-              { label:"Plan Period",  val:IDP.period },
-              { label:"Review Date",  val:IDP.reviewDate },
-              { label:"Goals",        val:`${IDP.goalsCompleted} of ${IDP.goalsTotal} completed` },
+              { label:"Plan Owners",  val:`HR ${hrOwner?.name ?? "—"} + ${superior?.name ?? "Superior"}` },
+              { label:"Plan Period",  val:storeIdp?.period ?? "—" },
+              { label:"Joint Review", val:storeIdp ? fmtStoreDate(storeIdp.reviewDate) : "—" },
+              { label:"Goals",        val:`${goalsCompleted} of ${goals.length} achieved` },
             ].map(({ label, val })=>(
               <div key={label}>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.07em] mb-0.5" style={{ color:MUTED }}>{label}</p>
@@ -611,18 +679,18 @@ function LearningPlanTab() {
               <p className="text-[10px] font-semibold uppercase tracking-[0.07em] mb-1.5" style={{ color:MUTED }}>Overall Progress</p>
               <div className="flex items-center gap-3">
                 <div className="flex-1 bg-gray-100 rounded-full" style={{ height:8 }}>
-                  <div className="rounded-full" style={{ height:8, width:`${IDP.progress}%`, backgroundColor:TEAL, transition:"width 0.4s ease" }}/>
+                  <div className="rounded-full" style={{ height:8, width:`${idpProgress}%`, backgroundColor:TEAL, transition:"width 0.4s ease" }}/>
                 </div>
-                <span className="text-[12px] font-bold shrink-0" style={{ color:TEAL }}>{IDP.progress}%</span>
+                <span className="text-[12px] font-bold shrink-0" style={{ color:TEAL }}>{idpProgress}%</span>
               </div>
             </div>
           </div>
 
           {/* Right: ring */}
           <div className="flex flex-col items-center justify-center px-4">
-            <ProgressRing progress={IDP.progress} size={96}/>
+            <ProgressRing progress={idpProgress} size={96}/>
             <p className="text-[10px] mt-2 text-center" style={{ color:MUTED }}>
-              {IDP.goalsCompleted}/{IDP.goalsTotal} goals met
+              {goalsCompleted}/{goals.length} goals met
             </p>
           </div>
         </div>
@@ -634,14 +702,16 @@ function LearningPlanTab() {
           <BookOpen size={15} style={{ color:BLUE }}/>
           <h2 className="text-[14px] font-bold" style={{ color:TEXT }}>Assigned Learning Path</h2>
         </div>
-        <p className="text-[11px] mb-5" style={{ color:MUTED }}>HVAC Professional Certification Track · {LEARNING_PATH.filter(s=>s.status==="completed").length} of {LEARNING_PATH.length} modules completed</p>
+        <p className="text-[11px] mb-5" style={{ color:MUTED }}>
+          {template ? `${template.name} · assigned by HR / superior` : "No path assigned yet"} · {PATH.filter(s=>s.status==="completed").length} of {PATH.length} modules completed
+        </p>
 
         <div className="flex gap-5">
           {/* Step column */}
           <div className="flex flex-col items-center pt-1">
-            {LEARNING_PATH.map((step, idx)=>{
-              const isLast = idx===LEARNING_PATH.length-1;
-              const nextStep = LEARNING_PATH[idx+1];
+            {PATH.map((step, idx)=>{
+              const isLast = idx===PATH.length-1;
+              const nextStep = PATH[idx+1];
               const lineColor = step.status==="completed" && nextStep && nextStep.status!=="locked" ? TEAL : step.status==="completed" ? TEAL : "#E5E7EB";
 
               return (
@@ -671,8 +741,8 @@ function LearningPlanTab() {
 
           {/* Content column */}
           <div className="flex-1 space-y-0">
-            {LEARNING_PATH.map((step,idx)=>{
-              const isLast = idx===LEARNING_PATH.length-1;
+            {PATH.map((step,idx)=>{
+              const isLast = idx===PATH.length-1;
               return (
                 <div key={step.step} className={`flex flex-col justify-center ${isLast?"":"mb-0"}`} style={{ minHeight:64 }}>
                   <div className={`rounded-lg px-4 py-3 transition-all ${step.status==="current"?"border-2":"border"}`}
@@ -724,35 +794,58 @@ function LearningPlanTab() {
           <Flag size={15} style={{ color:PURPLE }}/>
           <h2 className="text-[14px] font-bold" style={{ color:TEXT }}>Development Goals</h2>
         </div>
-        <p className="text-[11px] mb-5" style={{ color:MUTED }}>Personal targets tied to competency development for this plan cycle.</p>
+        <p className="text-[11px] mb-3" style={{ color:MUTED }}>Set jointly by HR and your superior — a goal becomes active once both approve.</p>
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg mb-4" style={{ backgroundColor:"#F9FAFB" }}>
+          <Lock size={11} className="mt-0.5 shrink-0" style={{ color:MUTED }}/>
+          <p className="text-[10px] leading-relaxed" style={{ color:MUTED }}>
+            View only here. HR ({hrOwner?.name ?? "—"}) and {superior?.name ?? "your superior"} manage these
+            goals from the Development Plans screen.
+          </p>
+        </div>
 
         <div className="space-y-3">
-          {DEV_GOALS.map((g,i)=>(
-            <div key={i} className="rounded-lg px-4 py-3.5 border" style={{ borderColor:BORDER, backgroundColor:g.progress===100?"#F0FDF9":"white" }}>
+          {goals.map(g=>{
+            const state = g.progress>=100 ? "Achieved" : (g.hrApproved && g.superiorApproved ? "Agreed" : "Proposed");
+            const st = GOAL_STATE_STYLE[state as keyof typeof GOAL_STATE_STYLE];
+            return (
+            <div key={g.id} className="rounded-lg px-4 py-3.5 border" style={{ borderColor:BORDER, backgroundColor:g.progress===100?"#F0FDF9":"white" }}>
               <div className="flex items-start justify-between gap-3 mb-2.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <p className="text-[13px] font-semibold" style={{ color:TEXT }}>{g.title}</p>
-                    {g.progress===100 && (
-                      <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color:GREEN }}>
-                        <CheckCircle size={10}/> Achieved
-                      </span>
-                    )}
+                    <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ color:st.color, backgroundColor:st.bg }}>{state}</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="flex items-center gap-1 text-[10px]" style={{ color:MUTED }}>
-                      <Calendar size={10}/> Target: {g.targetDate}
+                      <Calendar size={10}/> Target: {fmtStoreDate(g.targetDate)}
                     </span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor:`${g.color}18`, color:g.color }}>{g.competency}</span>
+                    <span className="text-[10px]" style={{ color:MUTED }}>Proposed by {staffById(g.proposedBy)?.name ?? "—"}</span>
                   </div>
                 </div>
                 <span className="text-[14px] font-bold shrink-0" style={{ color: g.progress===100?GREEN:g.color }}>{g.progress}%</span>
               </div>
-              <div className="w-full bg-gray-100 rounded-full" style={{ height:5 }}>
+              <div className="w-full bg-gray-100 rounded-full mb-2.5" style={{ height:5 }}>
                 <div className="rounded-full transition-all" style={{ height:5, width:`${g.progress}%`, backgroundColor:g.progress===100?GREEN:g.color }}/>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold"
+                  style={g.hrApproved ? { color:"#0891B2", backgroundColor:"#ECFEFF" } : { color:"#9CA3AF", backgroundColor:"#F9FAFB" }}>
+                  HR {g.hrApproved ? "approved" : "pending"}
+                </span>
+                <span className="px-2 py-0.5 rounded-md text-[9px] font-bold"
+                  style={g.superiorApproved ? { color:"#1D4ED8", backgroundColor:"#EFF6FF" } : { color:"#9CA3AF", backgroundColor:"#F9FAFB" }}>
+                  Superior {g.superiorApproved ? "approved" : "pending"}
+                </span>
+                {g.linkedCourseIds.length>0 && (
+                  <span className="text-[10px] ml-auto" style={{ color:MUTED }}>
+                    Linked: {g.linkedCourseIds.map(id=>courseById(id)?.title).filter(Boolean).join(", ")}
+                  </span>
+                )}
+              </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -848,6 +941,12 @@ function SkillsTab() {
 
 // ── Profile Left Panel ────────────────────────────────────────────────────────
 function ProfilePanel() {
+  const me = useMe();
+  const RECORDS = useTrainingRecords(me.id);
+  const idp = IDPS.find(i => i.staffId === me.id);
+  const idpProgress = idp && idp.goals.length
+    ? Math.round(idp.goals.reduce((a, g) => a + g.progress, 0) / idp.goals.length)
+    : 0;
   const completed = RECORDS.filter(r=>r.status==="Completed");
   const completionRate = Math.round((completed.length/RECORDS.length)*100);
   const hoursLogged = completed.reduce((s,r)=>s+r.hours,0);
@@ -856,11 +955,11 @@ function ProfilePanel() {
     <div className="apex-profile-panel w-[248px] shrink-0 bg-white border-r border-gray-100 overflow-y-auto flex flex-col">
       {/* Avatar */}
       <div className="px-5 pt-6 pb-5 border-b border-gray-100 text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-[18px] font-extrabold mx-auto mb-3" style={{ backgroundColor:TEAL }}>AS</div>
-        <p className="text-[14px] font-bold leading-tight" style={{ color:TEXT }}>Ahmad Samsudin</p>
-        <p className="text-[12px] mt-0.5" style={{ color:MUTED }}>Senior Technician</p>
+        <div className="w-16 h-16 rounded-full flex items-center justify-center text-white text-[18px] font-extrabold mx-auto mb-3" style={{ backgroundColor:me.staff?.color ?? TEAL }}>{me.staff?.initials ?? "AS"}</div>
+        <p className="text-[14px] font-bold leading-tight" style={{ color:TEXT }}>{me.staff?.name ?? "Ahmad Samsudin"}</p>
+        <p className="text-[12px] mt-0.5" style={{ color:MUTED }}>{me.staff?.position ?? "Senior Technician"}</p>
         <div className="flex items-center justify-center gap-1.5 mt-2">
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor:"#E8FAF7", color:TEAL }}>Engineering</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor:"#E8FAF7", color:TEAL }}>{me.staff?.dept ?? "Engineering"}</span>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100 text-[#6B7280]">Full-time</span>
         </div>
       </div>
@@ -917,7 +1016,7 @@ function ProfilePanel() {
         {([
           { icon:BookOpen,  color:BLUE,   bg:"#EFF6FF", label:"Last trained", val:"15 Aug 2026" },
           { icon:Award,     color:GREEN,  bg:"#ECFDF5", label:"Latest cert",  val:"ISO 9001"   },
-          { icon:TrendingUp,color:TEAL,   bg:"#E8FAF7", label:"IDP progress", val:`${IDP.progress}%`    },
+          { icon:TrendingUp,color:TEAL,   bg:"#E8FAF7", label:"IDP progress", val:`${idpProgress}%`    },
         ] as { icon:React.ElementType; color:string; bg:string; label:string; val:string }[]).map(({ icon:Icon, color, bg, label, val })=>(
           <div key={label} className="flex items-center gap-2.5 mb-2.5 last:mb-0">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor:bg }}>

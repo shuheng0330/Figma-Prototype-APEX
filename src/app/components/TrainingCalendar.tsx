@@ -3,18 +3,31 @@ import {
   ChevronLeft, ChevronRight, MapPin, Clock,
   CheckCircle, CalendarDays, LayoutList, LayoutGrid, Calendar, Plus, X,
   Printer, FileSpreadsheet, FileText, SlidersHorizontal, Trash2,
+  Repeat, Sparkles, ClipboardCheck, Save, Copy,
 } from "lucide-react";
+import { useNavigate, Link } from "react-router";
+import { useRole, can } from "../access";
+import {
+  SESSIONS as STORE_SESSIONS, TEMPLATES, ROLE_IDENTITY, STAFF as STORE_STAFF,
+  staffById, seatCount, addTemplate, removeTemplate, markTemplateUsed,
+  useStoreVersion,
+  type SessionTemplate, type SessionKind, type Topic,
+} from "../trainingStore";
 
 const TEAL = "#00C9A7";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ViewMode = "month" | "week" | "list";
-type SessionType = "physical" | "hybrid" | "online";
+type SessionType = "physical" | "hybrid" | "online" | "sharing";
 
 interface Session {
   id: string; title: string; date: string; time: string;
   venue: string; trainer: string; type: SessionType;
   mandatory: boolean; booked: number; capacity: number;
+  /** Set when the event lives in the shared store (registration page handles it). */
+  storeBacked?: boolean;
+  /** Set when generated from a recurring template. */
+  templateId?: string;
   description?: string;
   selfRegistration?: boolean;
   requireForm?: boolean;
@@ -26,6 +39,8 @@ const TYPE_CLR = {
   physical: { solid: "#3B82F6", light: "#EFF6FF", label: "Physical" },
   hybrid:   { solid: "#8B5CF6", light: "#F5F3FF", label: "Hybrid"   },
   online:   { solid: "#F59E0B", light: "#FFFBEB", label: "Online"   },
+  // Staff-led knowledge sharing is its own training category.
+  sharing:  { solid: "#D97706", light: "#FFFBEB", label: "Staff Sharing" },
 };
 
 const TRAINERS: Record<string, { initials: string; color: string }> = {
@@ -35,6 +50,11 @@ const TRAINERS: Record<string, { initials: string; color: string }> = {
   "Karim Abdullah": { initials: "KA", color: "#8B5CF6" },
   "Wei Ling":       { initials: "WL", color: "#EC4899" },
 };
+
+// Volunteer trainers from the shared store also need an avatar in the calendar.
+STORE_STAFF.filter(st => st.isTrainer).forEach(st => {
+  TRAINERS[st.name] ??= { initials: st.initials, color: st.color };
+});
 
 const TRAINER_NAMES = Object.keys(TRAINERS);
 
@@ -104,6 +124,27 @@ const SESSIONS_SEED: Session[] = [
   { id: "S13", title: "Q4 Safety Induction",             date: "2026-09-03", time: "09:00 – 11:00", venue: "Conference Hall A",           trainer: "Sarah Lim",      type: "physical", mandatory: true,  booked: 3,  capacity: 30, description: "Mandatory safety induction for all new hires and staff who have not completed induction in the current year. Covers fire safety, first aid basics, site hazard awareness, and emergency evacuation procedures." },
   { id: "S14", title: "Customer Onboarding Masterclass", date: "2026-09-08", time: "10:00 – 13:00", venue: "Training Room B",             trainer: "Priya Nair",     type: "hybrid",   mandatory: false, booked: 7,  capacity: 15, description: "Three-hour deep-dive into the full customer onboarding journey from first contact to handover sign-off. Includes walkthroughs of the onboarding checklist, warranty registration, and post-installation follow-up calls." },
 ];
+
+// Events owned by the shared store — these route to the full registration page.
+const STORE_SEED: Session[] = STORE_SESSIONS.map(s => ({
+  id: s.id,
+  title: s.title,
+  date: s.date,
+  time: s.time,
+  venue: s.venue,
+  trainer: staffById(s.trainerId)?.name ?? "TBC",
+  type: s.kind === "Sharing Session" ? "sharing" : s.kind === "Hybrid" ? "hybrid" : "physical",
+  mandatory: s.mandatory,
+  booked: seatCount(s.id),
+  capacity: s.capacity,
+  description: s.description,
+  selfRegistration: s.registrationOpen,
+  requireForm: true,
+  storeBacked: true,
+  templateId: s.templateId,
+}));
+
+const ALL_SEED: Session[] = [...STORE_SEED, ...SESSIONS_SEED].sort((a, b) => a.date.localeCompare(b.date));
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function toISO(d: Date) {
@@ -267,20 +308,32 @@ function DatePicker({
 }
 
 // ── Create Training Session Modal ─────────────────────────────────────────────
-function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: (s: Session) => void }) {
-  const [title, setTitle]           = useState("");
-  const [description, setDesc]      = useState("");
-  const [type, setType]             = useState<SessionType>("physical");
+function CreateSessionModal({ onClose, onSave, prefill }: {
+  onClose: () => void;
+  onSave: (s: Session, saveAs?: { name: string; fromTemplateId?: string }) => void;
+  /** Set when the form was opened from a saved template — date and time stay blank. */
+  prefill?: SessionTemplate;
+}) {
+  const kindToType = (k: SessionKind): SessionType =>
+    k === "Sharing Session" ? "sharing" : k === "Hybrid" ? "hybrid" : "physical";
+
+  const [title, setTitle]           = useState(prefill?.name ?? "");
+  const [description, setDesc]      = useState(prefill?.description ?? "");
+  const [type, setType]             = useState<SessionType>(prefill ? kindToType(prefill.kind) : "physical");
   const [date, setDate]             = useState("");
-  const [timeFrom, setTimeFrom]     = useState("");
-  const [timeTo, setTimeTo]         = useState("");
-  const [venue, setVenue]           = useState("");
-  const [trainer, setTrainer]       = useState(TRAINER_NAMES[0]);
-  const [capacity, setCapacity]     = useState(20);
-  const [mandatory, setMandatory]   = useState(false);
-  const [audience, setAudience]     = useState<string[]>([]);
-  const [selfReg, setSelfReg]       = useState(true);
-  const [requireForm, setRequireForm] = useState(false);
+  const [timeFrom, setTimeFrom]     = useState(prefill?.time?.split(" – ")[0] ?? "");
+  const [timeTo, setTimeTo]         = useState(prefill?.time?.split(" – ")[1] ?? "");
+  const [venue, setVenue]           = useState(prefill?.venue ?? "");
+  const [trainer, setTrainer]       = useState(prefill?.trainerName ?? "");
+  const [capacity, setCapacity]     = useState(prefill?.capacity ?? 20);
+  const [mandatory, setMandatory]   = useState(prefill?.mandatory ?? false);
+  const [audience, setAudience]     = useState<string[]>(prefill?.targetAudience ?? []);
+  const [selfReg, setSelfReg]       = useState(prefill?.selfRegistration ?? true);
+  const [requireForm, setRequireForm] = useState(prefill?.requireForm ?? false);
+
+  // Save-as-template — the setup is kept for the next time this training runs.
+  const [saveTemplate, setSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
 
   const toggleAudience = (role: string) => {
     if (role === "All Staff") {
@@ -293,7 +346,7 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
     }
   };
 
-  const canSubmit = title.trim() && date && timeFrom && timeTo &&
+  const canSubmit = title.trim() && date && timeFrom && timeTo && trainer.trim() &&
     (type === "online" || venue.trim());
 
   const handleSave = () => {
@@ -304,7 +357,7 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
       date,
       time: `${timeFrom} – ${timeTo}`,
       venue: venue.trim() || (type === "online" ? "Online" : ""),
-      trainer,
+      trainer: trainer.trim(),
       type,
       mandatory,
       booked: 0,
@@ -313,7 +366,9 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
       selfRegistration: selfReg,
       requireForm,
       targetAudience: audience.length ? audience : undefined,
-    });
+      templateId: prefill?.id,
+    },
+    saveTemplate ? { name: (templateName.trim() || title.trim()), fromTemplateId: prefill?.id } : undefined);
   };
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-[13px] text-[#1A1F2E] focus:outline-none focus:border-[#00C9A7] transition-colors";
@@ -334,7 +389,7 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white z-10">
           <div>
             <h2 className="text-[16px] font-bold text-[#1A1F2E]">Create Training Session</h2>
-            <p className="text-[11px] text-[#9CA3AF] mt-0.5">Set up a new physical, hybrid, or online session</p>
+            <p className="text-[11px] text-[#9CA3AF] mt-0.5">Physical, hybrid, online, or a staff-led sharing session</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
             <X size={16} className="text-[#6B7280]" />
@@ -343,6 +398,18 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
 
         {/* Form body */}
         <div className="px-6 py-5 space-y-6">
+
+          {/* Opened from a saved template */}
+          {prefill && (
+            <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl" style={{ backgroundColor: "#F0FDFA" }}>
+              <Copy size={14} className="mt-0.5 shrink-0" style={{ color: TEAL }} />
+              <p className="text-[12px] leading-relaxed" style={{ color: "#065F46" }}>
+                Using template <b>{prefill.name}</b> — details carried over from the last run
+                ({prefill.uses} time{prefill.uses === 1 ? "" : "s"} so far). Set the new date and time below;
+                everything else can still be edited.
+              </p>
+            </div>
+          )}
 
           {/* ── Session Details ── */}
           <div>
@@ -377,7 +444,7 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
               <div>
                 {fieldLabel("Session Type", true)}
                 <div className="flex gap-2">
-                  {(["physical", "hybrid", "online"] as SessionType[]).map(t => (
+                  {(["physical", "hybrid", "online", "sharing"] as SessionType[]).map(t => (
                     <button
                       key={t}
                       onClick={() => setType(t)}
@@ -438,12 +505,23 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
             {sectionLabel("Capacity & Trainer")}
             <div className="grid grid-cols-2 gap-3">
 
-              {/* Trainer */}
+              {/* Trainer — typed in by hand, may be an external facilitator */}
               <div>
-                {fieldLabel("Trainer")}
-                <select value={trainer} onChange={e => setTrainer(e.target.value)} className={inputCls}>
-                  {TRAINER_NAMES.map(t => <option key={t}>{t}</option>)}
-                </select>
+                {fieldLabel("Trainer / Facilitator", true)}
+                <input
+                  type="text"
+                  list="apex-trainer-suggestions"
+                  placeholder="e.g. Sarah Lim, or an external facilitator"
+                  value={trainer}
+                  onChange={e => setTrainer(e.target.value)}
+                  className={inputCls}
+                />
+                <datalist id="apex-trainer-suggestions">
+                  {TRAINER_NAMES.map(t => <option key={t} value={t} />)}
+                </datalist>
+                <p className="text-[11px] text-[#C4C9D4] mt-1">
+                  Type any name — internal staff are suggested as you type.
+                </p>
               </div>
 
               {/* Capacity */}
@@ -561,6 +639,49 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
               </div>
             </div>
           </div>
+
+          {/* ── Save as reusable template ── */}
+          <div>
+            {sectionLabel("Reuse This Setup")}
+            <div className="rounded-xl border overflow-hidden"
+              style={{ borderColor: saveTemplate ? TEAL : "#F3F4F6", backgroundColor: saveTemplate ? "#F0FDFA" : "#F9FAFB" }}>
+              <div className="flex items-start gap-3 p-4">
+                <button
+                  onClick={() => setSaveTemplate(v => !v)}
+                  className="relative w-10 h-5 rounded-full transition-colors shrink-0 mt-0.5"
+                  style={{ backgroundColor: saveTemplate ? TEAL : "#D1D5DB" }}
+                >
+                  <span
+                    className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-150"
+                    style={{ left: saveTemplate ? 22 : 2 }}
+                  />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[12px] font-semibold text-[#1A1F2E]">Save as a reusable template</p>
+                  <p className="text-[11px] text-[#9CA3AF] mt-0.5">
+                    Keeps the title, type, venue, trainer, capacity and registration settings. Next time this
+                    training runs, pick the template and just set a new date and time.
+                  </p>
+
+                  {saveTemplate && (
+                    <div className="mt-3">
+                      {fieldLabel("Template name")}
+                      <input
+                        type="text"
+                        placeholder={title.trim() || "e.g. New Hire Safety Induction"}
+                        value={templateName}
+                        onChange={e => setTemplateName(e.target.value)}
+                        className={inputCls}
+                      />
+                      <p className="text-[11px] text-[#C4C9D4] mt-1">
+                        Leave blank to use the session title. The date and time are not saved.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
@@ -577,7 +698,7 @@ function CreateSessionModal({ onClose, onSave }: { onClose: () => void; onSave: 
             className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-all"
             style={{ backgroundColor: canSubmit ? TEAL : "#D1D5DB", cursor: canSubmit ? "pointer" : "not-allowed" }}
           >
-            Create Session
+            {saveTemplate ? "Create & Save Template" : "Create Session"}
           </button>
         </div>
       </div>
@@ -912,7 +1033,7 @@ function TrainingReportOverlay({ session, onClose }: { session: Session; onClose
       <div className="fixed inset-0 z-[60] bg-[#F4F6F9] flex flex-col overflow-hidden">
 
         {/* Top bar — hidden when printing */}
-        <div className="bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
+        <div className="apex-calendar-toolbar bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
@@ -1526,29 +1647,142 @@ function ListView({
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
+
+// ── Saved session templates ───────────────────────────────────────────────────
+function TemplatesModal({ onClose, onUse }: {
+  onClose: () => void;
+  onUse: (t: SessionTemplate) => void;
+}) {
+  useStoreVersion();
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={onClose}>
+      <div className="bg-white rounded-xl w-full max-w-[720px] max-h-[86vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Repeat size={15} style={{ color: TEAL }} />
+              <h2 className="text-[15px] font-extrabold text-[#1A1F2E]">Saved session templates</h2>
+            </div>
+            <p className="text-[11px] text-[#9CA3AF] mt-1">
+              Setups saved while creating a session. Pick one to run the same training again on a new date.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-[#9CA3AF] hover:text-[#1A1F2E]"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 overflow-y-auto space-y-2.5">
+          {TEMPLATES.map(t => (
+            <div key={t.id} className="rounded-xl border border-gray-200 px-4 py-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <p className="text-[13px] font-bold text-[#1A1F2E]">{t.name}</p>
+                    {t.kind === "Sharing Session" && (
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: "#FEF3C7", color: "#B45309" }}>
+                        <Sparkles size={8} /> Staff sharing
+                      </span>
+                    )}
+                    {t.mandatory && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-100 text-[#DC2626]">Required</span>
+                    )}
+                    {t.requireForm && (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold" style={{ backgroundColor: "#EFF6FF", color: "#1D4ED8" }}>
+                        HRDC form
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[#6B7280]">
+                    {t.kind} · {t.time} · {t.venue} · cap {t.capacity}
+                  </p>
+                  <p className="text-[11px] text-[#6B7280] mt-0.5">
+                    Trainer: <b>{t.trainerName}</b>
+                  </p>
+                  <p className="text-[10px] text-[#9CA3AF] mt-1">
+                    Saved by {staffById(t.createdBy)?.name ?? "—"} on {fmtShort(t.createdOn)} ·
+                    used {t.uses} time{t.uses === 1 ? "" : "s"}{t.lastUsed ? ` · last ${fmtShort(t.lastUsed)}` : ""}
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <button
+                    onClick={() => onUse(t)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[11px] font-bold text-white transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: TEAL }}
+                  >
+                    <Copy size={11} /> Use template
+                  </button>
+                  {confirmId === t.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <button onClick={() => { removeTemplate(t.id); setConfirmId(null); }}
+                        className="px-2 py-1 rounded text-[10px] font-bold text-white" style={{ backgroundColor: "#DC2626" }}>
+                        Delete
+                      </button>
+                      <button onClick={() => setConfirmId(null)}
+                        className="px-2 py-1 rounded text-[10px] font-semibold text-[#6B7280] border border-gray-200">
+                        Keep
+                      </button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmId(t.id)}
+                      className="flex items-center gap-1 text-[10px] font-semibold text-[#9CA3AF] hover:text-[#DC2626] transition-colors">
+                      <Trash2 size={10} /> Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {!TEMPLATES.length && (
+            <div className="py-10 text-center">
+              <Repeat size={26} className="mx-auto mb-2" style={{ color: "#D1D5DB" }} />
+              <p className="text-[13px] font-semibold text-[#9CA3AF]">No templates saved yet</p>
+              <p className="text-[11px] text-[#C4C9D4] mt-1">
+                Tick "Save as a reusable template" when creating a session.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-6 py-3.5 border-t border-gray-100 flex items-center justify-between">
+          <p className="text-[11px] text-[#9CA3AF]">
+            Date and time are never saved — you set them each time the training runs.
+          </p>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-[12px] font-semibold border border-gray-200 text-[#6B7280]">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TrainingCalendar() {
-  const userRole    = (typeof window !== "undefined" ? localStorage.getItem("userRole") : null) ?? "employee";
-  const canManage   = ["trainer", "hr", "super_admin"].includes(userRole);
-  const canCreate   = canManage;
-  const canReport   = canManage;
-  const canDelete   = canManage;
+  const navigate    = useNavigate();
+  const userRole    = useRole();
+  useStoreVersion();
+  const canCreate   = can(userRole, "session-setup");
+  const canReport   = can(userRole, "attendance");
+  const canDelete   = can(userRole, "session-setup");
+  const myId        = ROLE_IDENTITY[userRole] ?? "E013";
 
   const [viewMode, setViewMode]         = useState<ViewMode>("month");
   const [anchorDate, setAnchorDate]     = useState(new Date(2026, 7, 1)); // Aug 2026
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [userBooked, setUserBooked]     = useState<Set<string>>(new Set());
   const [userWaiting, setUserWaiting]   = useState<Set<string>>(new Set());
-  const [sessions, setSessions]         = useState<Session[]>(SESSIONS_SEED);
+  const [sessions, setSessions]         = useState<Session[]>(ALL_SEED);
   const [localBooked, setLocalBooked]   = useState<Record<string, number>>(
-    Object.fromEntries(SESSIONS_SEED.map(s => [s.id, s.booked]))
+    Object.fromEntries(ALL_SEED.map(s => [s.id, s.booked]))
   );
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templatePrefill, setTemplatePrefill] = useState<SessionTemplate | undefined>();
+  const [toast, setToast] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<Session | null>(null);
   const [reportSession, setReportSession]       = useState<Session | null>(null);
-
-  useEffect(() => {
-    if (window.matchMedia("(max-width: 767px)").matches) setViewMode("list");
-  }, []);
 
   const daysSessions = useMemo(
     () => sessions.filter(s => s.date === selectedDate),
@@ -1600,28 +1834,63 @@ export function TrainingCalendar() {
     setUserWaiting(w => { const n = new Set(w); n.delete(id); return n; });
   };
 
-  // ── Add session ─────────────────────────────────────────────────────────────
-  const handleAddSession = (s: Session) => {
+  // ── Add session (optionally keeping the setup as a template) ────────────────
+  const handleAddSession = (s: Session, saveAs?: { name: string; fromTemplateId?: string }) => {
     setSessions(prev => [...prev, s].sort((a, b) => a.date.localeCompare(b.date)));
     setLocalBooked(lb => ({ ...lb, [s.id]: 0 }));
+
+    if (saveAs) {
+      addTemplate({
+        name: saveAs.name,
+        topic: (templatePrefill?.topic ?? "Product Knowledge") as Topic,
+        kind: s.type === "sharing" ? "Sharing Session" : s.type === "hybrid" ? "Hybrid" : "Physical",
+        time: s.time,
+        venue: s.venue,
+        trainerName: s.trainer,
+        capacity: s.capacity,
+        mandatory: s.mandatory,
+        description: s.description,
+        targetAudience: s.targetAudience,
+        selfRegistration: s.selfRegistration ?? true,
+        requireForm: s.requireForm ?? false,
+        createdBy: myId,
+      });
+      setToast(`Template "${saveAs.name}" saved — reuse it for the next run.`);
+      window.setTimeout(() => setToast(""), 3500);
+    }
+
+    // Reusing a template records the run against it.
+    if (s.templateId) markTemplateUsed(s.templateId, s.date);
+
     setShowScheduleModal(false);
+    setTemplatePrefill(undefined);
     selectDate(s.date);
   };
 
   // ── Register click — open form if required, else book immediately ────────────
   const handleRegisterClick = (session: Session) => {
-    if (session.requireForm === false) {
+    if (session.storeBacked) {
+      // Full registration flow (capacity, waitlist, HRDC details) has its own page.
+      navigate(`/register/${session.id}`);
+    } else if (session.requireForm === false) {
       bookSession(session.id);
     } else {
       setRegisterSession(session);
     }
   };
 
+  // ── Reuse a saved template — the form opens prefilled, minus date and time ──
+  const useTemplate = (t: SessionTemplate) => {
+    setTemplatePrefill(t);
+    setShowTemplates(false);
+    setShowScheduleModal(true);
+  };
+
   return (
     <div className="apex-calendar-page flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
 
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div className="apex-calendar-toolbar bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-100 px-6 py-3 shrink-0 flex items-center justify-between">
         {/* Date navigator */}
         <div className="apex-calendar-navigator flex items-center gap-1">
           {viewMode !== "list" && (
@@ -1653,6 +1922,12 @@ export function TrainingCalendar() {
 
         {/* Right: Schedule button + legend + view toggle */}
         <div className="apex-calendar-tools flex items-center gap-4">
+          {toast && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold"
+              style={{ backgroundColor: "#ECFDF5", color: "#065F46" }}>
+              <Save size={12} /> {toast}
+            </span>
+          )}
           {/* New Session button — trainer / admin only */}
           {canCreate && (
             <button
@@ -1664,6 +1939,26 @@ export function TrainingCalendar() {
             </button>
           )}
 
+          {/* Recurring templates — trainer / HR / admin */}
+          {canCreate && (
+            <button
+              onClick={() => setShowTemplates(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-[#6B7280] hover:border-[#00C9A7] hover:text-[#00C9A7] transition-colors"
+            >
+              <Repeat size={12} /> Templates
+            </button>
+          )}
+
+          {/* Record attendance */}
+          {canReport && (
+            <Link
+              to="/attendance"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-[#6B7280] hover:border-[#00C9A7] hover:text-[#00C9A7] transition-colors"
+            >
+              <ClipboardCheck size={12} /> Attendance
+            </Link>
+          )}
+
           {/* Legend */}
           <div className="flex items-center gap-3 text-[10px] font-semibold text-[#6B7280]">
             <span className="flex items-center gap-1.5">
@@ -1671,6 +1966,9 @@ export function TrainingCalendar() {
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-sm bg-[#8B5CF6]" /> Hybrid
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-[#D97706]" /> Staff Sharing
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-red-400" /> Mandatory
@@ -1734,8 +2032,16 @@ export function TrainingCalendar() {
       </div>
 
       {/* ── Schedule Session Modal ───────────────────────────────────────────── */}
+      {showTemplates && (
+        <TemplatesModal onClose={() => setShowTemplates(false)} onUse={useTemplate} />
+      )}
+
       {showScheduleModal && (
-        <CreateSessionModal onClose={() => setShowScheduleModal(false)} onSave={handleAddSession} />
+        <CreateSessionModal
+          onClose={() => { setShowScheduleModal(false); setTemplatePrefill(undefined); }}
+          onSave={handleAddSession}
+          prefill={templatePrefill}
+        />
       )}
 
       {/* ── Training Report Overlay ─────────────────────────────────────────── */}

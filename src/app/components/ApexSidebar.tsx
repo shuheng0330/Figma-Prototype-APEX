@@ -4,6 +4,7 @@ import {
   CalendarDays, CalendarRange, User, ClipboardCheck, ClipboardList,
   HelpCircle, UserPlus, Users, Target, Award, ShieldCheck,
   ChevronLeft, ChevronRight, Layers, Building2, SlidersHorizontal,
+  Route, Presentation, UserCheck, TrendingUp,
   X,
 } from "lucide-react";
 import { getCurrentAccount, pathIsAllowed, type OrganisationalRole } from "../auth";
@@ -32,6 +33,14 @@ const ROUTE_ACTIVE_ID: Record<string, string> = {
   "/performance/team-reviews": "team-reviews",
   "/performance/final-appraisals": "final-appraisals",
   "/performance/hr-appraisals": "hr-appraisals",
+  "/quiz-review": "quiz-review",
+  "/sharing-sessions": "sharing-sessions",
+  "/trainer-dashboard": "trainer-dashboard",
+  "/attendance": "attendance",
+  "/learning-paths": "learning-paths",
+  "/idp": "idp",
+  "/training-kpi": "training-kpi",
+  "/access": "access",
 };
 
 interface NavItem { id: string; label: string; path: string; icon: React.ElementType; }
@@ -54,7 +63,14 @@ const ORGANISATION: Section = { title: "ORGANISATION", items: [
 const MY_LEARNING: Section = { title: "MY LEARNING", items: [
   { id: "my-learning", label: "Learning Portal", path: "/portal", icon: BookOpen },
   { id: "calendar", label: "Training Calendar", path: "/calendar", icon: CalendarDays },
+  { id: "sharing-sessions", label: "Sharing Sessions", path: "/sharing-sessions", icon: Presentation },
   { id: "my-profile", label: "My Profile", path: "/profile", icon: User },
+] };
+
+const DEVELOPMENT: Section = { title: "DEVELOPMENT", items: [
+  { id: "learning-paths", label: "Learning Paths", path: "/learning-paths", icon: Route },
+  { id: "idp", label: "Development Plans", path: "/idp", icon: Target },
+  { id: "training-kpi", label: "Training KPI", path: "/training-kpi", icon: TrendingUp },
 ] };
 
 const TRAINING_MANAGEMENT: Section = { title: "TRAINING MANAGEMENT", items: [
@@ -62,15 +78,18 @@ const TRAINING_MANAGEMENT: Section = { title: "TRAINING MANAGEMENT", items: [
   { id: "training-review", label: "Review Materials", path: "/review", icon: FileCheck },
   { id: "quiz-review", label: "Review Quizzes", path: "/quiz-review", icon: HelpCircle },
   { id: "assign-training", label: "Assign Training", path: "/assign-training", icon: UserPlus },
+  { id: "attendance", label: "Event Attendance", path: "/attendance", icon: UserCheck },
   { id: "training-score", label: "Training Scoreboard", path: "/training-score", icon: ClipboardCheck },
+  { id: "trainer-dashboard", label: "Trainer Dashboard", path: "/trainer-dashboard", icon: BarChart3 },
 ] };
 
 const ADMINISTRATION: Section = { title: "ADMINISTRATION", items: [
   { id: "admin-users", label: "User Management", path: "/users", icon: Settings },
+  { id: "access", label: "Role Access", path: "/access", icon: ShieldCheck },
 ] };
 
 const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
-  employee: [MY_PERFORMANCE, MY_LEARNING],
+  employee: [MY_PERFORMANCE, MY_LEARNING, DEVELOPMENT],
   manager_hod: [MY_PERFORMANCE, {
     title: "KPI MANAGEMENT", items: [
       { id: "dept-kpis", label: "Department KPIs", path: "/performance/department-kpis", icon: Layers },
@@ -81,16 +100,16 @@ const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
       { id: "team-eval", label: "Team Performance", path: "/dashboard", icon: BarChart3 },
       { id: "final-appraisals", label: "Team Appraisals", path: "/performance/final-appraisals", icon: Award },
     ],
-  }, MY_LEARNING],
-  hr: [MY_PERFORMANCE, APPRAISAL_MANAGEMENT, ORGANISATION, MY_LEARNING],
+  }, MY_LEARNING, DEVELOPMENT],
+  hr: [MY_PERFORMANCE, APPRAISAL_MANAGEMENT, ORGANISATION, MY_LEARNING, DEVELOPMENT, ADMINISTRATION],
   super_admin: [{
     title: "KPI ADMINISTRATION", items: [
       { id: "review-periods", label: "Review Period", path: "/performance/review-periods", icon: CalendarRange },
       { id: "company-kpis", label: "Company KPIs", path: "/performance/company-kpis", icon: Building2 },
       { id: "attitude-setup", label: "Attitude Setup", path: "/performance/attitude-setup", icon: SlidersHorizontal },
     ],
-  }, ORGANISATION, TRAINING_MANAGEMENT, ADMINISTRATION],
-  trainer: [TRAINING_MANAGEMENT, MY_LEARNING],
+  }, ORGANISATION, MY_LEARNING, DEVELOPMENT, TRAINING_MANAGEMENT, ADMINISTRATION],
+  trainer: [TRAINING_MANAGEMENT, MY_LEARNING, DEVELOPMENT],
 };
 
 interface Props {
@@ -118,7 +137,8 @@ function Tooltip({ label }: { label: string }) {
 export function ApexSidebar({ collapsed, mobileOpen, onToggle, onClose }: Props) {
   const location = useLocation();
   const activeId = ROUTE_ACTIVE_ID[location.pathname]
-    ?? (location.pathname.startsWith("/performance/final-appraisals/") ? "final-appraisals"
+    ?? (location.pathname.startsWith("/register/") ? "calendar"
+    :  location.pathname.startsWith("/performance/final-appraisals/") ? "final-appraisals"
     :  location.pathname.startsWith("/performance/hr-appraisals/")     ? "hr-appraisals"
     : "");
 

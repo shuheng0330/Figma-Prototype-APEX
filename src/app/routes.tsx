@@ -28,6 +28,14 @@ import { AttitudeSetup } from "./components/AttitudeSetup";
 import { FinalAppraisals } from "./components/FinalAppraisals";
 import { HrAppraisalQueue } from "./components/HrAppraisalQueue";
 import { HrAppraisals } from "./components/HrAppraisals";
+import { SessionRegistration } from "./components/SessionRegistration";
+import { TrainerDashboard } from "./components/TrainerDashboard";
+import { SessionAttendance } from "./components/SessionAttendance";
+import { LearningPaths } from "./components/LearningPaths";
+import { IdpManagement } from "./components/IdpManagement";
+import { TrainingKpi } from "./components/TrainingKpi";
+import { RoleAccess } from "./components/RoleAccess";
+import { SharingSessions } from "./components/SharingSessions";
 
 export const router = createBrowserRouter([
   {
@@ -70,6 +78,16 @@ export const router = createBrowserRouter([
           { path: "performance/final-appraisals/:id", Component: FinalAppraisals},
           { path: "performance/hr-appraisals",        Component: HrAppraisalQueue },
           { path: "performance/hr-appraisals/:id",   Component: HrAppraisals     },
+
+          // ── Training ──────────────────────────────────────────────────────
+          { path: "register/:sessionId", Component: SessionRegistration },
+          { path: "trainer-dashboard",   Component: TrainerDashboard    },
+          { path: "sharing-sessions",    Component: SharingSessions     },
+          { path: "attendance",          Component: SessionAttendance   },
+          { path: "learning-paths",      Component: LearningPaths       },
+          { path: "idp",                 Component: IdpManagement       },
+          { path: "training-kpi",        Component: TrainingKpi         },
+          { path: "access",              Component: RoleAccess          },
         ],
       },
     ],
