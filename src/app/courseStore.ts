@@ -52,10 +52,12 @@ export const quizStatus: Record<string, "approved" | "pending" | "rejected"> = {
 
 export function updateModuleStatus(id: string, status: MStatus) {
   moduleStatus[id] = status;
+  save();
 }
 
 export function updateQuizStatus(id: string, status: "approved" | "pending" | "rejected") {
   quizStatus[id] = status;
+  save();
 }
 
 // ── SOPs ──────────────────────────────────────────────────────────────────────
@@ -411,3 +413,57 @@ export const ALL_QUIZZES: ModuleQuiz[] = [
     ],
   },
 ];
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+// The review screens mutate the status maps above; persist them under one
+// versioned key so approvals survive a refresh on the deployed prototype.
+const STORAGE_KEY = "apex-course-store-v1";
+export const COURSE_STORE_VERSION = 1;
+
+const SEED_MODULE_STATUS = { ...moduleStatus };
+const SEED_QUIZ_STATUS = { ...quizStatus };
+
+function save() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: COURSE_STORE_VERSION, moduleStatus, quizStatus }),
+    );
+  } catch {
+    // Private mode or quota exceeded — the prototype still works in memory.
+  }
+}
+
+function hydrate() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      moduleStatus?: Record<string, MStatus>;
+      quizStatus?: Record<string, "approved" | "pending" | "rejected">;
+    };
+    if (parsed.version !== COURSE_STORE_VERSION) return;
+    // Only known ids are restored, so a renamed seed never resurrects a stale key.
+    Object.keys(moduleStatus).forEach(id => {
+      const v = parsed.moduleStatus?.[id];
+      if (v) moduleStatus[id] = v;
+    });
+    Object.keys(quizStatus).forEach(id => {
+      const v = parsed.quizStatus?.[id];
+      if (v) quizStatus[id] = v;
+    });
+  } catch {
+    // Corrupt snapshot — fall through to the seed data.
+  }
+}
+
+/** Restores the seed review statuses and clears the saved snapshot. */
+export function resetCourseData() {
+  Object.assign(moduleStatus, SEED_MODULE_STATUS);
+  Object.assign(quizStatus, SEED_QUIZ_STATUS);
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing stored */ }
+}
+
+hydrate();

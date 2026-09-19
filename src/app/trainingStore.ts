@@ -614,7 +614,7 @@ export function kpiFor(staffId: string): KpiBreakdown {
 // ── Mutations + subscription ──────────────────────────────────────────────────
 type Listener = () => void;
 const listeners = new Set<Listener>();
-function emit() { listeners.forEach(l => l()); }
+function emit() { save(); listeners.forEach(l => l()); }
 
 export function useStoreVersion() {
   const [, bump] = useState(0);
@@ -802,3 +802,61 @@ export function daysUntil(iso: string) {
   const MS = 86400000;
   return Math.round((new Date(iso + "T00:00:00").getTime() - new Date(todayISO() + "T00:00:00").getTime()) / MS);
 }
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+// Mirrors the performance store: the whole mutable set is written under one
+// versioned key on every change and rehydrated on load, so a deployed
+// prototype survives a refresh. Bump the version when the seed data changes
+// shape and stale snapshots clear themselves instead of half-loading.
+const STORAGE_KEY = "apex-training-store-v1";
+export const TRAINING_STORE_VERSION = 1;
+
+/** Every collection a mutation can reach. */
+const PERSISTED: Record<string, unknown[]> = {
+  CATEGORIES, STAFF, COURSES, SESSIONS,
+  TEMPLATES, REGISTRATIONS, IDPS, PATH_TEMPLATES,
+};
+
+function save() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: TRAINING_STORE_VERSION, data: PERSISTED }),
+    );
+  } catch {
+    // Private mode or quota exceeded — the prototype still works in memory.
+  }
+}
+
+function hydrate() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as { version?: number; data?: Record<string, unknown[]> };
+    if (parsed.version !== TRAINING_STORE_VERSION || !parsed.data) return;
+    // The collections are exported as const, so refill them in place.
+    Object.entries(PERSISTED).forEach(([key, target]) => {
+      const saved = parsed.data?.[key];
+      if (Array.isArray(saved)) target.splice(0, target.length, ...saved);
+    });
+  } catch {
+    // Corrupt snapshot — fall through to the seed data.
+  }
+}
+
+// Snapshot of the seed data, taken before hydrate() overwrites it in place, so
+// a reset has something to restore to.
+const SEED: Record<string, unknown[]> = JSON.parse(JSON.stringify(PERSISTED));
+
+/** Restores the seed training data and clears the saved snapshot. */
+export function resetTrainingData() {
+  Object.entries(PERSISTED).forEach(([key, target]) => {
+    const seed = SEED[key];
+    if (Array.isArray(seed)) target.splice(0, target.length, ...JSON.parse(JSON.stringify(seed)));
+  });
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing stored */ }
+  listeners.forEach(l => l());
+}
+
+hydrate();
