@@ -180,7 +180,7 @@ export interface PortalCourse {
 export const COURSES: PortalCourse[] = [
   { id: "m1", title: "Data Privacy & Compliance",        dept: "IT",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "Video"], categoryIds: ["Safety & Compliance", "cat-hrdc"], duration: "45 min", progress: 100, mandatory: true,  from: "#1E293B", to: "#0F172A", emoji: "🔒", ownerId: "E013", deadline: "2026-10-31", sopId: "s3" },
   { id: "m2", title: "Workplace Safety Essentials",      dept: "HR",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["PPT", "Video"], categoryIds: ["Safety & Compliance", "cat-newhire", "cat-hrdc"],     duration: "60 min", progress: 0,   mandatory: true,  from: "#7F1D1D", to: "#450A0A", emoji: "⚠️", ownerId: "E013", deadline: "2026-10-15" },
-  { id: "m3", title: "Anti-Bribery & Ethics Policy",     dept: "Compliance",  topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Safety & Compliance", "cat-newhire"], duration: "30 min", progress: 0,   mandatory: true,  from: "#4C1D95", to: "#2E1065", emoji: "⚖️", ownerId: "E013", deadline: "2026-09-30",
+  { id: "m3", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales",    topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Sales", "cat-newhire"], duration: "40 min", progress: 0,   mandatory: true,  from: "#7C2D12", to: "#431407", emoji: "🛵", ownerId: "E013", deadline: "2026-09-30", sopId: "s4",
     assignment: { mode: "immediate", assignedOn: "2026-09-15", deadline: "2026-09-30", daysWithin: 7, mandatory: true, audience: "All staff", assignedBy: "E013" } },
   { id: "m4", title: "Emergency Response Protocol",      dept: "Operations",  topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["Video", "PPT"], categoryIds: ["Safety & Compliance"],     duration: "50 min", progress: 20,  mandatory: true,  from: "#78350F", to: "#451A03", emoji: "🚨", ownerId: "E012", deadline: "2026-11-20" },
   { id: "m5", title: "Information Security Awareness",   dept: "IT",          topic: "Digital Skills",      kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "PPT"], categoryIds: ["Digital Skills"], duration: "40 min", progress: 0,   mandatory: true,  from: "#0C4A6E", to: "#082F49", emoji: "🛡️", ownerId: "E013", deadline: "2026-12-05" },
@@ -611,6 +611,26 @@ export function kpiFor(staffId: string): KpiBreakdown {
   };
 }
 
+// ── Module completions ─────────────────────────────────────────────
+/** One learner finishing one module quiz. Stored so progress survives a reload. */
+export interface ModuleCompletion {
+  staffId: string;
+  moduleId: string;
+  correct: number;
+  total: number;
+  completedOn: string;
+}
+
+export const MODULE_COMPLETIONS: ModuleCompletion[] = [];
+
+export function completionFor(staffId: string, moduleId: string) {
+  return MODULE_COMPLETIONS.find(c => c.staffId === staffId && c.moduleId === moduleId);
+}
+
+export function completionsFor(staffId: string, moduleIds: string[]) {
+  return MODULE_COMPLETIONS.filter(c => c.staffId === staffId && moduleIds.includes(c.moduleId));
+}
+
 // ── Mutations + subscription ──────────────────────────────────────────────────
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -783,6 +803,29 @@ export function coursesInCategory(categoryId: string) {
   return COURSES.filter(c => c.categoryIds.includes(categoryId));
 }
 
+/** Records a module quiz result. Re-taking a module overwrites the previous score. */
+export function recordModuleCompletion(
+  staffId: string, moduleId: string, correct: number, total: number,
+) {
+  const existing = completionFor(staffId, moduleId);
+  if (existing) {
+    existing.correct = correct;
+    existing.total = total;
+    existing.completedOn = todayISO();
+  } else {
+    MODULE_COMPLETIONS.push({ staffId, moduleId, correct, total, completedOn: todayISO() });
+  }
+  emit();
+}
+
+/** Rolls module completions up into the percentage shown on the course card. */
+export function syncCourseProgress(courseId: string, doneModules: number, totalModules: number) {
+  const c = courseById(courseId);
+  if (!c || totalModules <= 0) return;
+  c.progress = Math.min(100, Math.round((doneModules / totalModules) * 100));
+  emit();
+}
+
 export function grantTrainer(staffId: string, on: boolean) {
   const s = staffById(staffId);
   if (!s) return;
@@ -808,13 +851,14 @@ export function daysUntil(iso: string) {
 // versioned key on every change and rehydrated on load, so a deployed
 // prototype survives a refresh. Bump the version when the seed data changes
 // shape and stale snapshots clear themselves instead of half-loading.
-const STORAGE_KEY = "apex-training-store-v1";
-export const TRAINING_STORE_VERSION = 1;
+const STORAGE_KEY = "apex-training-store-v3";
+export const TRAINING_STORE_VERSION = 3;
 
 /** Every collection a mutation can reach. */
 const PERSISTED: Record<string, unknown[]> = {
   CATEGORIES, STAFF, COURSES, SESSIONS,
   TEMPLATES, REGISTRATIONS, IDPS, PATH_TEMPLATES,
+  MODULE_COMPLETIONS,
 };
 
 function save() {
@@ -831,6 +875,12 @@ function save() {
 function hydrate() {
   if (typeof window === "undefined") return;
   try {
+    // Drop snapshots from earlier versions so they cannot be restored over
+    // updated seed data, and so dead keys do not accumulate.
+    Object.keys(localStorage)
+      .filter(k => k.startsWith("apex-training-store-") && k !== STORAGE_KEY)
+      .forEach(k => localStorage.removeItem(k));
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as { version?: number; data?: Record<string, unknown[]> };

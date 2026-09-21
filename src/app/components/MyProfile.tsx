@@ -9,7 +9,7 @@ import {
 import { useRole } from "../access";
 import {
   ROLE_IDENTITY, IDPS, PATH_TEMPLATES, GOAL_STATE_STYLE,
-  staffById, courseById, completedSessionsFor, pendingSessionsFor,
+  staffById, courseById, completedSessionsFor, pendingSessionsFor, COURSES,
   useStoreVersion, fmtDate as fmtStoreDate,
 } from "../trainingStore";
 
@@ -49,24 +49,6 @@ interface DevGoal {
   title: string; targetDate: string; competency: string; progress: number; color: string;
 }
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-const MOCK_RECORDS: TrainingRecord[] = [
-  { id:  1, date:"2026-08-15", title:"Data Privacy & Compliance",          type:"Mandatory", source:"E-Learning", score:94,   status:"Completed",   hours:5  },
-  { id:  2, date:"2026-08-02", title:"AC Installation Manual — Module 3",  type:"Technical", source:"E-Learning", score:78,   status:"Completed",   hours:3  },
-  { id:  3, date:"2026-07-25", title:"Workplace Safety Workshop",           type:"Mandatory", source:"Physical",   score:null, status:"Completed",   hours:8  },
-  { id:  4, date:"2026-07-12", title:"Customer Handling Techniques",        type:"Optional",  source:"E-Learning", score:85,   status:"Completed",   hours:4  },
-  { id:  5, date:"2026-09-20", title:"Emergency Response Protocol",         type:"Mandatory", source:"Hybrid",     score:null, status:"In Progress", hours:6  },
-  { id:  6, date:"2026-06-30", title:"ISO 9001 Quality Management",         type:"External",  source:"External",   score:72,   status:"Completed",   hours:16 },
-  { id:  7, date:"2026-09-05", title:"Leadership Fundamentals",             type:"Optional",  source:"E-Learning", score:null, status:"Overdue",     hours:5  },
-  { id:  8, date:"2026-05-28", title:"Safety Procedures Manual",            type:"Mandatory", source:"E-Learning", score:100,  status:"Completed",   hours:4  },
-  { id:  9, date:"2026-05-10", title:"Anti-Bribery & Ethics Policy",        type:"Mandatory", source:"Physical",   score:91,   status:"Completed",   hours:3  },
-  { id: 10, date:"2026-09-30", title:"Information Security Awareness",      type:"Mandatory", source:"E-Learning", score:null, status:"Overdue",     hours:4  },
-  { id: 11, date:"2026-04-20", title:"HVAC Certification Programme",        type:"Technical", source:"External",   score:88,   status:"Completed",   hours:24 },
-  { id: 12, date:"2026-03-15", title:"Customer Handover Protocol",          type:"Optional",  source:"E-Learning", score:90,   status:"Completed",   hours:3  },
-  { id: 13, date:"2026-02-28", title:"Refrigerant Handling R410A",          type:"Technical", source:"Hybrid",     score:82,   status:"Completed",   hours:6  },
-  { id: 14, date:"2026-02-10", title:"Fire Safety & Evacuation",            type:"Mandatory", source:"Physical",   score:null, status:"Completed",   hours:4  },
-  { id: 15, date:"2026-01-20", title:"Company Policy Induction",            type:"Mandatory", source:"E-Learning", score:96,   status:"Completed",   hours:3  },
-];
 
 
 // ── Live record helpers ───────────────────────────────────────────────────────
@@ -105,7 +87,27 @@ function useTrainingRecords(staffId: string): TrainingRecord[] {
     status: "In Progress",
     hours: 4,
   }));
-  return [...confirmed, ...awaiting, ...MOCK_RECORDS].sort((a, b) => b.date.localeCompare(a.date));
+  // E-learning rows come from the courses the learner has actually opened.
+  // A course that has never been started produces no record at all.
+  const today = new Date().toISOString().slice(0, 10);
+  const elearning: TrainingRecord[] = COURSES
+    .filter(c => c.progress > 0 || (c.mandatory && c.deadline && c.deadline < today))
+    .map((c, i) => {
+      const done = c.progress >= 100;
+      const overdue = !done && Boolean(c.deadline && c.deadline < today);
+      return {
+        id: 3000 + i,
+        date: c.deadline ?? today,
+        title: c.title,
+        type: (c.mandatory ? "Mandatory" : c.kpi === "Product Training" ? "Technical" : "Optional") as TrType,
+        source: (c.delivery === "Hybrid" ? "Hybrid" : "E-Learning") as Source,
+        score: null,
+        status: (done ? "Completed" : overdue ? "Overdue" : "In Progress") as Status,
+        hours: Math.max(1, Math.round(parseInt(c.duration, 10) / 60) || 1),
+      };
+    });
+
+  return [...confirmed, ...awaiting, ...elearning].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 const CERTIFICATES: Certificate[] = [

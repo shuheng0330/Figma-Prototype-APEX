@@ -79,7 +79,8 @@ export const ACCESS: Record<Feature, Record<Role, Scope>> = {
   "training-kpi":      { admin: "all",  hr: "all",  manager: "team", trainer: "own",  staff: "own"  },
   "scoreboard":        { admin: "all",  hr: "all",  manager: "team", trainer: "own",  staff: "none" },
   "users":             { admin: "all",  hr: "all",  manager: "none", trainer: "none", staff: "none" },
-  "access":            { admin: "all",  hr: "all",  manager: "none", trainer: "none", staff: "none" },
+  // Only Super Admin controls access — not HR.
+  "access":            { admin: "all",  hr: "none", manager: "none", trainer: "none", staff: "none" },
 };
 
 /** Roles that may see a feature but never change it. */

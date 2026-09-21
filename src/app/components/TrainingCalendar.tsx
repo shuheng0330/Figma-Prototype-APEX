@@ -147,7 +147,17 @@ const STORE_SEED: Session[] = STORE_SESSIONS.map(s => ({
 
 const ALL_SEED: Session[] = [...STORE_SEED, ...SESSIONS_SEED].sort((a, b) => a.date.localeCompare(b.date));
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ─────────────────────────────────────────────────────────────
+/**
+ * Seats taken. Store-backed events count their real registrations, so the
+ * number reacts to sign-ups made on the registration page; the seed-only
+ * demo events keep their local tally.
+ */
+function bookedCount(s: Session, localBooked?: Record<string, number>) {
+  if (s.storeBacked) return seatCount(s.id);
+  return localBooked?.[s.id] ?? s.booked;
+}
+
 function toISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -1256,7 +1266,7 @@ function SessionCard({
   const s = session;
   const clr = TYPE_CLR[s.type];
   const trainer = TRAINERS[s.trainer];
-  const currentBooked = localBooked[s.id] ?? s.booked;
+  const currentBooked = bookedCount(s, localBooked);
   const isFull      = currentBooked >= s.capacity;
   const isBooked    = booked.has(s.id);
   const isWaiting   = waitlisted.has(s.id);
@@ -1619,7 +1629,8 @@ function ListView({
           <div className="space-y-2">
             {daySessions.map(s => {
               const clr = TYPE_CLR[s.type];
-              const isFull = s.booked >= s.capacity;
+              const booked = bookedCount(s);
+              const isFull = booked >= s.capacity;
 
               return (
                 <div
@@ -1640,9 +1651,9 @@ function ListView({
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-[13px] font-bold" style={{ color: isFull ? "#EF4444" : "#059669" }}>
-                        {isFull ? "Full" : `${s.capacity - s.booked} left`}
+                        {isFull ? "Full" : `${s.capacity - booked} left`}
                       </p>
-                      <p className="text-[10px] text-[#9CA3AF]">{s.booked} / {s.capacity}</p>
+                      <p className="text-[10px] text-[#9CA3AF]">{booked} / {s.capacity}</p>
                     </div>
                   </div>
                 </div>

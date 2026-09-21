@@ -39,6 +39,7 @@ import {
   toggleCourseCategory, setPrimaryCategory,
   STATUS_GROUPS, STATUS_GROUP_STYLE, ROLE_IDENTITY, statusGroupOf, staffById,
   seatCount, waitCount, myReg, fmtDateShort, fmtDate, daysUntil, useStoreVersion,
+  completionsFor, recordModuleCompletion, syncCourseProgress,
   immediateAssignments,
   type PortalCourse, type DocType, type OfflineSession, type CourseStatusGroup,
 } from "../trainingStore";
@@ -505,7 +506,14 @@ function SopCourseDetail({ course, onBack }: { course: Course; onBack: () => voi
   const [phase, setPhase] = useState<Phase>("material");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [completions, setCompletions] = useState<Record<string, { correct: number; total: number }>>({});
+
+  // Completions live in the store, so a finished module survives a reload.
+  useStoreVersion();
+  const meId = ROLE_IDENTITY[useRole()] ?? "E001";
+  const completions: Record<string, { correct: number; total: number }> = Object.fromEntries(
+    completionsFor(meId, allSopModules.map(m => m.id))
+      .map(c => [c.moduleId, { correct: c.correct, total: c.total }]),
+  );
 
   const activeModule = allSopModules.find(m => m.id === activeModuleId);
   const blocks = activeModuleId ? (MODULE_BLOCKS[activeModuleId] ?? []) : [];
@@ -531,7 +539,13 @@ function SopCourseDetail({ course, onBack }: { course: Course; onBack: () => voi
       const correctOpt = q.options.find(o => o.isCorrect);
       return correctOpt && answers[q.id] === correctOpt.id;
     }).length;
-    setCompletions(prev => ({ ...prev, [activeModuleId]: { correct, total: quiz.questions.length } }));
+    recordModuleCompletion(meId, activeModuleId, correct, quiz.questions.length);
+
+    // Count this module even though the store write lands after this render.
+    const doneIds = new Set(Object.keys(completions));
+    doneIds.add(activeModuleId);
+    syncCourseProgress(course.id, doneIds.size, allSopModules.length);
+
     setPhase("result");
   };
 

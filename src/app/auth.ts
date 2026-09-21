@@ -39,7 +39,7 @@ const MANAGER_PATHS = [
 
 const HR_PATHS = [
   ...EMPLOYEE_PATHS, "/org-eval", "/dashboard", "/staff-profile", "/performance/hr-appraisals",
-  ...TRAINING_OPS_PATHS, "/learning-paths", "/access",
+  ...TRAINING_OPS_PATHS, "/learning-paths",
 ];
 
 const SUPER_ADMIN_PATHS = [
