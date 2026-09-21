@@ -3,9 +3,12 @@ import {
   CheckCircle, XCircle, FileText, Sparkles,
   AlignLeft, List as ListIcon, Table2, AlertTriangle,
   Image as ImgIcon, Video, Play, Plus, Eye, Pencil, Upload,
-  GripVertical, X,
+  GripVertical, X, Lock,
 } from "lucide-react";
 import { MODULE_BLOCKS, MODULE_META, moduleStatus as storeModuleStatus, updateModuleStatus } from "../courseStore";
+import { useRole, ROLE_META, scopeOf } from "../access";
+import { ROLE_IDENTITY, sopOwner, staffById, useStoreVersion } from "../trainingStore";
+
 
 const TEAL = "#00C9A7";
 
@@ -484,6 +487,12 @@ function renderBlock(
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export function MaterialReview() {
+  const role = useRole();
+  useStoreVersion();
+  const myId = ROLE_IDENTITY[role] ?? "E001";
+  /** Trainers may open any approved material but edit only their own. */
+  const ownOnly = scopeOf(role, "materials") === "own";
+
   const [selectedSop, setSelectedSop]       = useState("s1");
   const [selectedMod, setSelectedMod]       = useState("m1");
   const [mode, setMode]                     = useState<"edit" | "preview">("edit");
@@ -584,6 +593,9 @@ export function MaterialReview() {
   };
 
   const selectedSopData = SOPS.find(s => s.id === selectedSop)!;
+  const ownerId = sopOwner(selectedSop);
+  const isOwner = ownerId === myId;
+  const locked = ownOnly && !isOwner;
 
   // ── NEW TWO-PANEL LAYOUT ────────────────────────────────────────────────────
   return (
@@ -605,6 +617,20 @@ export function MaterialReview() {
                 return <option key={sop.id} value={sop.id}>{sop.emoji} {sop.title} ({mods.length})</option>;
               })}
             </select>
+          </div>
+
+          {/* Ownership — a trainer can only modify what they created */}
+          <div className="px-4 py-3 border-b border-gray-100 shrink-0">
+            <div className="flex items-start gap-2 px-2.5 py-2 rounded-lg"
+              style={{ backgroundColor: locked ? "#FFFBEB" : "#F0FDFA" }}>
+              {locked ? <Lock size={11} className="mt-0.5 shrink-0" style={{ color: "#B45309" }} />
+                      : <CheckCircle size={11} className="mt-0.5 shrink-0" style={{ color: "#059669" }} />}
+              <p className="text-[10px] leading-relaxed" style={{ color: locked ? "#92400E" : "#065F46" }}>
+                {locked
+                  ? `Read-only — created by ${staffById(ownerId ?? "")?.name ?? "another trainer"}. ${ROLE_META[role].label}s can edit only their own materials.`
+                  : `You own this material${ownOnly ? "" : ` (${ROLE_META[role].label} access)`} — editing and approval are enabled.`}
+              </p>
+            </div>
           </div>
 
           {/* SOP info card */}
@@ -937,10 +963,12 @@ export function MaterialReview() {
                   {currentStatus !== "approved" ? (
                     <button
                       onClick={approve}
+                      disabled={locked}
+                      title={locked ? "You can only approve materials you created" : undefined}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-white hover:opacity-90 transition-opacity"
-                      style={{ backgroundColor: "#059669" }}
+                      style={{ backgroundColor: locked ? "#D1D5DB" : "#059669", cursor: locked ? "not-allowed" : "pointer" }}
                     >
-                      <CheckCircle size={13} /> Approve Module
+                      {locked ? <Lock size={13} /> : <CheckCircle size={13} />} Approve Module
                     </button>
                   ) : (
                     <span className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold text-[#059669] bg-[#ECFDF5]">
