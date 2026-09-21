@@ -100,7 +100,7 @@ const NAV_BY_ROLE: Record<OrganisationalRole, Section[]> = {
       { id: "team-eval", label: "Team Performance", path: "/dashboard", icon: BarChart3 },
       { id: "final-appraisals", label: "Team Appraisals", path: "/performance/final-appraisals", icon: Award },
     ],
-  }, MY_LEARNING, DEVELOPMENT],
+  }, TRAINING_MANAGEMENT, MY_LEARNING, DEVELOPMENT],
   hr: [MY_PERFORMANCE, APPRAISAL_MANAGEMENT, ORGANISATION, MY_LEARNING, DEVELOPMENT, ADMINISTRATION],
   super_admin: [{
     title: "KPI ADMINISTRATION", items: [

@@ -8,8 +8,9 @@ import {
 import { useNavigate, Link } from "react-router";
 import { useRole, can } from "../access";
 import {
-  SESSIONS as STORE_SESSIONS, TEMPLATES, ROLE_IDENTITY, STAFF as STORE_STAFF,
-  staffById, seatCount, addTemplate, removeTemplate, markTemplateUsed,
+  SESSIONS as STORE_SESSIONS, TEMPLATES, ROLE_IDENTITY, STAFF as STORE_STAFF, REGISTRATIONS,
+  staffById, staffByName, seatCount, addSession, addTemplate, removeTemplate, markTemplateUsed,
+  cancelRegistration,
   useStoreVersion,
   type SessionTemplate, type SessionKind, type Topic,
 } from "../trainingStore";
@@ -1315,13 +1316,21 @@ function SessionCard({
           </div>
 
           {isBooked ? (
-            <button
-              onClick={() => onCancel(s.id)}
-              className="w-full py-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5 border-2 transition-colors hover:bg-[#ECFDF5]"
-              style={{ color: "#059669", borderColor: "#059669" }}
-            >
-              <CheckCircle size={12} /> Booked — Cancel
-            </button>
+            <div className="flex gap-1.5">
+              <div
+                className="flex-1 py-2 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5"
+                style={{ color: "#059669", backgroundColor: "#ECFDF5", border: "1px solid #A7F3D0" }}
+              >
+                <CheckCircle size={12} /> Registered
+              </div>
+              <button
+                onClick={() => onCancel(s.id)}
+                className="px-3 py-2 rounded-lg text-[11px] font-semibold border transition-colors hover:bg-[#FEF2F2] hover:border-[#FCA5A5] hover:text-[#DC2626]"
+                style={{ color: "#6B7280", borderColor: "#E5E7EB" }}
+              >
+                Cancel
+              </button>
+            </div>
           ) : isFull ? (
             <button
               onClick={() => !isWaiting && onWaitlist(s.id)}
@@ -1769,7 +1778,11 @@ export function TrainingCalendar() {
   const myId        = ROLE_IDENTITY[userRole] ?? "E013";
 
   const [viewMode, setViewMode]         = useState<ViewMode>("month");
-  const [anchorDate, setAnchorDate]     = useState(new Date(2026, 7, 1)); // Aug 2026
+  // Open on the current month rather than a fixed one.
+  const [anchorDate, setAnchorDate]     = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
   const [selectedDate, setSelectedDate] = useState(TODAY);
   const [userBooked, setUserBooked]     = useState<Set<string>>(new Set());
   const [userWaiting, setUserWaiting]   = useState<Set<string>>(new Set());
@@ -1822,9 +1835,27 @@ export function TrainingCalendar() {
   };
   const joinWaitlist = (id: string) => setUserWaiting(w => new Set([...w, id]));
   const cancelBooking = (id: string) => {
+    // Store-backed events keep their registrations in the shared store, where
+    // cancelling also promotes whoever is first on the waitlist.
+    if (sessions.find(x => x.id === id)?.storeBacked) {
+      cancelRegistration(id, myId);
+      return;
+    }
     setUserBooked(b => { const n = new Set(b); n.delete(id); return n; });
     setLocalBooked(lb => ({ ...lb, [id]: Math.max(0, lb[id] - 1) }));
   };
+
+  // Registrations made on the registration page live in the store, so the card
+  // state is the local seed-only bookings merged with whatever the store holds.
+  const myStoreRegs = REGISTRATIONS.filter(r => r.staffId === myId);
+  const bookedIds = new Set<string>([
+    ...userBooked,
+    ...myStoreRegs.filter(r => r.status === "registered").map(r => r.sessionId),
+  ]);
+  const waitingIds = new Set<string>([
+    ...userWaiting,
+    ...myStoreRegs.filter(r => r.status === "waitlisted").map(r => r.sessionId),
+  ]);
 
   // ── Delete session ───────────────────────────────────────────────────────────
   const deleteSession = (id: string) => {
@@ -1836,7 +1867,29 @@ export function TrainingCalendar() {
 
   // ── Add session (optionally keeping the setup as a template) ────────────────
   const handleAddSession = (s: Session, saveAs?: { name: string; fromTemplateId?: string }) => {
-    setSessions(prev => [...prev, s].sort((a, b) => a.date.localeCompare(b.date)));
+    // Mirror the event into the shared store, so registration, attendance and
+    // the trainer dashboard can all see it — and so it survives a refresh.
+    const topic = (templatePrefill?.topic ?? "Product Knowledge") as Topic;
+    addSession({
+      id: s.id,
+      title: s.title,
+      date: s.date,
+      time: s.time,
+      venue: s.venue,
+      trainerId: staffByName(s.trainer)?.id ?? myId,
+      // The store has no online-only kind; hybrid is the closest fit.
+      kind: s.type === "sharing" ? "Sharing Session" : s.type === "physical" ? "Physical" : "Hybrid",
+      topic,
+      kpi: topic === "Product Knowledge" ? "Product Training" : "Skill-Based Training",
+      capacity: s.capacity,
+      mandatory: s.mandatory,
+      registrationOpen: s.selfRegistration ?? true,
+      templateId: s.templateId,
+      description: s.description ?? "",
+    });
+
+    // storeBacked routes the card to the full registration page.
+    setSessions(prev => [...prev, { ...s, storeBacked: true }].sort((a, b) => a.date.localeCompare(b.date)));
     setLocalBooked(lb => ({ ...lb, [s.id]: 0 }));
 
     if (saveAs) {
@@ -2024,7 +2077,7 @@ export function TrainingCalendar() {
         {/* Right panel */}
         <SessionsPanel
           sessions={daysSessions} selectedDate={selectedDate}
-          booked={userBooked} waitlisted={userWaiting} localBooked={localBooked}
+          booked={bookedIds} waitlisted={waitingIds} localBooked={localBooked}
           onRegister={handleRegisterClick} onWaitlist={joinWaitlist} onCancel={cancelBooking}
           onReport={setReportSession} canReport={canReport}
           onDelete={deleteSession} canDelete={canDelete}

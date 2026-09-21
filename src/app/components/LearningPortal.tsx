@@ -1816,7 +1816,7 @@ function GroupSection({
 }
 
 // ── Learning Portal — "My Learnings" home ─────────────────────────────────────
-type Source = "all" | "assigned" | "open";
+type Source = "all" | "assigned" | "open" | "registered";
 
 export function LearningPortal() {
   const role = useRole();
@@ -1843,11 +1843,21 @@ export function LearningPortal() {
   const q = search.toLowerCase().trim();
   const cats = activeCategories();
 
-  const openSessions = SESSIONS
-    .filter(s => s.registrationOpen && daysUntil(s.date) >= 0)
+  const upcomingSessions = SESSIONS
+    .filter(s => daysUntil(s.date) >= 0)
     .filter(s => !q || s.title.toLowerCase().includes(q) || s.venue.toLowerCase().includes(q))
     .filter(s => !activeCats.length || activeCats.includes(s.topic))
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  /** A session I hold a live registration for — registered or waitlisted. */
+  const isMine = (s: OfflineSession) => {
+    const r = myReg(s.id, meId);
+    return Boolean(r && r.status !== "cancelled");
+  };
+
+  // Once registered, a session moves out of "open" and into "registered".
+  const registeredSessions = upcomingSessions.filter(isMine);
+  const openSessions = upcomingSessions.filter(s => s.registrationOpen && !isMine(s));
 
   const assignedCourses = COURSES.filter(c => c.assignment);
 
@@ -1874,9 +1884,10 @@ export function LearningPortal() {
   const completedCount   = COURSES.filter(c => c.progress >= 100).length;
 
   const SOURCES: { id: Source; label: string; count: number; icon: React.ElementType }[] = [
-    { id: "all",      label: "All learning",        count: COURSES.length + openSessions.length, icon: LayoutGrid },
+    { id: "all",      label: "All learning",        count: COURSES.length + openSessions.length + registeredSessions.length, icon: LayoutGrid },
     { id: "assigned", label: "Assigned training",   count: assignedCourses.length,               icon: Inbox      },
     { id: "open",     label: "Open for registration", count: openSessions.length,                icon: CalendarDays },
+    { id: "registered", label: "Registered",          count: registeredSessions.length,            icon: CheckCircle  },
   ];
 
   const byStatus = STATUS_GROUPS.map(g => ({ key: g, courses: filtered.filter(c => statusGroupOf(c) === g) }));
@@ -2026,7 +2037,30 @@ export function LearningPortal() {
       {/* ── Body ─────────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto py-4">
 
-        {source === "open" ? (
+        {source === "registered" ? (
+          /* ── Registered ────────────────────────────────────────────── */
+          <div className="px-6">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle size={15} style={{ color: "#059669" }} />
+              <h2 className="text-[14px] font-bold text-[#1A1F2E]">Registered</h2>
+              <span className="text-[11px]" style={{ color: "#9CA3AF" }}>
+                {registeredSessions.length} session{registeredSessions.length !== 1 ? "s" : ""} you have a place on
+                {activeCats.length ? ` · ${activeCats.length} category filter${activeCats.length > 1 ? "s" : ""}` : ""}
+              </span>
+            </div>
+            {registeredSessions.length ? (
+              <div className="grid grid-cols-3 gap-3">
+                {registeredSessions.map(s => <OfflineSessionCard key={s.id} s={s} meId={meId} />)}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20">
+                <CheckCircle size={40} className="mb-3" style={{ color: "#D1D5DB" }} />
+                <p className="text-[14px] font-semibold" style={{ color: "#9CA3AF" }}>No registrations yet</p>
+                <p className="text-[12px] mt-1" style={{ color: "#C4C9D4" }}>Sign up from Open for registration</p>
+              </div>
+            )}
+          </div>
+        ) : source === "open" ? (
           /* ── Open for registration ─────────────────────────────────── */
           <div className="px-6">
             <div className="flex items-center gap-2 mb-3">
