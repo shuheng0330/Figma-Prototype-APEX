@@ -17,18 +17,29 @@ export const SAMPLE_ACCOUNTS: PrototypeAccount[] = [
   { name: "Super Admin", email: "admin@apex.test", password: "demo1234", role: "super_admin", roleLabel: "Super Admin", landingPath: "/performance/review-periods" },
 ];
 
+// Training routes every role may reach for its own record.
+const SELF_TRAINING_PATHS = [
+  "/portal", "/calendar", "/profile", "/register",
+  "/sharing-sessions", "/idp", "/training-kpi",
+];
+
+// Training routes for roles that run sessions.
+const TRAINING_OPS_PATHS = ["/trainer-dashboard", "/attendance"];
+
 const EMPLOYEE_PATHS = [
   "/performance", "/performance/my-kpi-plan", "/performance/my-assessments",
-  "/portal", "/calendar", "/profile",
+  ...SELF_TRAINING_PATHS,
 ];
 
 const MANAGER_PATHS = [
   ...EMPLOYEE_PATHS, "/dashboard", "/staff-profile",
   "/performance/department-kpis", "/performance/team-reviews", "/performance/final-appraisals",
+  ...TRAINING_OPS_PATHS, "/learning-paths",
 ];
 
 const HR_PATHS = [
   ...EMPLOYEE_PATHS, "/org-eval", "/dashboard", "/staff-profile", "/performance/hr-appraisals",
+  ...TRAINING_OPS_PATHS, "/learning-paths",
 ];
 
 const SUPER_ADMIN_PATHS = [
@@ -36,11 +47,12 @@ const SUPER_ADMIN_PATHS = [
   "/performance/review-periods", "/performance/company-kpis",
   "/performance/attitude-setup", "/org-eval", "/dashboard", "/staff-profile",
   "/users",
+  ...SELF_TRAINING_PATHS, ...TRAINING_OPS_PATHS, "/learning-paths", "/access",
 ];
 
 const TRAINER_PATHS = [
   "/upload", "/review", "/quiz-review", "/assign-training", "/training-score",
-  "/portal", "/calendar", "/profile",
+  ...SELF_TRAINING_PATHS, ...TRAINING_OPS_PATHS,
 ];
 
 export const ROLE_PATHS: Record<OrganisationalRole, string[]> = {
@@ -82,7 +94,7 @@ export function pathIsAllowed(role: OrganisationalRole, pathname: string): boole
   const allowed = ROLE_PATHS[role];
   if (allowed.includes(pathname)) return true;
   const dynamicParents = [
-    "/staff-profile",
+    "/staff-profile", "/register",
     "/performance/review-periods",
     "/performance/final-appraisals",
     "/performance/hr-appraisals",

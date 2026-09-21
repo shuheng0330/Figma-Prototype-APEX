@@ -41,6 +41,7 @@ export const moduleStatus: Record<string, MStatus> = {
   m4: "pending",  m5: "rejected", m6: "approved", m7: "approved",
   m8: "approved", m9: "pending",  m10: "approved",
   m11: "approved", m12: "pending",
+  m13: "approved", m14: "approved", m15: "approved", m16: "approved",
 };
 
 export const quizStatus: Record<string, "approved" | "pending" | "rejected"> = {
@@ -48,14 +49,17 @@ export const quizStatus: Record<string, "approved" | "pending" | "rejected"> = {
   Q004: "pending",  Q005: "approved", Q006: "approved", Q007: "approved",
   Q008: "approved", Q009: "pending",  Q010: "approved",
   Q011: "approved", Q012: "pending",
+  Q013: "approved", Q014: "approved", Q015: "approved", Q016: "approved",
 };
 
 export function updateModuleStatus(id: string, status: MStatus) {
   moduleStatus[id] = status;
+  save();
 }
 
 export function updateQuizStatus(id: string, status: "approved" | "pending" | "rejected") {
   quizStatus[id] = status;
+  save();
 }
 
 // ── SOPs ──────────────────────────────────────────────────────────────────────
@@ -63,6 +67,7 @@ export const SOPS: SopCourse[] = [
   { id: "s1", title: "AC Installation Manual",     dept: "Engineering", date: "16 May 2026", emoji: "🔧", fromColor: "#064E3B", toColor: "#022C22" },
   { id: "s2", title: "Customer Service Protocol",  dept: "Sales",       date: "17 May 2026", emoji: "🤝", fromColor: "#831843", toColor: "#500724" },
   { id: "s3", title: "Data Privacy Guidelines v2", dept: "IT",          date: "18 May 2026", emoji: "🔒", fromColor: "#1E293B", toColor: "#0F172A" },
+  { id: "s4", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales", date: "12 Jan 2026", emoji: "🛵", fromColor: "#7C2D12", toColor: "#431407" },
 ];
 
 // ── Modules ───────────────────────────────────────────────────────────────────
@@ -79,6 +84,10 @@ export const ALL_MODULES: CourseModule[] = [
   { id: "m10", sopId: "s2", number: 3,  title: "Customer Handover Protocol"       },
   { id: "m11", sopId: "s3", number: 1,  title: "Data Classification Framework"    },
   { id: "m12", sopId: "s3", number: 2,  title: "Encryption & Access Control"      },
+  { id: "m13", sopId: "s4", number: 1,  title: "Objective, Scope & Platforms"      },
+  { id: "m14", sopId: "s4", number: 2,  title: "Customer Self-Arranged Pickup"     },
+  { id: "m15", sopId: "s4", number: 3,  title: "Company-Arranged Delivery"         },
+  { id: "m16", sopId: "s4", number: 4,  title: "Documentation & Dispute Handling"  },
 ];
 
 // ── Per-module metadata (summary, objectives, tools) ─────────────────────────
@@ -209,6 +218,46 @@ export const MODULE_META: Record<string, ModuleMeta> = {
     ],
     tools: ["Company Password Manager", "BitLocker / FileVault", "APEX Authenticator App", "Company VPN Client"],
   },
+  m13: {
+    summary: "Why the e-hailing SOP exists, which platforms it covers, and who has to follow it. The controlling principle: once a product is handed to a driver the customer appointed, responsibility for that product passes to the customer — but only if the handover is documented correctly.",
+    objectives: [
+      "State the objective of the E-Hailing Delivery & Customer Pickup SOP",
+      "Identify which third-party platforms the SOP applies to",
+      "Recognise which purchases and which staff fall within scope",
+      "Distinguish a customer self-arranged pickup from a company-arranged delivery",
+    ],
+    tools: ["WhatsApp Business", "Company E-Hailing Account", "Outlet Handover Log"],
+  },
+  m14: {
+    summary: "The full sequence for a pickup the customer books themselves, from sending the WhatsApp acknowledgement template through verifying the driver on arrival to closing the 12-hour confirmation window.",
+    objectives: [
+      "Send the correct acknowledgement template and collect name and IC number",
+      "Verify driver identity against the customer's app screenshot before releasing goods",
+      "Capture the required photo evidence at handover",
+      "Apply the 12-hour customer confirmation rule correctly",
+    ],
+    tools: ["WhatsApp Business", "Acknowledgement Template 1-1", "Outlet Camera / Phone"],
+  },
+  m15: {
+    summary: "The sequence when APEX books the driver. It follows the same handover discipline as a self-arranged pickup, with extra obligations at the delivery end — proof of receipt and the customer's digital signature pulled from the company account.",
+    objectives: [
+      "Book via the official company account and record the Order ID",
+      "Verify driver identity from the app on arrival",
+      "Require proof of receipt and a digital signature at the delivery end",
+      "Download and file delivery evidence from the company e-hailing account",
+    ],
+    tools: ["Company E-Hailing Account", "Acknowledgement Template 1-2", "WhatsApp Business"],
+  },
+  m16: {
+    summary: "The five mandatory records for every e-hailing handover, and how they are used when a customer or payment facility claims non-receipt. Evidence is what decides a dispute — the refund position depends entirely on whether the file is complete.",
+    objectives: [
+      "List the five mandatory documents for an e-hailing handover",
+      "File evidence so it can be retrieved during a dispute",
+      "Apply the refund rule when non-receipt is claimed",
+      "Explain why an incomplete evidence file shifts liability back to APEX",
+    ],
+    tools: ["Internal Record Folder", "WhatsApp Business", "Company E-Hailing Account"],
+  },
 };
 
 // ── Module → Quiz mapping ─────────────────────────────────────────────────────
@@ -217,6 +266,7 @@ export const MODULE_QUIZ: Record<string, string> = {
   m5: "Q005", m6: "Q006",  m7: "Q007",
   m8: "Q008", m9: "Q009",  m10: "Q010",
   m11: "Q011", m12: "Q012",
+  m13: "Q013", m14: "Q014", m15: "Q015", m16: "Q016",
 };
 
 // ── Block content per module (mutable — MaterialReview can update) ─────────────
@@ -285,6 +335,30 @@ export const MODULE_BLOCKS: Record<string, Block[]> = {
     { id: "m12b1", type: "paragraph", data: { text: "Encryption and access control are the two primary technical controls that protect data confidentiality and integrity. All APEX systems must implement both layers — one without the other is insufficient protection." } },
     { id: "m12b2", type: "steps", data: { items: ["Use only APEX-approved applications to store or share customer data — no personal email or messaging apps", "Enable full-disk encryption on all laptops and mobile devices used for work (BitLocker / FileVault)", "Use strong, unique passwords: minimum 12 characters, mix of upper/lower/numbers/symbols", "Change system passwords every 90 days — use the company password manager", "Enable MFA on all company accounts — authenticator app preferred over SMS"] } },
     { id: "m12b3", type: "table", data: { headers: ["Control", "Requirement", "Responsibility"], rows: [["Password length", "≥ 12 characters", "All staff"], ["Password rotation", "Every 90 days", "All staff"], ["MFA", "All company accounts", "IT enforces"], ["Device encryption", "All work devices", "IT provisions"], ["VPN for remote access", "Mandatory off-site", "All staff"]] } },
+  ],
+  m13: [
+    { id: "m13b1", type: "paragraph", data: { text: "This SOP exists to secure the handover of products and document it properly when delivery is arranged through an e-hailing platform, so that disputes and fraud are resolved on evidence rather than recollection. The controlling principle is simple: once the product is handed to a driver the customer appointed, the company’s responsibility for that product ends — but that protection only holds if the handover was documented the way this SOP requires." } },
+    { id: "m13b2", type: "table", data: { headers: ["Element", "Coverage", "Note"], rows: [["Platforms", "Lalamove, GrabExpress and similar providers", "Not an exhaustive list — covers all third-party on-demand providers"], ["Purchases", "Retail and online", "Both are in scope"], ["Staff", "Sales staff handling handover at outlets", "Applies at every outlet"], ["Arrangement", "Customer self-arranged, or company-arranged", "Different flows — see Modules 2 and 3"]] } },
+    { id: "m13b3", type: "warning", data: { text: "The SOP lists platforms as “including but not limited to”. If a customer arrives with a driver from a provider not named in the SOP, this procedure still applies in full. Never treat an unfamiliar platform as an exception.", level: "warning" } },
+    { id: "m13b4", type: "steps", data: { items: ["Establish who arranged the driver — the customer, or the company", "For a customer-arranged pickup, follow the Module 2 flow", "For a company-arranged delivery, follow the Module 3 flow", "Both flows require the customer acknowledgement message before handover", "Both flows require photo evidence of the driver with the product"] } },
+  ],
+  m14: [
+    { id: "m14b1", type: "paragraph", data: { text: "When the customer books the driver themselves, the company never controls the delivery leg. The evidence collected at the counter is therefore the only protection available, and it must be complete before the product leaves the outlet." } },
+    { id: "m14b2", type: "steps", data: { items: ["Send the customer the WhatsApp acknowledgement template (Communication Guidelines 1-1)", "Customer copies the text and fills in their full name as per IC and IC number", "Customer uploads an e-hailing app screenshot showing driver name, photo, contact number and Order ID", "On arrival, verify the driver against that screenshot before releasing anything", "Take a photo of the driver with the product for the internal record", "Send the customer the confirmation message once the product has been handed over"] } },
+    { id: "m14b3", type: "table", data: { headers: ["Driver detail", "Verify against", "If it does not match"], rows: [["Name", "Customer app screenshot", "Do not release the product"], ["Photo", "Customer app screenshot", "Do not release the product"], ["Contact number", "Customer app screenshot", "Contact the customer to confirm"], ["Order ID", "Customer app screenshot", "Contact the customer to confirm"]] } },
+    { id: "m14b4", type: "warning", data: { text: "The customer must confirm receipt within 12 hours of the confirmation message being sent. If no confirmation arrives in that window, the delivery is treated as completed. Sending the confirmation message is therefore not optional paperwork — it starts the clock that closes the company’s liability.", level: "danger" } },
+  ],
+  m15: [
+    { id: "m15b1", type: "paragraph", data: { text: "When the company books the driver, the outlet-side discipline is the same as a self-arranged pickup, but the company also has visibility of the delivery end through its own e-hailing account — and is expected to use it. Proof of receipt must be collected and filed." } },
+    { id: "m15b2", type: "steps", data: { items: ["Send the customer the WhatsApp acknowledgement template (Communication Guidelines 1-2)", "Book the driver through the official company account — never a personal account", "Record the Order ID and driver details", "Verify driver name and photo from the app on arrival", "Take a photo of the driver with the product for the internal record", "Send the customer the confirmation message after handover", "Require the driver to photograph the customer receiving the product and capture a digital signature in the app, unless the job is drop-off only", "Download the receipt photo and signature screenshot from the company account after delivery"] } },
+    { id: "m15b3", type: "table", data: { headers: ["Stage", "Self-arranged pickup", "Company-arranged delivery"], rows: [["Who books", "Customer", "Company, via official account"], ["Driver details from", "Customer screenshot", "Company e-hailing account"], ["Photo at pickup", "Required", "Required"], ["Proof at delivery", "Not available", "Photo and digital signature required"], ["12-hour confirmation", "Applies", "Applies"]] } },
+    { id: "m15b4", type: "warning", data: { text: "Booking a company-arranged delivery on a personal e-hailing account breaks the evidence chain — the receipt photo and digital signature cannot be retrieved from the company account afterwards, and the delivery becomes undefendable in a dispute.", level: "danger" } },
+  ],
+  m16: [
+    { id: "m16b1", type: "paragraph", data: { text: "Every e-hailing handover produces a file of mandatory records. When a customer or a payment facility claims non-receipt, that file is the entire defence — and the refund position turns on whether it is complete." } },
+    { id: "m16b2", type: "table", data: { headers: ["Mandatory document", "Captured when", "Applies to"], rows: [["Customer filled message (name and IC)", "Before handover", "Self-arranged pickup"], ["E-hailing app screenshot with driver details", "Before handover", "Self-arranged pickup"], ["Photo of driver with product at pickup", "At handover", "Both flows"], ["Photo of customer with product at delivery", "At delivery", "Company-arranged"], ["E-hailing delivery confirmation screenshot", "After delivery", "Both flows"], ["Customer WhatsApp acknowledgement", "Within 12 hours", "Both flows"]] } },
+    { id: "m16b3", type: "steps", data: { items: ["On a non-receipt claim, retrieve the customer filled message for that order", "Attach the photo evidence from pickup and, where available, delivery", "Attach the e-hailing confirmation from the company account", "Submit the complete file to the payment facility or the customer", "Escalate to management only where the evidence file is incomplete"] } },
+    { id: "m16b4", type: "warning", data: { text: "The refund rule is evidence-driven: no refund is issued unless the evidence is insufficient. A missing photo or an uncollected acknowledgement is what turns a defendable handover into a refund — the paperwork is the protection, not a formality.", level: "danger" } },
   ],
 };
 
@@ -410,4 +484,122 @@ export const ALL_QUIZZES: ModuleQuiz[] = [
         options: [{ id: "A", text: "Company brochures", isCorrect: false }, { id: "B", text: "Internal meeting minutes", isCorrect: false }, { id: "C", text: "HR staff salary records", isCorrect: true }, { id: "D", text: "Published pricing lists", isCorrect: false }] },
     ],
   },
+  {
+    id: "Q013", moduleId: "m13", sopId: "s4",
+    sopName: "Objective, Scope & Platforms", department: "Sales", dateGenerated: "2026-01-12",
+    questions: [
+      { id: "Q013-1", questionNumber: 1, questionText: "What is the stated objective of the E-Hailing Delivery & Customer Pickup SOP?", difficulty: "Easy",
+        options: [{ id: "A", text: "To reduce delivery costs across outlets", isCorrect: false }, { id: "B", text: "To secure product handover and document it, minimising disputes and fraud", isCorrect: true }, { id: "C", text: "To select a single preferred delivery partner", isCorrect: false }, { id: "D", text: "To speed up delivery times for online orders", isCorrect: false }] },
+      { id: "Q013-2", questionNumber: 2, questionText: "A customer arrives with a driver from a platform not named in the SOP. What applies?", difficulty: "Hard",
+        options: [{ id: "A", text: "The SOP does not apply — release the product normally", isCorrect: false }, { id: "B", text: "The SOP applies in full — the platform list is not exhaustive", isCorrect: true }, { id: "C", text: "Refuse the handover until the platform is added to the SOP", isCorrect: false }, { id: "D", text: "Apply only the photo requirement", isCorrect: false }] },
+      { id: "Q013-3", questionNumber: 3, questionText: "Which purchases fall within the scope of this SOP?", difficulty: "Easy",
+        options: [{ id: "A", text: "Online purchases only", isCorrect: false }, { id: "B", text: "Retail purchases only", isCorrect: false }, { id: "C", text: "Both retail and online purchases requiring delivery or e-hailing pickup", isCorrect: true }, { id: "D", text: "Only purchases above a set value", isCorrect: false }] },
+      { id: "Q013-4", questionNumber: 4, questionText: "Under the SOP, when does the company’s responsibility for the product end?", difficulty: "Medium",
+        options: [{ id: "A", text: "When the customer pays", isCorrect: false }, { id: "B", text: "When the product is handed to the driver the customer appointed", isCorrect: true }, { id: "C", text: "When the product leaves the outlet car park", isCorrect: false }, { id: "D", text: "Seven days after the sale", isCorrect: false }] },
+      { id: "Q013-5", questionNumber: 5, questionText: "Which two arrangements does the SOP define separate process flows for?", difficulty: "Medium",
+        options: [{ id: "A", text: "Same-day and next-day delivery", isCorrect: false }, { id: "B", text: "Customer self-arranged pickup and company-arranged delivery", isCorrect: true }, { id: "C", text: "In-store collection and postal delivery", isCorrect: false }, { id: "D", text: "Prepaid and cash-on-delivery orders", isCorrect: false }] },
+    ],
+  },
+  {
+    id: "Q014", moduleId: "m14", sopId: "s4",
+    sopName: "Customer Self-Arranged Pickup", department: "Sales", dateGenerated: "2026-01-12",
+    questions: [
+      { id: "Q014-1", questionNumber: 1, questionText: "For a self-arranged pickup, what must the customer provide before handover?", difficulty: "Easy",
+        options: [{ id: "A", text: "A verbal confirmation only", isCorrect: false }, { id: "B", text: "Name as per IC, IC number, and an app screenshot of driver details", isCorrect: true }, { id: "C", text: "A copy of the receipt", isCorrect: false }, { id: "D", text: "The driver’s vehicle registration number only", isCorrect: false }] },
+      { id: "Q014-2", questionNumber: 2, questionText: "Which driver details must the app screenshot show?", difficulty: "Medium",
+        options: [{ id: "A", text: "Name and photo only", isCorrect: false }, { id: "B", text: "Name, photo, contact number and Order ID", isCorrect: true }, { id: "C", text: "Order ID only", isCorrect: false }, { id: "D", text: "Contact number and vehicle model", isCorrect: false }] },
+      { id: "Q014-3", questionNumber: 3, questionText: "The driver’s name and photo do not match the customer’s screenshot. What must staff do?", difficulty: "Hard",
+        options: [{ id: "A", text: "Release the product — the customer booked it", isCorrect: false }, { id: "B", text: "Do not release the product", isCorrect: true }, { id: "C", text: "Release it but note the discrepancy", isCorrect: false }, { id: "D", text: "Ask the driver for a signature and proceed", isCorrect: false }] },
+      { id: "Q014-4", questionNumber: 4, questionText: "Within what period must the customer confirm receipt?", difficulty: "Easy",
+        options: [{ id: "A", text: "2 hours", isCorrect: false }, { id: "B", text: "12 hours", isCorrect: true }, { id: "C", text: "24 hours", isCorrect: false }, { id: "D", text: "48 hours", isCorrect: false }] },
+      { id: "Q014-5", questionNumber: 5, questionText: "No confirmation is received from the customer within the stated window. What is the outcome?", difficulty: "Medium",
+        options: [{ id: "A", text: "The delivery is considered completed", isCorrect: true }, { id: "B", text: "The delivery is cancelled and a refund is issued", isCorrect: false }, { id: "C", text: "The case is escalated to the payment facility", isCorrect: false }, { id: "D", text: "The window extends automatically by another 12 hours", isCorrect: false }] },
+    ],
+  },
+  {
+    id: "Q015", moduleId: "m15", sopId: "s4",
+    sopName: "Company-Arranged Delivery", department: "Sales", dateGenerated: "2026-01-12",
+    questions: [
+      { id: "Q015-1", questionNumber: 1, questionText: "How must a company-arranged e-hailing delivery be booked?", difficulty: "Easy",
+        options: [{ id: "A", text: "On any available staff account", isCorrect: false }, { id: "B", text: "Through the official company account", isCorrect: true }, { id: "C", text: "By the customer, then reimbursed", isCorrect: false }, { id: "D", text: "By phone with the platform’s call centre", isCorrect: false }] },
+      { id: "Q015-2", questionNumber: 2, questionText: "What must the driver obtain at the delivery end, unless the job is drop-off only?", difficulty: "Medium",
+        options: [{ id: "A", text: "A cash payment receipt", isCorrect: false }, { id: "B", text: "A photo of the customer receiving the product and a digital signature", isCorrect: true }, { id: "C", text: "The customer’s IC number", isCorrect: false }, { id: "D", text: "A second photo of the product only", isCorrect: false }] },
+      { id: "Q015-3", questionNumber: 3, questionText: "What must sales staff retrieve from the company account after delivery?", difficulty: "Medium",
+        options: [{ id: "A", text: "Nothing — the platform retains the records", isCorrect: false }, { id: "B", text: "The receipt photo and the digital signature screenshot", isCorrect: true }, { id: "C", text: "The driver’s rating", isCorrect: false }, { id: "D", text: "The route map", isCorrect: false }] },
+      { id: "Q015-4", questionNumber: 4, questionText: "Why is booking on a personal e-hailing account a problem?", difficulty: "Hard",
+        options: [{ id: "A", text: "It costs the company more", isCorrect: false }, { id: "B", text: "Delivery evidence cannot be retrieved from the company account, breaking the evidence chain", isCorrect: true }, { id: "C", text: "The platform charges a penalty fee", isCorrect: false }, { id: "D", text: "It delays the driver assignment", isCorrect: false }] },
+      { id: "Q015-5", questionNumber: 5, questionText: "Which requirement applies to BOTH self-arranged pickup and company-arranged delivery?", difficulty: "Medium",
+        options: [{ id: "A", text: "A photo of the customer receiving the product", isCorrect: false }, { id: "B", text: "A photo of the driver with the product at pickup", isCorrect: true }, { id: "C", text: "A digital signature captured in the app", isCorrect: false }, { id: "D", text: "Booking through the company account", isCorrect: false }] },
+    ],
+  },
+  {
+    id: "Q016", moduleId: "m16", sopId: "s4",
+    sopName: "Documentation & Dispute Handling", department: "Sales", dateGenerated: "2026-01-12",
+    questions: [
+      { id: "Q016-1", questionNumber: 1, questionText: "A customer claims non-receipt. What must be provided?", difficulty: "Easy",
+        options: [{ id: "A", text: "A verbal account from the sales staff involved", isCorrect: false }, { id: "B", text: "The customer filled message, photo evidence and e-hailing confirmation", isCorrect: true }, { id: "C", text: "The outlet CCTV footage only", isCorrect: false }, { id: "D", text: "The driver’s contact number", isCorrect: false }] },
+      { id: "Q016-2", questionNumber: 2, questionText: "Under the SOP, when is a refund issued on a non-receipt claim?", difficulty: "Hard",
+        options: [{ id: "A", text: "Whenever the customer requests one", isCorrect: false }, { id: "B", text: "Only where the evidence is insufficient", isCorrect: true }, { id: "C", text: "Automatically after 12 hours", isCorrect: false }, { id: "D", text: "Only with approval from the e-hailing platform", isCorrect: false }] },
+      { id: "Q016-3", questionNumber: 3, questionText: "Which document is required for a self-arranged pickup but not produced in a company-arranged delivery?", difficulty: "Medium",
+        options: [{ id: "A", text: "Photo of the driver with the product", isCorrect: false }, { id: "B", text: "The customer’s e-hailing app screenshot of driver details", isCorrect: true }, { id: "C", text: "The delivery confirmation screenshot", isCorrect: false }, { id: "D", text: "The WhatsApp acknowledgement", isCorrect: false }] },
+      { id: "Q016-4", questionNumber: 4, questionText: "Photo evidence is required at which point(s) of the handover?", difficulty: "Medium",
+        options: [{ id: "A", text: "At pickup only", isCorrect: false }, { id: "B", text: "At delivery only", isCorrect: false }, { id: "C", text: "Driver with product at pickup, and customer with product at delivery", isCorrect: true }, { id: "D", text: "Photo evidence is optional if the customer acknowledges", isCorrect: false }] },
+      { id: "Q016-5", questionNumber: 5, questionText: "What is the practical consequence of an incomplete evidence file?", difficulty: "Hard",
+        options: [{ id: "A", text: "The claim is automatically rejected", isCorrect: false }, { id: "B", text: "Liability shifts back to the company and a refund becomes payable", isCorrect: true }, { id: "C", text: "The driver is held responsible", isCorrect: false }, { id: "D", text: "The customer must supply the missing evidence", isCorrect: false }] },
+    ],
+  },
 ];
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+// The review screens mutate the status maps above; persist them under one
+// versioned key so approvals survive a refresh on the deployed prototype.
+const STORAGE_KEY = "apex-course-store-v1";
+export const COURSE_STORE_VERSION = 1;
+
+const SEED_MODULE_STATUS = { ...moduleStatus };
+const SEED_QUIZ_STATUS = { ...quizStatus };
+
+function save() {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: COURSE_STORE_VERSION, moduleStatus, quizStatus }),
+    );
+  } catch {
+    // Private mode or quota exceeded — the prototype still works in memory.
+  }
+}
+
+function hydrate() {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as {
+      version?: number;
+      moduleStatus?: Record<string, MStatus>;
+      quizStatus?: Record<string, "approved" | "pending" | "rejected">;
+    };
+    if (parsed.version !== COURSE_STORE_VERSION) return;
+    // Only known ids are restored, so a renamed seed never resurrects a stale key.
+    Object.keys(moduleStatus).forEach(id => {
+      const v = parsed.moduleStatus?.[id];
+      if (v) moduleStatus[id] = v;
+    });
+    Object.keys(quizStatus).forEach(id => {
+      const v = parsed.quizStatus?.[id];
+      if (v) quizStatus[id] = v;
+    });
+  } catch {
+    // Corrupt snapshot — fall through to the seed data.
+  }
+}
+
+/** Restores the seed review statuses and clears the saved snapshot. */
+export function resetCourseData() {
+  Object.assign(moduleStatus, SEED_MODULE_STATUS);
+  Object.assign(quizStatus, SEED_QUIZ_STATUS);
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* nothing stored */ }
+}
+
+hydrate();

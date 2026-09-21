@@ -1,16 +1,25 @@
 import { useState, useMemo } from "react";
 import {
-  X, Search, Plus, ChevronUp, ChevronDown,
+  X, Search, Plus, Globe, ChevronUp, ChevronDown,
   CalendarDays, CheckCircle, Users, User, Briefcase,
-  ToggleLeft, ToggleRight, BookOpen, Clock,
+  ToggleLeft, ToggleRight, BookOpen, Clock, AlertTriangle, Lock, Info,
+  Zap, LayoutGrid, Bell,
 } from "lucide-react";
+import { useRole, ROLE_META, scopeOf } from "../access";
+import {
+  COURSES as MATERIALS, ROLE_IDENTITY, catStyle, ASSIGNMENT_MODE_META,
+  staffById, assignCourse, useStoreVersion,
+  type AssignmentMode,
+} from "../trainingStore";
 
 const TEAL = "#00C9A7";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+/** A material as shown in the picker — sourced from the shared training store. */
 interface CourseMaterial {
   id: string; title: string; dept: string; version: string;
   modules: number; from: string; to: string; emoji: string; approved: string;
+  ownerId: string; topic: string;
 }
 interface Staff {
   id: string; name: string; initials: string; dept: string; role: string; color: string;
@@ -19,16 +28,26 @@ interface Chip {
   key: string; type: "department" | "role" | "individual";
   label: string; count: number; staffIds: string[];
 }
+/** "all" publishes the course to the Learning Portal for every staff member. */
+type Audience = "all" | "specific";
 interface HistoryEntry {
   id: string; title: string; target: string; date: string; count: number; status: string;
 }
 
 // ── Data ──────────────────────────────────────────────────────────────────────
-const COURSES: CourseMaterial[] = [
-  { id: "M001", title: "AC Installation Manual",      dept: "Technical",  version: "v1.2", modules: 5, from: "#0F4C75", to: "#1B6CA8",  emoji: "🔧", approved: "16 May 2026" },
-  { id: "M002", title: "Customer Handling Protocol",  dept: "Operations", version: "v1.0", modules: 3, from: "#00897B", to: "#00C9A7",  emoji: "🤝", approved: "10 May 2026" },
-  { id: "M003", title: "Safety Procedures Manual",    dept: "Technical",  version: "v2.1", modules: 4, from: "#B91C1C", to: "#EF4444",  emoji: "⚠️", approved: "8 May 2026"  },
-];
+const COURSES: CourseMaterial[] = MATERIALS.map((c, i) => ({
+  id: c.id,
+  title: c.title,
+  dept: c.dept,
+  version: `v1.${i % 4}`,
+  modules: 3 + (i % 4),
+  from: c.from,
+  to: c.to,
+  emoji: c.emoji,
+  approved: c.deadline ? fmtDate(c.deadline) : "16 May 2026",
+  ownerId: c.ownerId,
+  topic: c.topic,
+}));
 
 const DEPARTMENTS = ["Technical", "IT", "HR", "Sales", "Finance", "Operations", "Marketing"];
 const ROLES       = ["Technician", "Service Staff", "Admin", "Manager", "Analyst"];
@@ -50,7 +69,7 @@ const STAFF: Staff[] = [
 
 const HISTORY: HistoryEntry[] = [
   { id: "H1", title: "AC Installation Manual",     target: "Technical Dept",    date: "16 May 2026", count: 8,  status: "In Progress" },
-  { id: "H2", title: "Customer Handling Protocol", target: "Service Staff Role", date: "10 May 2026", count: 12, status: "Completed"   },
+  { id: "H2", title: "Customer Handling Protocol", target: "All Staff · Learning Portal", date: "10 May 2026", count: 12, status: "Completed"   },
   { id: "H3", title: "Safety Procedures Manual",   target: "Operations Dept",   date: "8 May 2026",  count: 15, status: "Completed"   },
 ];
 
@@ -64,10 +83,14 @@ const HIST_PILL: Record<string, { color: string; bg: string }> = {
 function fmtDate(iso: string) {
   return new Date(iso + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-function addDays(iso: string, n: number) {
-  const d = new Date(iso + "T00:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+function todayISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/** Whole days from today until the given date (negative if it has passed). */
+function daysUntil(iso: string) {
+  const MS = 24 * 60 * 60 * 1000;
+  return Math.round((new Date(iso + "T00:00:00").getTime() - new Date(todayISO() + "T00:00:00").getTime()) / MS);
 }
 
 const CHIP_STYLE: Record<Chip["type"], { color: string; bg: string; border: string }> = {
@@ -93,26 +116,50 @@ function Section({ num, title, children }: { num: number; title: string; childre
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function TrainingAssignment() {
-  const [selectedId, setSelectedId]       = useState<string | null>(null);
-  const [mode, setMode]                   = useState<Chip["type"]>("department");
-  const [chips, setChips]                 = useState<Chip[]>([]);
-  const [pickedDept, setPickedDept]       = useState(DEPARTMENTS[0]);
-  const [pickedRole, setPickedRole]       = useState(ROLES[0]);
-  const [search, setSearch]               = useState("");
-  const [mandatory, setMandatory]         = useState(false);
-  const [effectiveDate, setEffectiveDate] = useState("");
-  const [daysWithin, setDaysWithin]       = useState(14);
-  const [submitted, setSubmitted]         = useState(false);
+  const role  = useRole();
+  useStoreVersion();
+  const myId  = ROLE_IDENTITY[role] ?? "E001";
+  const scope = scopeOf(role, "assign-training");
+  /** Trainers may assign only what they created; HR and Super Admin assign anything. */
+  const ownOnly = scope === "own";
+  const visibleCourses = ownOnly ? COURSES.filter(c => c.ownerId === myId) : COURSES;
 
-  const selectedCourse = COURSES.find(c => c.id === selectedId);
+  const [selectedId, setSelectedId]   = useState<string | null>(null);
+  const [audience, setAudience]       = useState<Audience>("all");
+  const [mode2, setMode2]             = useState<AssignmentMode>("portal");
+  const [mode, setMode]               = useState<Chip["type"]>("department");
+  const [chips, setChips]             = useState<Chip[]>([]);
+  const [pickedDept, setPickedDept]   = useState(DEPARTMENTS[0]);
+  const [pickedRole, setPickedRole]   = useState(ROLES[0]);
+  const [search, setSearch]           = useState("");
+  const [mandatory, setMandatory]     = useState(false);
+  const [deadline, setDeadline]       = useState("");
+  const [daysWithin, setDaysWithin]   = useState(14);
+  const [submitted, setSubmitted]     = useState(false);
+
+  const selectedCourse = visibleCourses.find(c => c.id === selectedId);
 
   const previewStaff = useMemo(() => {
+    if (audience === "all") return STAFF;
     const ids = new Set<string>(chips.flatMap(c => c.staffIds));
     return STAFF.filter(s => ids.has(s.id));
-  }, [chips]);
+  }, [audience, chips]);
 
   const totalAssignees = previewStaff.length;
-  const canAssign = selectedId && chips.length > 0 && effectiveDate;
+  const audienceReady = audience === "all" || chips.length > 0;
+  const daysLeft = deadline ? daysUntil(deadline) : null;
+  const deadlinePassed = daysLeft !== null && daysLeft < 0;
+  // The personal window cannot outrun the deadline — whichever comes first wins.
+  const windowClipped = daysLeft !== null && daysLeft >= 0 && daysLeft < daysWithin;
+  const isImmediate = mode2 === "immediate";
+  /** For an immediate assignment the window runs from today, so the due date is fixed. */
+  const immediateDue = (() => {
+    const d = new Date(todayISO() + "T00:00:00");
+    d.setDate(d.getDate() + daysWithin);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return deadline && iso > deadline ? deadline : iso;
+  })();
+  const canAssign = Boolean(selectedId && audienceReady && deadline && !deadlinePassed);
 
   // ── Chip helpers ────────────────────────────────────────────────────────────
   const addDeptChip = () => {
@@ -145,12 +192,22 @@ export function TrainingAssignment() {
   );
 
   const handleAssign = () => {
-    if (!canAssign) return;
+    if (!canAssign || !selectedId) return;
+    assignCourse(selectedId, {
+      mode: mode2,
+      deadline,
+      daysWithin,
+      mandatory,
+      audience: audience === "all" ? "All staff · Learning Portal" : chips.map(c => c.label).join(", "),
+      assignedBy: myId,
+    });
     setSubmitted(true);
     setTimeout(() => setSubmitted(false), 4000);
     setChips([]);
     setSelectedId(null);
-    setEffectiveDate("");
+    setAudience("all");
+    setMode2("portal");
+    setDeadline("");
     setDaysWithin(14);
     setMandatory(false);
   };
@@ -162,12 +219,16 @@ export function TrainingAssignment() {
       <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0 flex items-center justify-between">
         <div>
           <h1 className="text-[18px] font-extrabold text-[#1A1F2E]">Assign Training</h1>
-          <p className="text-[12px] text-[#9CA3AF] mt-0.5">Select a course, choose recipients, and set a completion window</p>
+          <p className="text-[12px] text-[#9CA3AF] mt-0.5">Select a course, choose an audience, and set the completion deadline</p>
         </div>
         {submitted && (
           <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#ECFDF5] border border-[#A7F3D0]">
             <CheckCircle size={14} style={{ color: "#059669" }} />
-            <p className="text-[12px] font-semibold text-[#065F46]">Training assigned — staff notified.</p>
+            <p className="text-[12px] font-semibold text-[#065F46]">
+            {isImmediate
+              ? "Assigned to start now — staff notified and the course is pinned in My Learnings."
+              : "Added to the Learning Portal — staff can start any time before the deadline."}
+          </p>
           </div>
         )}
       </div>
@@ -180,8 +241,19 @@ export function TrainingAssignment() {
 
           {/* ── 1. Select Course ─────────────────────────────────────────── */}
           <Section num={1} title="Select Course">
-            <div className="grid grid-cols-3 gap-3">
-              {COURSES.map(c => {
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg mb-3"
+              style={{ backgroundColor: ownOnly ? "#FFFBEB" : "#F9FAFB" }}>
+              {ownOnly ? <Lock size={12} className="mt-0.5 shrink-0" style={{ color: "#B45309" }} />
+                       : <Info size={12} className="mt-0.5 shrink-0" style={{ color: "#9CA3AF" }} />}
+              <p className="text-[11px] leading-relaxed" style={{ color: ownOnly ? "#92400E" : "#6B7280" }}>
+                {ownOnly
+                  ? `${ROLE_META[role].label}: you can assign only the ${visibleCourses.length} material${visibleCourses.length === 1 ? "" : "s"} you created. Materials owned by others are read-only.`
+                  : `${ROLE_META[role].label}: you can assign any of the ${visibleCourses.length} approved materials company-wide.`}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 overflow-y-auto pr-1" style={{ maxHeight: 340 }}>
+              {visibleCourses.map(c => {
                 const active = selectedId === c.id;
                 return (
                   <button
@@ -213,16 +285,67 @@ export function TrainingAssignment() {
                         <span className="text-[10px] text-[#9CA3AF] bg-gray-100 px-1.5 py-0.5 rounded">{c.dept}</span>
                         <span className="text-[10px] text-[#9CA3AF]">{c.modules} modules</span>
                       </div>
-                      <p className="text-[10px] text-[#9CA3AF] mt-1">Approved {c.approved}</p>
+                      <div className="flex items-center justify-between gap-1 mt-1">
+                        <p className="text-[10px] text-[#9CA3AF] truncate">Approved {c.approved}</p>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded shrink-0"
+                          style={{ color: catStyle(c.topic).color, backgroundColor: catStyle(c.topic).bg }}>
+                          {catStyle(c.topic).name}
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-[#C4C9D4] mt-1 truncate">
+                        Owner: {c.ownerId === myId ? "you" : staffById(c.ownerId)?.name ?? "—"}
+                      </p>
                     </div>
                   </button>
                 );
               })}
             </div>
+            {!visibleCourses.length && (
+              <div className="py-8 text-center">
+                <BookOpen size={26} className="mx-auto mb-2" style={{ color: "#D1D5DB" }} />
+                <p className="text-[12px] font-semibold" style={{ color: "#9CA3AF" }}>You have not created any materials yet</p>
+                <p className="text-[11px] mt-1" style={{ color: "#C4C9D4" }}>Upload an SOP first — you can only assign your own.</p>
+              </div>
+            )}
           </Section>
 
           {/* ── 2. Assign To ─────────────────────────────────────────────── */}
-          <Section num={2} title="Assign To">
+          <Section num={2} title="Audience">
+            {/* All staff vs. targeted */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              {([
+                { id: "all",      icon: Globe, label: "All staff",           desc: `Published to the Learning Portal — any of the ${STAFF.length} staff can take it` },
+                { id: "specific", icon: Users, label: "Specific recipients", desc: "Target selected departments, roles, or individuals" },
+              ] as const).map(({ id, icon: Icon, label, desc }) => {
+                const active = audience === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setAudience(id)}
+                    className="text-left rounded-xl border-2 px-3.5 py-3 transition-all"
+                    style={{ borderColor: active ? TEAL : "#E5E7EB", backgroundColor: active ? "#F0FDFA" : "white" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon size={13} style={{ color: active ? TEAL : "#9CA3AF" }} />
+                      <p className="text-[12px] font-bold text-[#1A1F2E]">{label}</p>
+                      {active && <CheckCircle size={13} className="ml-auto" style={{ color: TEAL }} />}
+                    </div>
+                    <p className="text-[11px] text-[#9CA3AF] mt-1 leading-snug">{desc}</p>
+                  </button>
+                );
+              })}
+            </div>
+
+            {audience === "all" ? (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#E8FAF7" }}>
+                <Globe size={13} className="mt-0.5 shrink-0" style={{ color: TEAL }} />
+                <p className="text-[12px] font-semibold leading-relaxed" style={{ color: "#065F46" }}>
+                  No recipients needed — the course appears in every staff member's Learning Portal
+                  and must be completed on or before the deadline below.
+                </p>
+              </div>
+            ) : (
+            <>
             {/* Mode tabs */}
             <div className="flex gap-1.5 mb-4">
               {([
@@ -345,10 +468,60 @@ export function TrainingAssignment() {
             ) : (
               <p className="text-[11px] text-[#9CA3AF] mt-1">No recipients added yet — use the selector above.</p>
             )}
+            </>
+            )}
           </Section>
 
-          {/* ── 3. Mandatory ─────────────────────────────────────────────── */}
-          <Section num={3} title="Mandatory">
+          {/* ── 3. Assignment type ───────────────────────────────────────── */}
+          <Section num={3} title="How Staff Receive It">
+            <div className="grid grid-cols-2 gap-3">
+              {(["portal", "immediate"] as AssignmentMode[]).map(m => {
+                const meta = ASSIGNMENT_MODE_META[m];
+                const active = mode2 === m;
+                const Icon = m === "portal" ? LayoutGrid : Zap;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setMode2(m)}
+                    className="text-left rounded-xl border-2 px-4 py-3.5 transition-all"
+                    style={{ borderColor: active ? meta.color : "#E5E7EB", backgroundColor: active ? meta.bg : "white" }}
+                  >
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Icon size={14} style={{ color: active ? meta.color : "#9CA3AF" }} />
+                      <p className="text-[12px] font-bold text-[#1A1F2E]">{meta.label}</p>
+                      {active && <CheckCircle size={13} className="ml-auto" style={{ color: meta.color }} />}
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-[#9CA3AF]">{meta.blurb}</p>
+                    <div className="flex items-center gap-1.5 mt-2.5">
+                      {(m === "portal"
+                        ? ["Self-paced", "No notification", "Counts on completion"]
+                        : ["Pinned to the top", "Notifies staff", "Clock starts today"]
+                      ).map(tag => (
+                        <span key={tag} className="px-1.5 py-0.5 rounded text-[9px] font-semibold"
+                          style={{ color: active ? meta.color : "#9CA3AF", backgroundColor: active ? "white" : "#F3F4F6" }}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {isImmediate && (
+              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg mt-3" style={{ backgroundColor: "#FEF2F2" }}>
+                <Bell size={12} className="mt-0.5 shrink-0" style={{ color: "#DC2626" }} />
+                <p className="text-[11px] leading-relaxed" style={{ color: "#991B1B" }}>
+                  Every assignee is notified on assignment and the course is pinned to the top of their
+                  My Learnings as <b>Start now</b>. They must finish within {daysWithin} day{daysWithin === 1 ? "" : "s"} of
+                  today{deadline ? `, and no later than ${fmtDate(deadline)}` : ""}.
+                </p>
+              </div>
+            )}
+          </Section>
+
+          {/* ── 4. Mandatory ─────────────────────────────────────────────── */}
+          <Section num={4} title="Mandatory">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[13px] text-[#374151]">
@@ -361,8 +534,8 @@ export function TrainingAssignment() {
                 </p>
                 <p className="text-[11px] text-[#9CA3AF] mt-0.5">
                   {mandatory
-                    ? "Staff must complete this training. Non-completion will be flagged."
-                    : "Optional — staff can complete this at their own discretion."}
+                    ? "Staff must complete this training by the deadline. Non-completion will be flagged."
+                    : "Optional — staff can complete this any time before the deadline."}
                 </p>
               </div>
               <button onClick={() => setMandatory(m => !m)} className="shrink-0 ml-4">
@@ -374,26 +547,29 @@ export function TrainingAssignment() {
             </div>
           </Section>
 
-          {/* ── 4. Duration ──────────────────────────────────────────────── */}
-          <Section num={4} title="Completion Window">
-            <div className="flex items-end gap-4 flex-wrap">
-              {/* Effective date */}
+          {/* ── 5. Deadline ──────────────────────────────────────────────── */}
+          <Section num={5} title="Completion Deadline">
+            <div className="flex items-start gap-4 flex-wrap">
+              {/* Absolute cutoff */}
               <div className="flex-1 min-w-[180px]">
                 <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">
-                  Public effective date
+                  Last date to complete
                 </label>
                 <div className="relative">
                   <CalendarDays size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                   <input
                     type="date"
-                    value={effectiveDate}
-                    onChange={e => setEffectiveDate(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-[12px] text-[#1A1F2E] focus:outline-none focus:border-[#00C9A7] transition-colors"
+                    value={deadline}
+                    min={todayISO()}
+                    onChange={e => setDeadline(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-[12px] text-[#1A1F2E] focus:outline-none focus:border-[#00C9A7] transition-colors"
+                    style={{ borderColor: deadlinePassed ? "#FCA5A5" : "#E5E7EB" }}
                   />
                 </div>
+                <p className="text-[10px] text-[#9CA3AF] mt-1.5">Course closes after this date.</p>
               </div>
 
-              {/* Days stepper */}
+              {/* Per-person window */}
               <div>
                 <label className="block text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider mb-1.5">
                   Complete within
@@ -420,33 +596,61 @@ export function TrainingAssignment() {
                   </button>
                   <span className="pr-3 text-[12px] text-[#9CA3AF] font-medium">days</span>
                 </div>
+                <p className="text-[10px] text-[#9CA3AF] mt-1.5">
+                  {isImmediate ? "Counted from today — the assignment date." : "Counted from the day each staff starts."}
+                </p>
               </div>
             </div>
 
             {/* Live helper line */}
-            {effectiveDate ? (
-              <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#E8FAF7" }}>
-                <Clock size={13} style={{ color: TEAL }} />
-                <p className="text-[12px] font-semibold" style={{ color: "#065F46" }}>
-                  Effective {fmtDate(effectiveDate)} · due by {addDays(effectiveDate, daysWithin)} for each assignee
+            {!deadline ? (
+              <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50">
+                <Clock size={13} className="text-gray-300" />
+                <p className="text-[12px] text-[#9CA3AF]">Set the last date staff can take this course</p>
+              </div>
+            ) : deadlinePassed ? (
+              <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#FEF2F2" }}>
+                <AlertTriangle size={13} style={{ color: "#DC2626" }} />
+                <p className="text-[12px] font-semibold" style={{ color: "#991B1B" }}>
+                  {fmtDate(deadline)} has already passed — pick a future date.
                 </p>
               </div>
             ) : (
-              <div className="mt-3 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50">
-                <Clock size={13} className="text-gray-300" />
-                <p className="text-[12px] text-[#9CA3AF]">Set an effective date to see the computed due date</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#E8FAF7" }}>
+                  <Clock size={13} className="mt-0.5 shrink-0" style={{ color: TEAL }} />
+                  <p className="text-[12px] font-semibold leading-relaxed" style={{ color: "#065F46" }}>
+                    {isImmediate ? (
+                      <>Starts today · everyone must finish by {fmtDate(immediateDue)} ({daysWithin} {daysWithin === 1 ? "day" : "days"} from assignment)
+                        {immediateDue === deadline ? " — capped by the deadline" : ""}</>
+                    ) : (
+                      <>Staff can start any time · each has {daysWithin} {daysWithin === 1 ? "day" : "days"} from their own start date to finish
+                        {" "}· nothing accepted after {fmtDate(deadline)}
+                        {" "}({daysLeft === 0 ? "today" : `${daysLeft} ${daysLeft === 1 ? "day" : "days"} from today`})</>
+                    )}
+                  </p>
+                </div>
+                {windowClipped && !isImmediate && (
+                  <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg" style={{ backgroundColor: "#FFFBEB" }}>
+                    <AlertTriangle size={13} className="mt-0.5 shrink-0" style={{ color: "#D97706" }} />
+                    <p className="text-[12px] font-semibold leading-relaxed" style={{ color: "#92400E" }}>
+                      Only {daysLeft} {daysLeft === 1 ? "day" : "days"} left before the deadline — anyone starting today gets
+                      less than the full {daysWithin}-day window, and it shrinks further each day.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </Section>
 
           {/* ── 5. Assignee Preview ──────────────────────────────────────── */}
           {previewStaff.length > 0 && (
-            <Section num={5} title={`Assignee Preview · ${totalAssignees} ${totalAssignees === 1 ? "person" : "people"}`}>
-              <div className="rounded-lg overflow-hidden border border-gray-100">
+            <Section num={6} title={`${audience === "all" ? "Learning Portal Preview" : "Assignee Preview"} · ${totalAssignees} ${totalAssignees === 1 ? "person" : "people"}`}>
+              <div className="rounded-lg overflow-hidden border border-gray-100 max-h-[280px] overflow-y-auto">
                 <table className="w-full text-left">
                   <thead>
                     <tr style={{ backgroundColor: "#F9FAFB" }}>
-                      {["Name", "Department", "Role", "Due Date"].map(h => (
+                      {["Name", "Department", "Role", "Must Finish By"].map(h => (
                         <th key={h} className="px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF] border-b border-gray-100">
                           {h}
                         </th>
@@ -467,10 +671,15 @@ export function TrainingAssignment() {
                         <td className="px-4 py-2.5 text-[12px] text-[#6B7280]">{s.dept}</td>
                         <td className="px-4 py-2.5 text-[12px] text-[#6B7280]">{s.role}</td>
                         <td className="px-4 py-2.5">
-                          {effectiveDate ? (
-                            <span className="text-[12px] font-semibold" style={{ color: mandatory ? "#DC2626" : "#1A1F2E" }}>
-                              {addDays(effectiveDate, daysWithin)}
-                            </span>
+                          {deadline ? (
+                            <>
+                              <span className="text-[12px] font-semibold" style={{ color: mandatory ? "#DC2626" : "#1A1F2E" }}>
+                                {fmtDate(isImmediate ? immediateDue : deadline)}
+                              </span>
+                              <span className="block text-[10px] text-[#9CA3AF]">
+                                {isImmediate ? `${daysWithin}d from today — starts immediately` : `or ${daysWithin}d after start — whichever is first`}
+                              </span>
+                            </>
                           ) : (
                             <span className="text-[11px] text-[#9CA3AF]">—</span>
                           )}
@@ -519,11 +728,22 @@ export function TrainingAssignment() {
           {selectedCourse
             ? <><BookOpen size={12} className="inline mr-1" />{selectedCourse.title} · {selectedCourse.version}</>
             : "No course selected"}
-          {chips.length > 0 && <span className="ml-3"><Users size={12} className="inline mr-1" />{totalAssignees} assignees</span>}
+          {audience === "all"
+            ? <span className="ml-3"><Globe size={12} className="inline mr-1" />All staff · Learning Portal</span>
+            : chips.length > 0 && <span className="ml-3"><Users size={12} className="inline mr-1" />{totalAssignees} assignees</span>}
+          {deadline && !deadlinePassed && (
+            <span className="ml-3"><Clock size={12} className="inline mr-1" />
+              {daysWithin}d window · by {fmtDate(isImmediate ? immediateDue : deadline)}
+            </span>
+          )}
+          <span className="ml-3 px-2 py-0.5 rounded-full text-[10px] font-bold"
+            style={{ color: ASSIGNMENT_MODE_META[mode2].color, backgroundColor: ASSIGNMENT_MODE_META[mode2].bg }}>
+            {ASSIGNMENT_MODE_META[mode2].short}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setSelectedId(null); setChips([]); setEffectiveDate(""); setDaysWithin(14); setMandatory(false); }}
+            onClick={() => { setSelectedId(null); setChips([]); setAudience("all"); setDeadline(""); setDaysWithin(14); setMandatory(false); }}
             className="px-5 py-2 rounded-lg text-[13px] font-semibold border-2 border-gray-200 text-[#6B7280] hover:border-gray-300 hover:text-[#1A1F2E] transition-colors"
           >
             Cancel
@@ -534,7 +754,8 @@ export function TrainingAssignment() {
             className="flex items-center gap-1.5 px-6 py-2 rounded-lg text-[13px] font-semibold text-white transition-all"
             style={{ backgroundColor: canAssign ? "#059669" : "#D1D5DB", cursor: canAssign ? "pointer" : "not-allowed" }}
           >
-            <CheckCircle size={14} /> Assign Training
+            {isImmediate ? <Zap size={14} /> : <CheckCircle size={14} />}
+            {isImmediate ? "Assign & Start Now" : "Add to Portal"}
           </button>
         </div>
       </div>
