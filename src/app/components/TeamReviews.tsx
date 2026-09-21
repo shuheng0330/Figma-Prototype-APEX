@@ -41,6 +41,7 @@ interface KpiRow {
 interface ReviewItem {
   id: string; employee: string; initials: string; role: string; dept: string;
   type: ReviewType; checkpoint: string; due: string; dueTs: number; status: ReviewStatus; overdue?: boolean;
+  periodId?: string; periodName?: string;
 }
 interface EmpAssessment {
   score: number; comment: string; evidence?: { name: string; size: string };
@@ -383,6 +384,7 @@ export function TeamReviews() {
       const dueIso = record.superiorDeadline ?? checkpoint?.superiorDeadline ?? period?.endDate ?? record.periodId + "-12-31";
       return {
         id: `assessment:${record.id}`, employee: employee?.name ?? record.employeeId, initials: employee?.initials ?? "—", role: employee?.role ?? "Employee", dept: employee?.department ?? "—",
+        periodId: record.periodId, periodName: period?.name ?? `${record.periodId} Annual KPI Review`,
         type: "KPI Assessment" as const, checkpoint: record.checkpointLabel, due: formatDate(dueIso),
         dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
         overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
@@ -396,6 +398,7 @@ export function TeamReviews() {
       const dueIso = period?.deadlines.attitudeSuperior ?? `${record.periodId}-12-27`;
       return {
         id: `attitude:${record.id}`, employee: employee?.name ?? record.employeeId, initials: employee?.initials ?? "—", role: employee?.role ?? "Employee", dept: employee?.department ?? "—",
+        periodId: record.periodId, periodName: period?.name ?? `${record.periodId} Annual KPI Review`,
         type: "Attitude Evaluation" as const, checkpoint: `Annual ${record.periodId}`, due: formatDate(dueIso),
         dueTs: Number(dueIso.replaceAll("-", "")), status: record.status === "Reviewed" ? "Reviewed" : "Pending Review",
         overdue: Boolean(record.completedLate || (record.status !== "Reviewed" && performanceStore.state.effectiveDate > dueIso)),
@@ -404,20 +407,33 @@ export function TeamReviews() {
   const sharedPlanItems: ReviewItem[] = Object.entries(performanceStore.state.employeeKpiPlansByPeriod).flatMap(([periodName, plan]) => {
     const individual = plan.filter((kpi: any) => kpi.level === "Individual");
     if (!individual.length || individual.every((kpi: any) => kpi.status === "Draft")) return [];
+    const period = performanceStore.periods.find(item => item.name === periodName);
     const status: ReviewStatus = individual.some((kpi: any) => kpi.status === "Pending Approval")
       ? "Pending Approval" : individual.some((kpi: any) => kpi.status === "Returned") ? "Returned" : "Approved";
     return [{
       id: `kpi-plan:${periodName}`, employee: "Amir Hassan", initials: "AH", role: "Retail Sales Executive", dept: "Retail Sales",
-      type: "Individual KPI Approval" as const, checkpoint: periodName.split(" ")[0], due: formatDate(performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`), dueTs: Number((performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`).replaceAll("-", "")),
-      status, overdue: status === "Pending Approval" && performanceStore.state.effectiveDate > (performanceStore.periods.find(period => period.name === periodName)?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`),
+      periodId: period?.id ?? periodName.split(" ")[0], periodName,
+      type: "Individual KPI Approval" as const, checkpoint: periodName.split(" ")[0], due: formatDate(period?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`), dueTs: Number((period?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`).replaceAll("-", "")),
+      status, overdue: status === "Pending Approval" && performanceStore.state.effectiveDate > (period?.deadlines.kpiSetup ?? `${periodName.split(" ")[0]}-01-01`),
     }];
   });
   const queue = [...staticQueue, ...sharedAssessmentItems, ...sharedAttitudeItems, ...sharedPlanItems];
-  const workspacePeriod = performanceStore.periods.find(period => period.status === "Open")?.name ?? "Annual KPI Review";
-  const employees = useMemo(() => Array.from(new Set(queue.map(r => r.employee))), [queue]);
+  const requestedPeriodName = searchParams.get("period") ?? returnPeriod;
+  const actionablePeriodIds = new Set(queue
+    .filter(item => item.status === "Pending Approval" || item.status === "Pending Review" || item.status === "Returned")
+    .map(item => item.periodId)
+    .filter((id): id is string => Boolean(id)));
+  const workspacePeriodRecord = performanceStore.periods.find(period => period.name === requestedPeriodName)
+    ?? performanceStore.periods.find(period => actionablePeriodIds.has(period.id))
+    ?? performanceStore.periods.find(period => period.status === "Open");
+  const workspacePeriod = workspacePeriodRecord?.name ?? "Annual KPI Review";
+  const workspaceQueue = workspacePeriodRecord
+    ? queue.filter(item => !item.periodId || item.periodId === workspacePeriodRecord.id)
+    : queue;
+  const employees = useMemo(() => Array.from(new Set(workspaceQueue.map(r => r.employee))), [workspaceQueue]);
 
   const filtered = useMemo(() => {
-    let rows = queue.filter(r =>
+    let rows = workspaceQueue.filter(r =>
       (filterType === "All" || r.type === filterType) &&
       (filterStatus === "All" || r.status === filterStatus) &&
       (filterEmp === "All" || r.employee === filterEmp)
@@ -430,7 +446,7 @@ export function TeamReviews() {
       );
     }
     return rows;
-  }, [queue, filterType, filterStatus, filterEmp, sortField, sortAsc]);
+  }, [workspaceQueue, filterType, filterStatus, filterEmp, sortField, sortAsc]);
 
   function toggleSort(field: "due" | "status") {
     if (sortField === field) setSortAsc(a => !a);
@@ -824,7 +840,7 @@ export function TeamReviews() {
                             </div>
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-wide mb-1" style={{ color: MUTED }}>Review Period</p>
-                              <p style={{ color: TEXT }}>2027 Annual KPI Review</p>
+                              <p style={{ color: TEXT }}>{drawerItem.periodName ?? workspacePeriod}</p>
                             </div>
                           </div>
 
