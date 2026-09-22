@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useRole, ROLE_META, scopeOf } from "../access";
 import {
-  COURSES as MATERIALS, ROLE_IDENTITY, catStyle, ASSIGNMENT_MODE_META,
+  COURSES as MATERIALS, STAFF as STORE_STAFF, ROLE_IDENTITY, catStyle, ASSIGNMENT_MODE_META,
   staffById, assignCourse, useStoreVersion,
   type AssignmentMode,
 } from "../trainingStore";
@@ -49,23 +49,19 @@ const COURSES: CourseMaterial[] = MATERIALS.map((c, i) => ({
   topic: c.topic,
 }));
 
-const DEPARTMENTS = ["Technical", "IT", "HR", "Sales", "Finance", "Operations", "Marketing"];
-const ROLES       = ["Technician", "Service Staff", "Admin", "Manager", "Analyst"];
 
-const STAFF: Staff[] = [
-  { id: "S001", name: "Ahmad Syafiq",    initials: "AS", dept: "Technical",  role: "Technician",    color: TEAL      },
-  { id: "S002", name: "Nurul Ain",       initials: "NA", dept: "Technical",  role: "Technician",    color: "#6366F1" },
-  { id: "S003", name: "Haziq Rahman",    initials: "HR", dept: "Technical",  role: "Technician",    color: "#F59E0B" },
-  { id: "S004", name: "Siti Mariam",     initials: "SM", dept: "Technical",  role: "Service Staff", color: "#3B82F6" },
-  { id: "S005", name: "Faizal Ismail",   initials: "FI", dept: "Technical",  role: "Technician",    color: "#8B5CF6" },
-  { id: "S006", name: "Izzati Mohd",     initials: "IM", dept: "Technical",  role: "Service Staff", color: "#EC4899" },
-  { id: "S007", name: "Razif Kamal",     initials: "RK", dept: "Technical",  role: "Technician",    color: "#14B8A6" },
-  { id: "S008", name: "Amirah Zulkifli", initials: "AZ", dept: "Technical",  role: "Technician",    color: "#A855F7" },
-  { id: "S009", name: "Alice Morgan",    initials: "AM", dept: "IT",         role: "Technician",    color: "#0EA5E9" },
-  { id: "S010", name: "Bob Carter",      initials: "BC", dept: "HR",         role: "Manager",       color: "#10B981" },
-  { id: "S011", name: "Clara Davis",     initials: "CD", dept: "Sales",      role: "Service Staff", color: "#F97316" },
-  { id: "S012", name: "Derek Lee",       initials: "DL", dept: "Finance",    role: "Analyst",       color: "#64748B" },
-];
+/** The real roster, so the audience matches the people every other screen shows. */
+const STAFF: Staff[] = STORE_STAFF.map(st => ({
+  id: st.id,
+  name: st.name,
+  initials: st.initials,
+  dept: st.dept,
+  role: st.position,
+  color: st.color,
+}));
+
+const DEPARTMENTS = [...new Set(STAFF.map(s => s.dept))].sort();
+const ROLES       = [...new Set(STAFF.map(s => s.role))].sort();
 
 const HISTORY: HistoryEntry[] = [
   { id: "H1", title: "AC Installation Manual",     target: "Technical Dept",    date: "16 May 2026", count: 8,  status: "In Progress" },

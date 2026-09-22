@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Clock, File, Sparkles, Loader } from "lucide-react";
-import { ALL_QUIZZES as STORE_QUIZZES, quizStatus as storeQuizStatus, updateQuizStatus } from "../courseStore";
+import { SOPS, ALL_QUIZZES as STORE_QUIZZES, quizStatus as storeQuizStatus, updateQuizStatus } from "../courseStore";
 
 const TEAL = "#00C9A7";
 
@@ -24,6 +24,8 @@ interface QuizQuestion {
 
 interface Quiz {
   id: string;
+  /** The course this quiz belongs to. */
+  sopId: string;
   sopName: string;
   department: string;
   dateGenerated: string;
@@ -44,6 +46,9 @@ interface ReviewHistoryEntry {
 }
 
 // ── Status styles ─────────────────────────────────────────────────────────────
+/** Review Quizzes opens on this course; its first quiz is selected with it. */
+const DEFAULT_SOP = "s4";
+
 const STATUS_STYLE: Record<QuizModuleStatus, { color: string; bg: string; label: string }> = {
   pending:      { color: "#D97706", bg: "#FEF3C7", label: "Pending" },
   approved:     { color: "#059669", bg: "#ECFDF5", label: "Approved" },
@@ -61,75 +66,19 @@ function getDifficultyPill(d: DifficultyLevel): { color: string; bg: string } {
 }
 
 // ── Mock quiz content ─────────────────────────────────────────────────────────
-const MOCK_QUIZZES: Quiz[] = [
-  {
-    id: "Q001", sopName: "R32 Refrigerant Safety & Handling", department: "Technical", dateGenerated: "2026-05-16",
-    questions: [
-      { id: "Q001-1", questionNumber: 1, questionText: "What is the minimum password length required according to the Data Security Protocol?", difficulty: "Easy",
-        options: [{ id: "A", text: "6 characters", isCorrect: false }, { id: "B", text: "8 characters", isCorrect: false }, { id: "C", text: "12 characters", isCorrect: true }, { id: "D", text: "16 characters", isCorrect: false }] },
-      { id: "Q001-2", questionNumber: 2, questionText: "How often should employees change their system passwords?", difficulty: "Medium",
-        options: [{ id: "A", text: "Every 30 days", isCorrect: false }, { id: "B", text: "Every 60 days", isCorrect: false }, { id: "C", text: "Every 90 days", isCorrect: true }, { id: "D", text: "Every 180 days", isCorrect: false }] },
-      { id: "Q001-3", questionNumber: 3, questionText: "What action should be taken if a phishing email is detected?", difficulty: "Easy",
-        options: [{ id: "A", text: "Delete it immediately", isCorrect: false }, { id: "B", text: "Forward to IT Security team", isCorrect: true }, { id: "C", text: "Reply to confirm sender identity", isCorrect: false }, { id: "D", text: "Click links to investigate", isCorrect: false }] },
-      { id: "Q001-4", questionNumber: 4, questionText: "Which of the following is NOT allowed when handling sensitive data?", difficulty: "Hard",
-        options: [{ id: "A", text: "Storing on encrypted drives", isCorrect: false }, { id: "B", text: "Sharing via personal email", isCorrect: true }, { id: "C", text: "Using VPN for remote access", isCorrect: false }, { id: "D", text: "Locking computer when away", isCorrect: false }] },
-      { id: "Q001-5", questionNumber: 5, questionText: "What is the recommended action when leaving your workstation?", difficulty: "Easy",
-        options: [{ id: "A", text: "Leave it running", isCorrect: false }, { id: "B", text: "Lock the screen (Win+L)", isCorrect: true }, { id: "C", text: "Turn off monitor only", isCorrect: false }, { id: "D", text: "Close all applications", isCorrect: false }] },
-    ],
-  },
-  {
-    id: "Q002", sopName: "Site Selection & Mounting", department: "Technical", dateGenerated: "2026-05-16",
-    questions: [
-      { id: "Q002-1", questionNumber: 1, questionText: "What is the minimum clearance required for outdoor unit installation?", difficulty: "Medium",
-        options: [{ id: "A", text: "10 cm from wall", isCorrect: false }, { id: "B", text: "15 cm from wall", isCorrect: true }, { id: "C", text: "20 cm from wall", isCorrect: false }, { id: "D", text: "25 cm from wall", isCorrect: false }] },
-      { id: "Q002-2", questionNumber: 2, questionText: "Which surface is NOT suitable for mounting the indoor unit?", difficulty: "Easy",
-        options: [{ id: "A", text: "Concrete wall", isCorrect: false }, { id: "B", text: "Plasterboard only", isCorrect: true }, { id: "C", text: "Brick wall", isCorrect: false }, { id: "D", text: "Reinforced drywall", isCorrect: false }] },
-      { id: "Q002-3", questionNumber: 3, questionText: "What should be checked before drilling mounting holes?", difficulty: "Hard",
-        options: [{ id: "A", text: "Wall color", isCorrect: false }, { id: "B", text: "Hidden pipes and wiring", isCorrect: true }, { id: "C", text: "Room temperature", isCorrect: false }, { id: "D", text: "Time of day", isCorrect: false }] },
-    ],
-  },
-  {
-    id: "Q003", sopName: "Piping Connection & Air Purging", department: "Technical", dateGenerated: "2026-05-16",
-    questions: [
-      { id: "Q003-1", questionNumber: 1, questionText: "What is the correct torque specification for φ6mm flare nut connections?", difficulty: "Medium",
-        options: [{ id: "A", text: "10–15 N·m", isCorrect: false }, { id: "B", text: "15–20 N·m", isCorrect: true }, { id: "C", text: "30–35 N·m", isCorrect: false }, { id: "D", text: "50–55 N·m", isCorrect: false }] },
-      { id: "Q003-2", questionNumber: 2, questionText: "What vacuum level must be achieved before opening refrigerant valves?", difficulty: "Hard",
-        options: [{ id: "A", text: "500Pa absolute", isCorrect: false }, { id: "B", text: "200Pa absolute", isCorrect: false }, { id: "C", text: "100Pa absolute", isCorrect: true }, { id: "D", text: "50Pa absolute", isCorrect: false }] },
-      { id: "Q003-3", questionNumber: 3, questionText: "Which side must ALL piping connections be made on for R32 models?", difficulty: "Medium",
-        options: [{ id: "A", text: "Indoor side only", isCorrect: false }, { id: "B", text: "Either side", isCorrect: false }, { id: "C", text: "Outdoor side only", isCorrect: true }, { id: "D", text: "Junction box side", isCorrect: false }] },
-      { id: "Q003-4", questionNumber: 4, questionText: "Which tool is essential for flaring copper pipes before connection?", difficulty: "Easy",
-        options: [{ id: "A", text: "Pipe cutter", isCorrect: false }, { id: "B", text: "Flaring tool", isCorrect: true }, { id: "C", text: "Wrench", isCorrect: false }, { id: "D", text: "Screwdriver", isCorrect: false }] },
-    ],
-  },
-  {
-    id: "Q004", sopName: "Electrical Wiring & Cable Specs", department: "Technical", dateGenerated: "2026-05-16",
-    questions: [
-      { id: "Q004-1", questionNumber: 1, questionText: "What is the minimum cable size for a 3-phase 5HP unit?", difficulty: "Hard",
-        options: [{ id: "A", text: "1.5 mm²", isCorrect: false }, { id: "B", text: "2.5 mm²", isCorrect: true }, { id: "C", text: "4.0 mm²", isCorrect: false }, { id: "D", text: "6.0 mm²", isCorrect: false }] },
-      { id: "Q004-2", questionNumber: 2, questionText: "Which safety device must be installed in the circuit to protect against earth faults?", difficulty: "Easy",
-        options: [{ id: "A", text: "Timer", isCorrect: false }, { id: "B", text: "ELCB/RCD", isCorrect: true }, { id: "C", text: "Dimmer", isCorrect: false }, { id: "D", text: "Transformer", isCorrect: false }] },
-      { id: "Q004-3", questionNumber: 3, questionText: "What should be verified before energizing the system after wiring?", difficulty: "Medium",
-        options: [{ id: "A", text: "Cable color only", isCorrect: false }, { id: "B", text: "All connections and earthing continuity", isCorrect: true }, { id: "C", text: "Unit color", isCorrect: false }, { id: "D", text: "Remote batteries", isCorrect: false }] },
-      { id: "Q004-4", questionNumber: 4, questionText: "What is the correct voltage tolerance range for standard single-phase units?", difficulty: "Medium",
-        options: [{ id: "A", text: "180–200V", isCorrect: false }, { id: "B", text: "200–240V (±10%)", isCorrect: true }, { id: "C", text: "240–280V", isCorrect: false }, { id: "D", text: "280–320V", isCorrect: false }] },
-      { id: "Q004-5", questionNumber: 5, questionText: "What is the minimum ELCB trip current sensitivity required for AC installation circuits?", difficulty: "Hard",
-        options: [{ id: "A", text: "100mA", isCorrect: false }, { id: "B", text: "30mA", isCorrect: true }, { id: "C", text: "60mA", isCorrect: false }, { id: "D", text: "10mA", isCorrect: false }] },
-    ],
-  },
-  {
-    id: "Q005", sopName: "Maintenance & Troubleshooting", department: "Technical", dateGenerated: "2026-05-15",
-    questions: [
-      { id: "Q005-1", questionNumber: 1, questionText: "How often should air filters be cleaned according to the SOP?", difficulty: "Easy",
-        options: [{ id: "A", text: "Every week", isCorrect: false }, { id: "B", text: "Every 2 weeks or 100 hours of operation", isCorrect: true }, { id: "C", text: "Every month", isCorrect: false }, { id: "D", text: "Every 3 months", isCorrect: false }] },
-      { id: "Q005-2", questionNumber: 2, questionText: "What symptom most clearly indicates a refrigerant leak?", difficulty: "Medium",
-        options: [{ id: "A", text: "Loud compressor noise", isCorrect: false }, { id: "B", text: "Ice formation on pipes with reduced cooling", isCorrect: true }, { id: "C", text: "High power consumption only", isCorrect: false }, { id: "D", text: "Remote not responding", isCorrect: false }] },
-      { id: "Q005-3", questionNumber: 3, questionText: "Which component should be checked first when a unit fails to start?", difficulty: "Easy",
-        options: [{ id: "A", text: "Compressor winding", isCorrect: false }, { id: "B", text: "Power supply and circuit breaker", isCorrect: true }, { id: "C", text: "Indoor fan blade", isCorrect: false }, { id: "D", text: "Drain pipe blockage", isCorrect: false }] },
-      { id: "Q005-4", questionNumber: 4, questionText: "What does fault code E1 typically indicate on this unit?", difficulty: "Hard",
-        options: [{ id: "A", text: "Filter clogged", isCorrect: false }, { id: "B", text: "High-pressure protection triggered", isCorrect: true }, { id: "C", text: "Remote signal loss", isCorrect: false }, { id: "D", text: "Drain pump failure", isCorrect: false }] },
-    ],
-  },
-];
+/**
+ * The catalogue comes from the store, so a newly published course appears
+ * here without a second edit. The demonstration review history below still
+ * seeds the older quizzes.
+ */
+const MOCK_QUIZZES: Quiz[] = STORE_QUIZZES.map(q => ({
+  id: q.id,
+  sopId: q.sopId,
+  sopName: q.sopName,
+  department: q.department,
+  dateGenerated: q.dateGenerated,
+  questions: q.questions as QuizQuestion[],
+}));
 
 // Demo: Q004 = STATE 4 (regenerated), Q005 = STATE 2 (rejected)
 const INITIAL_QUIZ_DATA: Record<string, QuizModuleData> = {
@@ -166,12 +115,16 @@ const INITIAL_HISTORY: Record<string, ReviewHistoryEntry[]> = {
 export function QuizReview() {
   const [quizData, setQuizData] = useState<Record<string, QuizModuleData>>(INITIAL_QUIZ_DATA);
   const [history, setHistory] = useState<Record<string, ReviewHistoryEntry[]>>(INITIAL_HISTORY);
-  const [selected, setSelected] = useState<Quiz>(MOCK_QUIZZES[2]);
+  const [selectedSop, setSelectedSop] = useState(DEFAULT_SOP);
+  const [selected, setSelected] = useState<Quiz>(
+    () => MOCK_QUIZZES.find(q => q.sopId === DEFAULT_SOP) ?? MOCK_QUIZZES[0],
+  );
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [barWidth, setBarWidth] = useState(0);
 
-  const qd = quizData[selected.id];
+  const qd = quizData[selected.id]
+    ?? { status: (storeQuizStatus[selected.id] ?? "pending") as QuizModuleStatus, rejectionReason: "", version: 1 };
   const st = STATUS_STYLE[qd.status];
 
   useEffect(() => {
@@ -213,14 +166,26 @@ export function QuizReview() {
     setTimeout(() => startRegeneration(id), 900);
   };
 
+  /** A quiz with no seeded review history falls back to its published status. */
+  const statusOf = (id: string): QuizModuleStatus =>
+    quizData[id]?.status ?? ((storeQuizStatus[id] ?? "pending") as QuizModuleStatus);
+
   const selectQuiz = (quiz: Quiz) => {
-    if (quizData[quiz.id].status === "regenerating") return;
+    if (statusOf(quiz.id) === "regenerating") return;
     setSelected(quiz);
     setRejecting(false);
     setRejectReason("");
   };
 
-  const awaitingCount = MOCK_QUIZZES.filter(q => ["pending", "regenerated"].includes(quizData[q.id].status)).length;
+  const sopQuizzes = MOCK_QUIZZES.filter(q => q.sopId === selectedSop);
+  const awaitingCount = sopQuizzes.filter(q => ["pending", "regenerated"].includes(statusOf(q.id))).length;
+
+  /** Switching course selects that course's first quiz. */
+  const selectSop = (id: string) => {
+    setSelectedSop(id);
+    const first = MOCK_QUIZZES.find(q => q.sopId === id);
+    if (first) selectQuiz(first);
+  };
   const selectedHistory = history[selected.id] || [];
 
   return (
@@ -238,19 +203,28 @@ export function QuizReview() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 py-3 bg-[#F9FAFB] border-b border-[#F3F4F6]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mb-2">
               <File size={14} className="text-[#9CA3AF] shrink-0" />
-              <div>
-                <p className="text-[12px] font-bold text-[#1A1F2E]">Installation-Manual.pdf</p>
-                <p className="text-[11px] text-[#9CA3AF] mt-0.5">{MOCK_QUIZZES.length} quizzes generated</p>
-              </div>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#9CA3AF]">Course</p>
             </div>
+            <select
+              value={selectedSop}
+              onChange={e => selectSop(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-[#1A1F2E] focus:outline-none bg-white cursor-pointer"
+            >
+              {SOPS.map(sop => {
+                const count = MOCK_QUIZZES.filter(q => q.sopId === sop.id).length;
+                return <option key={sop.id} value={sop.id}>{sop.emoji} {sop.title} ({count})</option>;
+              })}
+            </select>
+            <p className="text-[11px] text-[#9CA3AF] mt-1.5">{sopQuizzes.length} quizzes generated</p>
           </div>
 
           <div className="relative">
             <div className="absolute left-[24px] top-0 bottom-0 w-[2px] bg-[#E5E7EB]" />
-            {MOCK_QUIZZES.map((quiz, index) => {
-              const data = quizData[quiz.id];
+            {sopQuizzes.map((quiz, index) => {
+              const data = quizData[quiz.id]
+                ?? { status: statusOf(quiz.id), rejectionReason: "", version: 1 };
               const isSelected = selected.id === quiz.id;
               const isRegen = data.status === "regenerating";
               const isRegenerated = data.status === "regenerated";

@@ -5,7 +5,10 @@ import {
   Image as ImgIcon, Video, Play, Plus, Eye, Pencil, Upload,
   GripVertical, X, Lock,
 } from "lucide-react";
-import { MODULE_BLOCKS, MODULE_META, moduleStatus as storeModuleStatus, updateModuleStatus } from "../courseStore";
+import {
+  SOPS, ALL_MODULES, MODULE_BLOCKS, MODULE_META,
+  moduleStatus as storeModuleStatus, updateModuleStatus,
+} from "../courseStore";
 import { useRole, ROLE_META, scopeOf } from "../access";
 import { ROLE_IDENTITY, sopOwner, staffById, useStoreVersion } from "../trainingStore";
 
@@ -16,32 +19,12 @@ const TEAL = "#00C9A7";
 type MStatus = "approved" | "pending" | "rejected";
 type BType = "paragraph" | "steps" | "table" | "warning" | "image" | "video";
 
-interface SopDoc   { id: string; title: string; dept: string; date: string; emoji: string; }
-interface Module   { id: string; sopId: string; number: number; title: string; initStatus: MStatus; }
 interface Block    { id: string; type: BType; data: Record<string, any>; }
-interface KeyTerm  { term: string; def: string; }
 
 // ── Static data ───────────────────────────────────────────────────────────────
-const SOPS: SopDoc[] = [
-  { id: "s1", title: "AC Installation Manual",     dept: "Engineering", date: "16 May 2026", emoji: "🔧" },
-  { id: "s2", title: "Customer Service Protocol",  dept: "Sales",       date: "17 May 2026", emoji: "🤝" },
-  { id: "s3", title: "Data Privacy Guidelines v2", dept: "IT",          date: "18 May 2026", emoji: "🔒" },
-];
-
-const ALL_MODULES: Module[] = [
-  { id: "m1",  sopId: "s1", number: 1, title: "R32 Refrigerant Safety"         , initStatus: "approved" },
-  { id: "m2",  sopId: "s1", number: 2, title: "Site Selection & Mounting"       , initStatus: "approved" },
-  { id: "m3",  sopId: "s1", number: 3, title: "Piping Connection & Air Purging" , initStatus: "pending"  },
-  { id: "m4",  sopId: "s1", number: 4, title: "Electrical Wiring & Cable Specs" , initStatus: "pending"  },
-  { id: "m5",  sopId: "s1", number: 5, title: "Maintenance & Troubleshooting"   , initStatus: "rejected" },
-  { id: "m6",  sopId: "s1", number: 6, title: "Remote Control Operations"       , initStatus: "approved" },
-  { id: "m7",  sopId: "s1", number: 7, title: "Warranty & Documentation"        , initStatus: "approved" },
-  { id: "m8",  sopId: "s2", number: 1, title: "Customer Communication Skills"   , initStatus: "approved" },
-  { id: "m9",  sopId: "s2", number: 2, title: "Complaint Handling Procedure"    , initStatus: "pending"  },
-  { id: "m10", sopId: "s2", number: 3, title: "Customer Handover Protocol"      , initStatus: "approved" },
-  { id: "m11", sopId: "s3", number: 1, title: "Data Classification Framework"   , initStatus: "approved" },
-  { id: "m12", sopId: "s3", number: 2, title: "Encryption & Access Control"     , initStatus: "pending"  },
-];
+/** The review screen opens on this SOP; its first module is selected with it. */
+const DEFAULT_SOP = "s4";
+const DEFAULT_MOD = ALL_MODULES.find(m => m.sopId === DEFAULT_SOP)?.id ?? ALL_MODULES[0].id;
 
 const STATUS: Record<MStatus, { color: string; bg: string; label: string }> = {
   approved: { color: "#059669", bg: "#ECFDF5", label: "Approved" },
@@ -82,13 +65,6 @@ const INIT_BLOCKS: Block[] = [
     id: "b3", type: "warning",
     data: { text: "Never use compressed air or oxygen to flush the refrigerant circuit. Only Oxygen Free Nitrogen (OFN) is permitted for purging. R32 refrigerant is flammable — any ignition source creates a serious fire and explosion hazard.", level: "danger" },
   },
-];
-
-const INIT_KEY_TERMS: KeyTerm[] = [
-  { term: "Flare Nut",      def: "Threaded nut connecting refrigerant pipes to the valve; always pre-tighten by hand before using a wrench." },
-  { term: "Torque (N·m)",   def: "Rotational force during tightening — incorrect torque deforms the pipe and causes refrigerant leaks." },
-  { term: "100Pa Absolute", def: "Target vacuum level confirming the system is fully airtight before opening any refrigerant valves." },
-  { term: "Vacuum Pump",    def: "Removes air and moisture from the refrigerant circuit prior to refrigerant introduction." },
 ];
 
 const BLOCK_TYPES: Array<{ type: BType; icon: React.ElementType; label: string }> = [
@@ -493,18 +469,17 @@ export function MaterialReview() {
   /** Trainers may open any approved material but edit only their own. */
   const ownOnly = scopeOf(role, "materials") === "own";
 
-  const [selectedSop, setSelectedSop]       = useState("s1");
-  const [selectedMod, setSelectedMod]       = useState("m1");
+  const [selectedSop, setSelectedSop]       = useState(DEFAULT_SOP);
+  const [selectedMod, setSelectedMod]       = useState(DEFAULT_MOD);
   const [mode, setMode]                     = useState<"edit" | "preview">("edit");
   const [statuses, setStatuses]             = useState<Record<string, MStatus>>(
-    () => Object.fromEntries(ALL_MODULES.map(m => [m.id, storeModuleStatus[m.id] ?? m.initStatus]))
+    () => Object.fromEntries(ALL_MODULES.map(m => [m.id, storeModuleStatus[m.id] ?? "pending"]))
   );
-  const [modTitle, setModTitle]             = useState(ALL_MODULES.find(m => m.id === "m1")?.title ?? "");
-  const [summary, setSummary]               = useState(MODULE_META["m1"]?.summary ?? "");
-  const [objectives, setObjectives]         = useState(MODULE_META["m1"]?.objectives ?? INIT_OBJECTIVES);
-  const [tools, setTools]                   = useState(MODULE_META["m1"]?.tools ?? INIT_TOOLS);
-  const [blocks, setBlocks]                 = useState<Block[]>(() => MODULE_BLOCKS["m1"] ?? INIT_BLOCKS);
-  const [keyTerms, setKeyTerms]             = useState<KeyTerm[]>(INIT_KEY_TERMS);
+  const [modTitle, setModTitle]             = useState(ALL_MODULES.find(m => m.id === DEFAULT_MOD)?.title ?? "");
+  const [summary, setSummary]               = useState(MODULE_META[DEFAULT_MOD]?.summary ?? "");
+  const [objectives, setObjectives]         = useState(MODULE_META[DEFAULT_MOD]?.objectives ?? INIT_OBJECTIVES);
+  const [tools, setTools]                   = useState(MODULE_META[DEFAULT_MOD]?.tools ?? INIT_TOOLS);
+  const [blocks, setBlocks]                 = useState<Block[]>(() => MODULE_BLOCKS[DEFAULT_MOD] ?? INIT_BLOCKS);
   const [rejectMode, setRejectMode]         = useState(false);
   const [rejectReason, setRejectReason]     = useState("");
   const [saved, setSaved]                   = useState(false);
@@ -869,40 +844,6 @@ export function MaterialReview() {
                 </div>
               </div>
 
-              {/* Key Terms */}
-              {keyTerms.length > 0 && (
-                <div className="mb-7">
-                  <h3 className="text-[16px] font-bold text-[#1A1F2E] mb-3">Key Terms</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {keyTerms.map((kt, i) => (
-                      <div key={i} className="border border-gray-100 rounded-lg p-4 bg-white">
-                        {mode === "edit" ? (
-                          <>
-                            <input
-                              type="text"
-                              value={kt.term}
-                              onChange={e => setKeyTerms(kts => kts.map((k, j) => j === i ? { ...k, term: e.target.value } : k))}
-                              className="w-full text-[12px] font-bold text-[#1A1F2E] focus:outline-none border-b border-transparent focus:border-gray-300 pb-0.5 mb-1.5 bg-transparent"
-                            />
-                            <textarea
-                              value={kt.def}
-                              onChange={e => setKeyTerms(kts => kts.map((k, j) => j === i ? { ...k, def: e.target.value } : k))}
-                              rows={2}
-                              className="w-full text-[11px] text-[#6B7280] focus:outline-none resize-none bg-transparent leading-relaxed"
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-[12px] font-bold text-[#1A1F2E]">{kt.term}</p>
-                            <p className="text-[11px] text-[#6B7280] mt-1 leading-relaxed">{kt.def}</p>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Reject reason */}
               {rejectMode && (
                 <div className="rounded-xl p-4 mb-5" style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA" }}>
@@ -950,14 +891,15 @@ export function MaterialReview() {
                   >
                     {saved ? "✓ Saved" : "Save Draft"}
                   </button>
-                  {currentStatus !== "approved" && (
+                  {/* An approved module can still be rejected — approval is revocable. */}
+                  {!locked && (
                     <button
                       onClick={() => setRejectMode(r => !r)}
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-semibold border-2 text-[#DC2626] hover:bg-[#FEF2F2] transition-colors"
                       style={{ borderColor: "#DC2626" }}
                     >
                       <XCircle size={13} />
-                      {rejectMode ? "Cancel" : "Reject & Regenerate"}
+                      {rejectMode ? "Cancel" : currentStatus === "approved" ? "Reject Module" : "Reject & Regenerate"}
                     </button>
                   )}
                   {currentStatus !== "approved" ? (
