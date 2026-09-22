@@ -603,3 +603,8 @@ export function resetCourseData() {
 }
 
 hydrate();
+
+// Cleared by the same Reset Demo Data action as the training store.
+if (typeof window !== "undefined") {
+  window.addEventListener("performanceDemoReset", () => resetCourseData());
+}

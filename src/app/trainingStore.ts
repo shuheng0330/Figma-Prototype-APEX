@@ -180,7 +180,7 @@ export interface PortalCourse {
 export const COURSES: PortalCourse[] = [
   { id: "m1", title: "Data Privacy & Compliance",        dept: "IT",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "Video"], categoryIds: ["Safety & Compliance", "cat-hrdc"], duration: "45 min", progress: 100, mandatory: true,  from: "#1E293B", to: "#0F172A", emoji: "🔒", ownerId: "E013", deadline: "2026-10-31", sopId: "s3" },
   { id: "m2", title: "Workplace Safety Essentials",      dept: "HR",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["PPT", "Video"], categoryIds: ["Safety & Compliance", "cat-newhire", "cat-hrdc"],     duration: "60 min", progress: 0,   mandatory: true,  from: "#7F1D1D", to: "#450A0A", emoji: "⚠️", ownerId: "E013", deadline: "2026-10-15" },
-  { id: "m3", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales",    topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Sales", "cat-newhire"], duration: "40 min", progress: 0,   mandatory: true,  from: "#7C2D12", to: "#431407", emoji: "🛵", ownerId: "E013", deadline: "2026-09-30", sopId: "s4",
+  { id: "m3", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales",    topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Sales", "cat-newhire"], duration: "40 min", progress: 0,   mandatory: true,  from: "#7C2D12", to: "#431407", emoji: "🛵", ownerId: "E003", deadline: "2026-09-30", sopId: "s4",
     assignment: { mode: "immediate", assignedOn: "2026-09-15", deadline: "2026-09-30", daysWithin: 7, mandatory: true, audience: "All staff", assignedBy: "E013" } },
   { id: "m4", title: "Emergency Response Protocol",      dept: "Operations",  topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["Video", "PPT"], categoryIds: ["Safety & Compliance"],     duration: "50 min", progress: 20,  mandatory: true,  from: "#78350F", to: "#451A03", emoji: "🚨", ownerId: "E012", deadline: "2026-11-20" },
   { id: "m5", title: "Information Security Awareness",   dept: "IT",          topic: "Digital Skills",      kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "PPT"], categoryIds: ["Digital Skills"], duration: "40 min", progress: 0,   mandatory: true,  from: "#0C4A6E", to: "#082F49", emoji: "🛡️", ownerId: "E013", deadline: "2026-12-05" },
@@ -571,8 +571,42 @@ export interface TrainerStats {
   showRate: number; sharingSessions: number;
 }
 
+/**
+ * Sessions this trainer ran that now have attendance recorded, shaped like the
+ * seeded history so both can be reported together. A session nobody attended
+ * yet is left out, so it does not drag the averages down.
+ */
+export function liveTrainerResults(trainerId: string): PastSessionResult[] {
+  return SESSIONS
+    .filter(s => s.trainerId === trainerId)
+    .map(s => {
+      const regs = REGISTRATIONS.filter(r => r.sessionId === s.id && r.status !== "cancelled");
+      const attended = regs.filter(r => r.attended);
+      if (!attended.length) return null;
+      const scores = attended
+        .map(r => r.quizScore)
+        .filter((n): n is number => typeof n === "number");
+      return {
+        sessionId: s.id, title: s.title, date: s.date, trainerId,
+        kind: s.kind, topic: s.topic,
+        headcount: attended.length,
+        registered: regs.length,
+        avgQuizScore: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+        // Session feedback is not collected in the prototype.
+        rating: 0,
+      } as PastSessionResult;
+    })
+    .filter((r): r is PastSessionResult => r !== null);
+}
+
+/** Seeded history plus anything recorded during this session of testing. */
+export function trainerResults(trainerId: string): PastSessionResult[] {
+  return [...PAST_RESULTS.filter(r => r.trainerId === trainerId), ...liveTrainerResults(trainerId)]
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
 export function trainerStats(trainerId: string): TrainerStats {
-  const rows = PAST_RESULTS.filter(r => r.trainerId === trainerId);
+  const rows = trainerResults(trainerId);
   if (!rows.length) return { sessions: 0, headcount: 0, avgQuiz: 0, avgRating: 0, showRate: 0, sharingSessions: 0 };
   const headcount = rows.reduce((a, r) => a + r.headcount, 0);
   const registered = rows.reduce((a, r) => a + r.registered, 0);
@@ -580,7 +614,10 @@ export function trainerStats(trainerId: string): TrainerStats {
     sessions: rows.length,
     headcount,
     avgQuiz: Math.round(rows.reduce((a, r) => a + r.avgQuizScore, 0) / rows.length),
-    avgRating: +(rows.reduce((a, r) => a + r.rating, 0) / rows.length).toFixed(1),
+    avgRating: (() => {
+      const rated = rows.filter(r => r.rating > 0);
+      return rated.length ? +(rated.reduce((a, r) => a + r.rating, 0) / rated.length).toFixed(1) : 0;
+    })(),
     showRate: Math.round((headcount / registered) * 100),
     sharingSessions: rows.filter(r => r.kind === "Sharing Session").length,
   };
@@ -851,8 +888,8 @@ export function daysUntil(iso: string) {
 // versioned key on every change and rehydrated on load, so a deployed
 // prototype survives a refresh. Bump the version when the seed data changes
 // shape and stale snapshots clear themselves instead of half-loading.
-const STORAGE_KEY = "apex-training-store-v3";
-export const TRAINING_STORE_VERSION = 3;
+const STORAGE_KEY = "apex-training-store-v4";
+export const TRAINING_STORE_VERSION = 4;
 
 /** Every collection a mutation can reach. */
 const PERSISTED: Record<string, unknown[]> = {
@@ -910,3 +947,9 @@ export function resetTrainingData() {
 }
 
 hydrate();
+
+// Reset Demo Data on the Review Period screen resets the whole prototype, so
+// the training data clears with it rather than surviving into a fresh demo.
+if (typeof window !== "undefined") {
+  window.addEventListener("performanceDemoReset", () => resetTrainingData());
+}

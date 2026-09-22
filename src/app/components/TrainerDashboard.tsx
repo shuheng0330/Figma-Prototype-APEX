@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useRole, ROLE_META, scopeOf } from "../access";
 import {
-  STAFF, SESSIONS, PAST_RESULTS, ROLE_IDENTITY, catStyle,
+  STAFF, SESSIONS, ROLE_IDENTITY, catStyle, trainerResults,
   staffById, trainerStats, coursesOwnedBy, seatCount, waitCount,
   fmtDate, daysUntil, useStoreVersion,
 } from "../trainingStore";
@@ -59,7 +59,7 @@ export function TrainerDashboard({ embedded = false }: { embedded?: boolean } = 
 
   const trainer = scope === "none" ? undefined : staffById(selectedId);
   const stats = trainerStats(selectedId);
-  const history = PAST_RESULTS.filter(r => r.trainerId === selectedId).sort((a, b) => b.date.localeCompare(a.date));
+  const history = trainerResults(selectedId);
   const upcoming = SESSIONS
     .filter(s => s.trainerId === selectedId && daysUntil(s.date) >= 0)
     .sort((a, b) => a.date.localeCompare(b.date));
