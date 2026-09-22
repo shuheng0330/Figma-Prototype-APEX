@@ -9,3 +9,8 @@ tmp/
 .env.*
 !.env.example
 *.log
+
+# Local only - not part of the prototype deliverable
+*.docx
+src/app/training-scenarios.test.ts
+tests/e2e/training-flow.spec.ts
