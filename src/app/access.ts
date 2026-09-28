@@ -46,7 +46,7 @@ export const FEATURE_META: Record<Feature, { label: string; group: string; note:
   "calendar":          { label: "Training calendar",           group: "Learning",       note: "Browse sessions; registration opens from here." },
   "register":          { label: "Session registration",        group: "Learning",       note: "Capacity-checked, waitlisted when full." },
   "profile":           { label: "My training record",          group: "Learning",       note: "Only registered + attendance-confirmed sessions appear." },
-  "sharing-session":   { label: "Staff sharing sessions",      group: "Learning",       note: "Any staff may present; the sharing board is visible company-wide." },
+  "sharing-session":   { label: "Staff sharing sessions",      group: "Learning",       note: "Presenting requires the trainer permission, granted by Super Admin. The board itself is visible company-wide." },
   "trainer-dashboard": { label: "Trainer dashboard",           group: "Training ops",   note: "Headcount and average quiz score per session." },
   "materials":         { label: "Create / edit materials",     group: "Training ops",   note: "Trainers are limited to materials they created." },
   "assign-training":   { label: "Assign training",             group: "Training ops",   note: "Trainers may assign only their own materials." },

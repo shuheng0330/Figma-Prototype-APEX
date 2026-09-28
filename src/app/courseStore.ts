@@ -49,7 +49,9 @@ export const quizStatus: Record<string, "approved" | "pending" | "rejected"> = {
   Q004: "pending",  Q005: "approved", Q006: "approved", Q007: "approved",
   Q008: "approved", Q009: "pending",  Q010: "approved",
   Q011: "approved", Q012: "pending",
-  Q013: "approved", Q014: "approved", Q015: "approved", Q016: "approved",
+  // Q013 starts pending so a reviewer has something to approve; the rest are
+  // published so the learner can complete the whole course.
+  Q013: "pending", Q014: "approved", Q015: "approved", Q016: "approved",
 };
 
 export function updateModuleStatus(id: string, status: MStatus) {
@@ -553,8 +555,8 @@ export const ALL_QUIZZES: ModuleQuiz[] = [
 // ── Persistence ───────────────────────────────────────────────────────────────
 // The review screens mutate the status maps above; persist them under one
 // versioned key so approvals survive a refresh on the deployed prototype.
-const STORAGE_KEY = "apex-course-store-v1";
-export const COURSE_STORE_VERSION = 1;
+const STORAGE_KEY = "apex-course-store-v2";
+export const COURSE_STORE_VERSION = 2;
 
 const SEED_MODULE_STATUS = { ...moduleStatus };
 const SEED_QUIZ_STATUS = { ...quizStatus };
@@ -573,6 +575,12 @@ function save() {
 function hydrate() {
   if (typeof window === "undefined") return;
   try {
+    // Drop snapshots from earlier versions so a stale review status cannot be
+    // restored over updated seed data.
+    Object.keys(localStorage)
+      .filter(k => k.startsWith("apex-course-store-") && k !== STORAGE_KEY)
+      .forEach(k => localStorage.removeItem(k));
+
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw) as {
