@@ -6,6 +6,22 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * A seed date, expressed as a number of days from today.
+ *
+ * Demonstration data used to carry fixed dates, which meant the assigned course
+ * fell overdue and sessions slipped into the past as soon as the calendar moved
+ * past them. Keeping the offsets means the walkthrough reads the same whenever
+ * it is run.
+ */
+function day(offset: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const date = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${date}`;
+}
+
 // ── Taxonomy ──────────────────────────────────────────────────────────────────
 /** Course subject grouping — the portal can group the catalogue by this. */
 export type Topic =
@@ -178,12 +194,12 @@ export interface PortalCourse {
 }
 
 export const COURSES: PortalCourse[] = [
-  { id: "m1", title: "Data Privacy & Compliance",        dept: "IT",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "Video"], categoryIds: ["Safety & Compliance", "cat-hrdc"], duration: "45 min", progress: 100, mandatory: true,  from: "#1E293B", to: "#0F172A", emoji: "🔒", ownerId: "E013", deadline: "2026-10-31", sopId: "s3" },
-  { id: "m2", title: "Workplace Safety Essentials",      dept: "HR",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["PPT", "Video"], categoryIds: ["Safety & Compliance", "cat-newhire", "cat-hrdc"],     duration: "60 min", progress: 0,   mandatory: true,  from: "#7F1D1D", to: "#450A0A", emoji: "⚠️", ownerId: "E013", deadline: "2026-10-15" },
-  { id: "m3", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales",    topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Sales", "cat-newhire"], duration: "40 min", progress: 0,   mandatory: true,  from: "#7C2D12", to: "#431407", emoji: "🛵", ownerId: "E003", deadline: "2026-09-30", sopId: "s4",
-    assignment: { mode: "immediate", assignedOn: "2026-09-15", deadline: "2026-09-30", daysWithin: 7, mandatory: true, audience: "All staff", assignedBy: "E013" } },
-  { id: "m4", title: "Emergency Response Protocol",      dept: "Operations",  topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["Video", "PPT"], categoryIds: ["Safety & Compliance"],     duration: "50 min", progress: 20,  mandatory: true,  from: "#78350F", to: "#451A03", emoji: "🚨", ownerId: "E012", deadline: "2026-11-20" },
-  { id: "m5", title: "Information Security Awareness",   dept: "IT",          topic: "Digital Skills",      kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "PPT"], categoryIds: ["Digital Skills"], duration: "40 min", progress: 0,   mandatory: true,  from: "#0C4A6E", to: "#082F49", emoji: "🛡️", ownerId: "E013", deadline: "2026-12-05" },
+  { id: "m1", title: "Data Privacy & Compliance",        dept: "IT",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "Video"], categoryIds: ["Safety & Compliance", "cat-hrdc"], duration: "45 min", progress: 100, mandatory: true,  from: "#1E293B", to: "#0F172A", emoji: "🔒", ownerId: "E013", deadline: day(39), sopId: "s3" },
+  { id: "m2", title: "Workplace Safety Essentials",      dept: "HR",          topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["PPT", "Video"], categoryIds: ["Safety & Compliance", "cat-newhire", "cat-hrdc"],     duration: "60 min", progress: 0,   mandatory: true,  from: "#7F1D1D", to: "#450A0A", emoji: "⚠️", ownerId: "E013", deadline: day(23) },
+  { id: "m3", title: "E-Hailing Delivery & Customer Pickup", dept: "Sales",    topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF"], categoryIds: ["Sales", "cat-newhire"], duration: "40 min", progress: 0,   mandatory: true,  from: "#7C2D12", to: "#431407", emoji: "🛵", ownerId: "E003", deadline: day(16), sopId: "s4",
+    assignment: { mode: "immediate", assignedOn: day(-2), deadline: day(16), daysWithin: 18, mandatory: true, audience: "All staff", assignedBy: "E013" } },
+  { id: "m4", title: "Emergency Response Protocol",      dept: "Operations",  topic: "Safety & Compliance", kpi: "Skill-Based Training",  delivery: "Hybrid", types: ["Video", "PPT"], categoryIds: ["Safety & Compliance"],     duration: "50 min", progress: 20,  mandatory: true,  from: "#78350F", to: "#451A03", emoji: "🚨", ownerId: "E012", deadline: day(59) },
+  { id: "m5", title: "Information Security Awareness",   dept: "IT",          topic: "Digital Skills",      kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PDF", "PPT"], categoryIds: ["Digital Skills"], duration: "40 min", progress: 0,   mandatory: true,  from: "#0C4A6E", to: "#082F49", emoji: "🛡️", ownerId: "E013", deadline: day(74) },
   { id: "c1", title: "AC Installation Manual",           dept: "Engineering", topic: "Repairs & Service",   kpi: "Product Training",      delivery: "E-Learning", types: ["PDF", "Video", "PPT"], categoryIds: ["Repairs & Service", "cat-hrdc"], duration: "90 min", progress: 60,  mandatory: false, from: "#064E3B", to: "#022C22", emoji: "🔧", ownerId: "E010", sopId: "s1" },
   { id: "c2", title: "Customer Handling Techniques",     dept: "Sales",       topic: "Sales",               kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["Video"], categoryIds: ["Sales"], duration: "35 min", progress: 45,  mandatory: false, from: "#831843", to: "#500724", emoji: "🤝", ownerId: "E011", sopId: "s2" },
   { id: "c3", title: "Project Management Basics",        dept: "Operations",  topic: "Leadership",          kpi: "Skill-Based Training",  delivery: "E-Learning", types: ["PPT", "Word"], categoryIds: ["Leadership"], duration: "55 min", progress: 80,  mandatory: false, from: "#14532D", to: "#052E16", emoji: "📋", ownerId: "E013" },
@@ -238,16 +254,16 @@ export interface OfflineSession {
 }
 
 export const SESSIONS: OfflineSession[] = [
-  { id: "EV01", title: "R32 Refrigerant Safety Certification", date: "2026-09-24", time: "09:00 – 12:00", venue: "Technical Lab, Level 2",  trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 18, mandatory: true,  registrationOpen: true,  hrdcClaimable: true,  description: "Mandatory certification for field technicians handling R32. Flammability, leak detection, DOSH compliance." },
-  { id: "EV02", title: "Inverter Series 2026 Product Launch",  date: "2026-09-29", time: "10:00 – 13:00", venue: "Conference Hall B",       trainerId: "E010", kind: "Physical",        topic: "Product Knowledge",   kpi: "Product Training",     capacity: 40, mandatory: false, registrationOpen: true,  hrdcClaimable: true,  description: "Walkthrough of the 2026 inverter line — specs, selling points, installation differences and warranty terms." },
-  { id: "EV03", title: "Closing the Sale — Staff Sharing",     date: "2026-10-02", time: "14:00 – 15:00", venue: "Training Room A, HQ",     trainerId: "E003", kind: "Sharing Session", topic: "Sales",               kpi: "Skill-Based Training", capacity: 25, mandatory: false, registrationOpen: true,  description: "Tan Wei Ming shares the objection-handling script behind three consecutive quarters of quota." },
-  { id: "EV04", title: "Customer Service Excellence",          date: "2026-10-07", time: "10:00 – 12:00", venue: "Conference Hall B",       trainerId: "E011", kind: "Hybrid",          topic: "Sales",               kpi: "Skill-Based Training", capacity: 20, mandatory: false, registrationOpen: true,  hrdcClaimable: true,  description: "CARE framework role-play — courteous, attentive, responsive, empathetic. Includes escalation drills." },
-  { id: "EV05", title: "Field Repair Shortcuts — Staff Sharing",date:"2026-10-14", time: "16:00 – 16:45", venue: "Workshop Floor, Bay 3",   trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service",   kpi: "Product Training",     capacity: 15, mandatory: false, registrationOpen: true,  description: "Ahmad Samsudin walks through the diagnostic shortcuts he uses on inverter board faults." },
-  { id: "EV06", title: "Electrical Wiring Certification",      date: "2026-10-21", time: "09:00 – 17:00", venue: "Technical Lab, Level 2",  trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 10, mandatory: true,  registrationOpen: true,  hrdcClaimable: true,  description: "Full-day certification — cable sizing, isolator installation, safety earth. Assessment at the end." },
-  { id: "EV07", title: "Phone Etiquette — Staff Sharing",      date: "2026-09-26", time: "16:00 – 17:00", venue: "Training Room B",         trainerId: "E006", kind: "Sharing Session", topic: "Sales",             kpi: "Skill-Based Training", capacity: 25, mandatory: false, registrationOpen: true,  description: "Tan Hui Ying shares the call-handling habits behind her repeat-job rate, including opening lines and follow-up timing." },
-  { id: "EV08", title: "Warranty Claims — Staff Sharing",      date: "2026-10-09", time: "11:00 – 12:00", venue: "Service Centre, Level 1", trainerId: "E004", kind: "Sharing Session", topic: "Product Knowledge", kpi: "Product Training",     capacity: 20, mandatory: false, registrationOpen: true,  description: "Priya Subramaniam walks through the documentation shortcuts that cut warranty claim turnaround in half." },
-  { id: "EV09", title: "Morning Briefing Practice — Sharing",  date: "2026-10-23", time: "08:30 – 09:15", venue: "Branch — Ampang",         trainerId: "E005", kind: "Sharing Session", topic: "Leadership",        kpi: "Skill-Based Training", capacity: 15, mandatory: false, registrationOpen: true,  description: "Mohd Faizal runs a live briefing and breaks down how he keeps it under fifteen minutes." },
-  { id: "EV00", title: "Q3 Safety Induction",                  date: "2026-09-03", time: "09:00 – 11:00", venue: "Conference Hall A",       trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 30, mandatory: true,  registrationOpen: false, hrdcClaimable: true,  description: "Completed induction covering fire safety, first aid basics and evacuation procedure." },
+  { id: "EV01", title: "R32 Refrigerant Safety Certification", date: day(2), time: "09:00 – 12:00", venue: "Technical Lab, Level 2",  trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 18, mandatory: true,  registrationOpen: true,  hrdcClaimable: true,  description: "Mandatory certification for field technicians handling R32. Flammability, leak detection, DOSH compliance." },
+  { id: "EV02", title: "Inverter Series 2026 Product Launch",  date: day(7), time: "10:00 – 13:00", venue: "Conference Hall B",       trainerId: "E010", kind: "Physical",        topic: "Product Knowledge",   kpi: "Product Training",     capacity: 40, mandatory: false, registrationOpen: true,  hrdcClaimable: true,  description: "Walkthrough of the 2026 inverter line — specs, selling points, installation differences and warranty terms." },
+  { id: "EV03", title: "Closing the Sale — Staff Sharing",     date: day(10), time: "14:00 – 15:00", venue: "Training Room A, HQ",     trainerId: "E003", kind: "Sharing Session", topic: "Sales",               kpi: "Skill-Based Training", capacity: 25, mandatory: false, registrationOpen: true,  description: "Tan Wei Ming shares the objection-handling script behind three consecutive quarters of quota." },
+  { id: "EV04", title: "Customer Service Excellence",          date: day(15), time: "10:00 – 12:00", venue: "Conference Hall B",       trainerId: "E011", kind: "Hybrid",          topic: "Sales",               kpi: "Skill-Based Training", capacity: 20, mandatory: false, registrationOpen: true,  hrdcClaimable: true,  description: "CARE framework role-play — courteous, attentive, responsive, empathetic. Includes escalation drills." },
+  { id: "EV05", title: "Field Repair Shortcuts — Staff Sharing",date: day(22), time: "16:00 – 16:45", venue: "Workshop Floor, Bay 3",   trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service",   kpi: "Product Training",     capacity: 15, mandatory: false, registrationOpen: true,  description: "Ahmad Samsudin walks through the diagnostic shortcuts he uses on inverter board faults." },
+  { id: "EV06", title: "Electrical Wiring Certification",      date: day(29), time: "09:00 – 17:00", venue: "Technical Lab, Level 2",  trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 10, mandatory: true,  registrationOpen: true,  hrdcClaimable: true,  description: "Full-day certification — cable sizing, isolator installation, safety earth. Assessment at the end." },
+  { id: "EV07", title: "Phone Etiquette — Staff Sharing",      date: day(4), time: "16:00 – 17:00", venue: "Training Room B",         trainerId: "E006", kind: "Sharing Session", topic: "Sales",             kpi: "Skill-Based Training", capacity: 25, mandatory: false, registrationOpen: true,  description: "Tan Hui Ying shares the call-handling habits behind her repeat-job rate, including opening lines and follow-up timing." },
+  { id: "EV08", title: "Warranty Claims — Staff Sharing",      date: day(17), time: "11:00 – 12:00", venue: "Service Centre, Level 1", trainerId: "E004", kind: "Sharing Session", topic: "Product Knowledge", kpi: "Product Training",     capacity: 20, mandatory: false, registrationOpen: true,  description: "Priya Subramaniam walks through the documentation shortcuts that cut warranty claim turnaround in half." },
+  { id: "EV09", title: "Morning Briefing Practice — Sharing",  date: day(31), time: "08:30 – 09:15", venue: "Branch — Ampang",         trainerId: "E005", kind: "Sharing Session", topic: "Leadership",        kpi: "Skill-Based Training", capacity: 15, mandatory: false, registrationOpen: true,  description: "Mohd Faizal runs a live briefing and breaks down how he keeps it under fifteen minutes." },
+  { id: "EV00", title: "Q3 Safety Induction",                  date: day(-19), time: "09:00 – 11:00", venue: "Conference Hall A",       trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", kpi: "Skill-Based Training", capacity: 30, mandatory: true,  registrationOpen: false, hrdcClaimable: true,  description: "Completed induction covering fire safety, first aid basics and evacuation procedure." },
 ];
 
 // ── Recurring templates ───────────────────────────────────────────────────────
@@ -277,10 +293,10 @@ export interface SessionTemplate {
 }
 
 export const TEMPLATES: SessionTemplate[] = [
-  { id: "T01", name: "New Hire Safety Induction",      topic: "Safety & Compliance", kind: "Physical",        time: "09:00 – 11:00", venue: "Conference Hall A",      trainerName: "Karim Abdullah", capacity: 30, mandatory: true,  selfRegistration: true,  requireForm: true,  createdBy: "E013", createdOn: "2026-01-12", lastUsed: "2026-09-03", uses: 9,  description: "Fire safety, first aid basics, site hazard awareness and evacuation procedure for new joiners." },
-  { id: "T02", name: "Monthly Product Update",         topic: "Product Knowledge",   kind: "Hybrid",          time: "14:00 – 15:30", venue: "Conference Hall B",      trainerName: "Lim Chee Keong", capacity: 40, mandatory: false, selfRegistration: true,  requireForm: false, createdBy: "E013", createdOn: "2026-02-02", lastUsed: "2026-08-28", uses: 8,  description: "Specs, selling points and installation differences for the latest product line." },
-  { id: "T03", name: "Staff Sharing Slot",             topic: "Sales",               kind: "Sharing Session", time: "16:00 – 17:00", venue: "Training Room A, HQ",    trainerName: "Tan Wei Ming",   capacity: 25, mandatory: false, selfRegistration: true,  requireForm: false, createdBy: "E013", createdOn: "2026-03-06", lastUsed: "2026-09-05", uses: 14, description: "Open slot for a staff member to share practical experience with colleagues." },
-  { id: "T04", name: "Technician Refresher",           topic: "Repairs & Service",   kind: "Physical",        time: "09:00 – 13:00", venue: "Technical Lab, Level 2", trainerName: "Karim Abdullah", capacity: 18, mandatory: true,  selfRegistration: true,  requireForm: true,  createdBy: "E013", createdOn: "2026-01-20", lastUsed: "2026-07-15", uses: 3,  description: "Hands-on refresher on diagnostics, safe handling and current service standards." },
+  { id: "T01", name: "New Hire Safety Induction",      topic: "Safety & Compliance", kind: "Physical",        time: "09:00 – 11:00", venue: "Conference Hall A",      trainerName: "Karim Abdullah", capacity: 30, mandatory: true,  selfRegistration: true,  requireForm: true,  createdBy: "E013", createdOn: day(-253), lastUsed: day(-19), uses: 9,  description: "Fire safety, first aid basics, site hazard awareness and evacuation procedure for new joiners." },
+  { id: "T02", name: "Monthly Product Update",         topic: "Product Knowledge",   kind: "Hybrid",          time: "14:00 – 15:30", venue: "Conference Hall B",      trainerName: "Lim Chee Keong", capacity: 40, mandatory: false, selfRegistration: true,  requireForm: false, createdBy: "E013", createdOn: day(-232), lastUsed: day(-25), uses: 8,  description: "Specs, selling points and installation differences for the latest product line." },
+  { id: "T03", name: "Staff Sharing Slot",             topic: "Sales",               kind: "Sharing Session", time: "16:00 – 17:00", venue: "Training Room A, HQ",    trainerName: "Tan Wei Ming",   capacity: 25, mandatory: false, selfRegistration: true,  requireForm: false, createdBy: "E013", createdOn: day(-200), lastUsed: day(-17), uses: 14, description: "Open slot for a staff member to share practical experience with colleagues." },
+  { id: "T04", name: "Technician Refresher",           topic: "Repairs & Service",   kind: "Physical",        time: "09:00 – 13:00", venue: "Technical Lab, Level 2", trainerName: "Karim Abdullah", capacity: 18, mandatory: true,  selfRegistration: true,  requireForm: true,  createdBy: "E013", createdOn: day(-245), lastUsed: day(-69), uses: 3,  description: "Hands-on refresher on diagnostics, safe handling and current service standards." },
 ];
 
 // ── Registration / waitlist / attendance ──────────────────────────────────────
@@ -297,32 +313,32 @@ export interface Registration {
 
 /** Seeded registrations — includes a full session and a waitlist to show the flow. */
 export const REGISTRATIONS: Registration[] = [
-  { sessionId: "EV00", staffId: "E001", status: "registered", registeredOn: "2026-08-20", attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 88 },
-  { sessionId: "EV00", staffId: "E002", status: "registered", registeredOn: "2026-08-20", attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 74 },
-  { sessionId: "EV00", staffId: "E007", status: "registered", registeredOn: "2026-08-21", attended: false, quizScore: null },
-  { sessionId: "EV00", staffId: "E014", status: "registered", registeredOn: "2026-08-22", attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 91 },
-  { sessionId: "EV01", staffId: "E002", status: "registered", registeredOn: "2026-09-08", attended: false },
-  { sessionId: "EV01", staffId: "E007", status: "registered", registeredOn: "2026-09-09", attended: false },
-  { sessionId: "EV03", staffId: "E006", status: "registered", registeredOn: "2026-09-10", attended: false },
-  { sessionId: "EV03", staffId: "E009", status: "registered", registeredOn: "2026-09-10", attended: false },
-  { sessionId: "EV06", staffId: "E002", status: "registered", registeredOn: "2026-09-11", attended: false },
-  { sessionId: "EV06", staffId: "E007", status: "registered", registeredOn: "2026-09-11", attended: false },
-  { sessionId: "EV06", staffId: "E014", status: "registered", registeredOn: "2026-09-12", attended: false },
-  { sessionId: "EV06", staffId: "E004", status: "registered", registeredOn: "2026-09-12", attended: false },
-  { sessionId: "EV06", staffId: "E008", status: "registered", registeredOn: "2026-09-12", attended: false },
-  { sessionId: "EV06", staffId: "E003", status: "registered", registeredOn: "2026-09-13", attended: false },
-  { sessionId: "EV06", staffId: "E006", status: "registered", registeredOn: "2026-09-13", attended: false },
-  { sessionId: "EV06", staffId: "E009", status: "registered", registeredOn: "2026-09-13", attended: false },
-  { sessionId: "EV06", staffId: "E005", status: "registered", registeredOn: "2026-09-14", attended: false },
-  { sessionId: "EV06", staffId: "E010", status: "registered", registeredOn: "2026-09-14", attended: false },
-  { sessionId: "EV06", staffId: "E011", status: "waitlisted", registeredOn: "2026-09-15", attended: false },
-  { sessionId: "EV07", staffId: "E004", status: "registered", registeredOn: "2026-09-16", attended: false },
-  { sessionId: "EV07", staffId: "E008", status: "registered", registeredOn: "2026-09-16", attended: false },
-  { sessionId: "EV07", staffId: "E009", status: "registered", registeredOn: "2026-09-16", attended: false },
-  { sessionId: "EV07", staffId: "E003", status: "registered", registeredOn: "2026-09-17", attended: false },
-  { sessionId: "EV08", staffId: "E002", status: "registered", registeredOn: "2026-09-16", attended: false },
-  { sessionId: "EV08", staffId: "E008", status: "registered", registeredOn: "2026-09-17", attended: false },
-  { sessionId: "EV09", staffId: "E006", status: "registered", registeredOn: "2026-09-17", attended: false },
+  { sessionId: "EV00", staffId: "E001", status: "registered", registeredOn: day(-33), attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 88 },
+  { sessionId: "EV00", staffId: "E002", status: "registered", registeredOn: day(-33), attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 74 },
+  { sessionId: "EV00", staffId: "E007", status: "registered", registeredOn: day(-32), attended: false, quizScore: null },
+  { sessionId: "EV00", staffId: "E014", status: "registered", registeredOn: day(-31), attended: true,  attendanceMethod: "batch",  recordedBy: "E013", quizScore: 91 },
+  { sessionId: "EV01", staffId: "E002", status: "registered", registeredOn: day(-14), attended: false },
+  { sessionId: "EV01", staffId: "E007", status: "registered", registeredOn: day(-13), attended: false },
+  { sessionId: "EV03", staffId: "E006", status: "registered", registeredOn: day(-12), attended: false },
+  { sessionId: "EV03", staffId: "E009", status: "registered", registeredOn: day(-12), attended: false },
+  { sessionId: "EV06", staffId: "E002", status: "registered", registeredOn: day(-11), attended: false },
+  { sessionId: "EV06", staffId: "E007", status: "registered", registeredOn: day(-11), attended: false },
+  { sessionId: "EV06", staffId: "E014", status: "registered", registeredOn: day(-10), attended: false },
+  { sessionId: "EV06", staffId: "E004", status: "registered", registeredOn: day(-10), attended: false },
+  { sessionId: "EV06", staffId: "E008", status: "registered", registeredOn: day(-10), attended: false },
+  { sessionId: "EV06", staffId: "E003", status: "registered", registeredOn: day(-9), attended: false },
+  { sessionId: "EV06", staffId: "E006", status: "registered", registeredOn: day(-9), attended: false },
+  { sessionId: "EV06", staffId: "E009", status: "registered", registeredOn: day(-9), attended: false },
+  { sessionId: "EV06", staffId: "E005", status: "registered", registeredOn: day(-8), attended: false },
+  { sessionId: "EV06", staffId: "E010", status: "registered", registeredOn: day(-8), attended: false },
+  { sessionId: "EV06", staffId: "E011", status: "waitlisted", registeredOn: day(-7), attended: false },
+  { sessionId: "EV07", staffId: "E004", status: "registered", registeredOn: day(-6), attended: false },
+  { sessionId: "EV07", staffId: "E008", status: "registered", registeredOn: day(-6), attended: false },
+  { sessionId: "EV07", staffId: "E009", status: "registered", registeredOn: day(-6), attended: false },
+  { sessionId: "EV07", staffId: "E003", status: "registered", registeredOn: day(-5), attended: false },
+  { sessionId: "EV08", staffId: "E002", status: "registered", registeredOn: day(-6), attended: false },
+  { sessionId: "EV08", staffId: "E008", status: "registered", registeredOn: day(-5), attended: false },
+  { sessionId: "EV09", staffId: "E006", status: "registered", registeredOn: day(-5), attended: false },
 ];
 
 // Past sharing/physical sessions that already produced records + quiz scores,
@@ -334,31 +350,32 @@ export interface PastSessionResult {
 }
 
 export const PAST_RESULTS: PastSessionResult[] = [
-  { sessionId: "P01", title: "Closing the Sale — Staff Sharing",   date: "2026-08-14", trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 22, registered: 25, avgQuizScore: 86, rating: 4.6 },
-  { sessionId: "P02", title: "Upselling Service Packages",         date: "2026-07-17", trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 18, registered: 20, avgQuizScore: 79, rating: 4.3 },
-  { sessionId: "P03", title: "Handling Price Objections",          date: "2026-06-19", trainerId: "E003", kind: "Physical",        topic: "Sales",             headcount: 24, registered: 24, avgQuizScore: 91, rating: 4.8 },
-  { sessionId: "P04", title: "Customer Handover Walkthrough",      date: "2026-05-22", trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 15, registered: 18, avgQuizScore: 72, rating: 4.0 },
-  { sessionId: "P05", title: "Field Repair Shortcuts — Sharing",   date: "2026-08-07", trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service", headcount: 14, registered: 15, avgQuizScore: 88, rating: 4.7 },
-  { sessionId: "P06", title: "Inverter Board Fault Diagnosis",     date: "2026-06-26", trainerId: "E001", kind: "Physical",        topic: "Repairs & Service", headcount: 12, registered: 12, avgQuizScore: 83, rating: 4.5 },
-  { sessionId: "P07", title: "R32 Safety Certification",           date: "2026-07-10", trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", headcount: 17, registered: 18, avgQuizScore: 90, rating: 4.6 },
-  { sessionId: "P08", title: "AC Installation Fundamentals",       date: "2026-08-04", trainerId: "E010", kind: "Physical",        topic: "Repairs & Service", headcount: 15, registered: 20, avgQuizScore: 81, rating: 4.2 },
-  // Sharing sessions led by staff who are not formal trainers — any staff may present.
-  { sessionId: "P09", title: "Handling Difficult Customers — Sharing", date: "2026-08-21", trainerId: "E006", kind: "Sharing Session", topic: "Sales",             headcount: 19, registered: 21, avgQuizScore: 84, rating: 4.4 },
-  { sessionId: "P10", title: "Preventive Maintenance Tips — Sharing",  date: "2026-07-31", trainerId: "E005", kind: "Sharing Session", topic: "Repairs & Service", headcount: 16, registered: 18, avgQuizScore: 87, rating: 4.5 },
-  { sessionId: "P11", title: "Reading Wiring Diagrams — Sharing",      date: "2026-06-12", trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service", headcount: 11, registered: 12, avgQuizScore: 78, rating: 4.1 },
-  { sessionId: "P12", title: "Branch Handover Checklist — Sharing",    date: "2026-09-04", trainerId: "E005", kind: "Sharing Session", topic: "Product Knowledge", headcount: 13, registered: 15, avgQuizScore: 80, rating: 4.3 },
-  { sessionId: "P13", title: "Inverter Fault Codes — Quick Reference",  date: "2026-06-05", trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 12, registered: 14, avgQuizScore: 82, rating: 4.4 },
-  { sessionId: "P14", title: "Safe R32 Handling in the Field",          date: "2026-04-17", trainerId: "E001", kind: "Sharing Session", topic: "Safety & Compliance", headcount: 17, registered: 18, avgQuizScore: 90, rating: 4.8 },
-  { sessionId: "P15", title: "Running a Smooth Morning Briefing",       date: "2026-05-15", trainerId: "E005", kind: "Sharing Session", topic: "Leadership",          headcount: 10, registered: 12, avgQuizScore: 76, rating: 4.2 },
-  { sessionId: "P16", title: "Phone Etiquette That Wins Repeat Jobs",   date: "2026-06-26", trainerId: "E006", kind: "Sharing Session", topic: "Sales",               headcount: 21, registered: 23, avgQuizScore: 88, rating: 4.6 },
-  { sessionId: "P17", title: "Handling Escalations Calmly",             date: "2026-04-30", trainerId: "E006", kind: "Sharing Session", topic: "Sales",               headcount: 15, registered: 17, avgQuizScore: 81, rating: 4.2 },
-  { sessionId: "P18", title: "Torque Settings Cheat Sheet",             date: "2026-05-08", trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 9,  registered: 11, avgQuizScore: 85, rating: 4.5 },
-  { sessionId: "P19", title: "Installation Mistakes I Made",            date: "2026-03-20", trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 13, registered: 14, avgQuizScore: 83, rating: 4.6 },
-  { sessionId: "P20", title: "Demo Techniques for Showroom Walk-ins",   date: "2026-07-03", trainerId: "E009", kind: "Sharing Session", topic: "Sales",               headcount: 14, registered: 16, avgQuizScore: 79, rating: 4.1 },
-  { sessionId: "P21", title: "Following Up Quotations",                 date: "2026-05-29", trainerId: "E009", kind: "Sharing Session", topic: "Sales",               headcount: 12, registered: 13, avgQuizScore: 77, rating: 4.0 },
-  { sessionId: "P22", title: "Faster Warranty Claim Processing",        date: "2026-08-28", trainerId: "E004", kind: "Sharing Session", topic: "Product Knowledge",   headcount: 11, registered: 12, avgQuizScore: 86, rating: 4.5 },
-  { sessionId: "P23", title: "Scheduling Jobs Without Double-Booking",  date: "2026-06-19", trainerId: "E004", kind: "Sharing Session", topic: "Digital Skills",      headcount: 9,  registered: 10, avgQuizScore: 82, rating: 4.3 },
-  { sessionId: "P24", title: "Reading Buying Signals",                  date: "2026-09-11", trainerId: "E003", kind: "Sharing Session", topic: "Sales",               headcount: 20, registered: 22, avgQuizScore: 89, rating: 4.7 },
+  { sessionId: "P01", title: "Closing the Sale — Staff Sharing",   date: day(-39), trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 22, registered: 25, avgQuizScore: 86, rating: 4.6 },
+  { sessionId: "P02", title: "Upselling Service Packages",         date: day(-67), trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 18, registered: 20, avgQuizScore: 79, rating: 4.3 },
+  { sessionId: "P03", title: "Handling Price Objections",          date: day(-95), trainerId: "E003", kind: "Physical",        topic: "Sales",             headcount: 24, registered: 24, avgQuizScore: 91, rating: 4.8 },
+  { sessionId: "P04", title: "Customer Handover Walkthrough",      date: day(-123), trainerId: "E003", kind: "Sharing Session", topic: "Sales",             headcount: 15, registered: 18, avgQuizScore: 72, rating: 4.0 },
+  { sessionId: "P05", title: "Field Repair Shortcuts — Sharing",   date: day(-46), trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service", headcount: 14, registered: 15, avgQuizScore: 88, rating: 4.7 },
+  { sessionId: "P06", title: "Inverter Board Fault Diagnosis",     date: day(-88), trainerId: "E001", kind: "Physical",        topic: "Repairs & Service", headcount: 12, registered: 12, avgQuizScore: 83, rating: 4.5 },
+  { sessionId: "P07", title: "R32 Safety Certification",           date: day(-74), trainerId: "E012", kind: "Physical",        topic: "Safety & Compliance", headcount: 17, registered: 18, avgQuizScore: 90, rating: 4.6 },
+  { sessionId: "P08", title: "AC Installation Fundamentals",       date: day(-49), trainerId: "E010", kind: "Physical",        topic: "Repairs & Service", headcount: 15, registered: 20, avgQuizScore: 81, rating: 4.2 },
+  // Sharing sessions. Presenting requires the trainer permission, so a presenter
+  // here has been granted it even where their day job is not training.
+  { sessionId: "P09", title: "Handling Difficult Customers — Sharing", date: day(-32), trainerId: "E006", kind: "Sharing Session", topic: "Sales",             headcount: 19, registered: 21, avgQuizScore: 84, rating: 4.4 },
+  { sessionId: "P10", title: "Preventive Maintenance Tips — Sharing",  date: day(-53), trainerId: "E005", kind: "Sharing Session", topic: "Repairs & Service", headcount: 16, registered: 18, avgQuizScore: 87, rating: 4.5 },
+  { sessionId: "P11", title: "Reading Wiring Diagrams — Sharing",      date: day(-102), trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service", headcount: 11, registered: 12, avgQuizScore: 78, rating: 4.1 },
+  { sessionId: "P12", title: "Branch Handover Checklist — Sharing",    date: day(-18), trainerId: "E005", kind: "Sharing Session", topic: "Product Knowledge", headcount: 13, registered: 15, avgQuizScore: 80, rating: 4.3 },
+  { sessionId: "P13", title: "Inverter Fault Codes — Quick Reference",  date: day(-109), trainerId: "E001", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 12, registered: 14, avgQuizScore: 82, rating: 4.4 },
+  { sessionId: "P14", title: "Safe R32 Handling in the Field",          date: day(-158), trainerId: "E001", kind: "Sharing Session", topic: "Safety & Compliance", headcount: 17, registered: 18, avgQuizScore: 90, rating: 4.8 },
+  { sessionId: "P15", title: "Running a Smooth Morning Briefing",       date: day(-130), trainerId: "E005", kind: "Sharing Session", topic: "Leadership",          headcount: 10, registered: 12, avgQuizScore: 76, rating: 4.2 },
+  { sessionId: "P16", title: "Phone Etiquette That Wins Repeat Jobs",   date: day(-88), trainerId: "E006", kind: "Sharing Session", topic: "Sales",               headcount: 21, registered: 23, avgQuizScore: 88, rating: 4.6 },
+  { sessionId: "P17", title: "Handling Escalations Calmly",             date: day(-145), trainerId: "E006", kind: "Sharing Session", topic: "Sales",               headcount: 15, registered: 17, avgQuizScore: 81, rating: 4.2 },
+  { sessionId: "P18", title: "Torque Settings Cheat Sheet",             date: day(-137), trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 9,  registered: 11, avgQuizScore: 85, rating: 4.5 },
+  { sessionId: "P19", title: "Installation Mistakes I Made",            date: day(-186), trainerId: "E002", kind: "Sharing Session", topic: "Repairs & Service",   headcount: 13, registered: 14, avgQuizScore: 83, rating: 4.6 },
+  { sessionId: "P20", title: "Demo Techniques for Showroom Walk-ins",   date: day(-81), trainerId: "E009", kind: "Sharing Session", topic: "Sales",               headcount: 14, registered: 16, avgQuizScore: 79, rating: 4.1 },
+  { sessionId: "P21", title: "Following Up Quotations",                 date: day(-116), trainerId: "E009", kind: "Sharing Session", topic: "Sales",               headcount: 12, registered: 13, avgQuizScore: 77, rating: 4.0 },
+  { sessionId: "P22", title: "Faster Warranty Claim Processing",        date: day(-25), trainerId: "E004", kind: "Sharing Session", topic: "Product Knowledge",   headcount: 11, registered: 12, avgQuizScore: 86, rating: 4.5 },
+  { sessionId: "P23", title: "Scheduling Jobs Without Double-Booking",  date: day(-95), trainerId: "E004", kind: "Sharing Session", topic: "Digital Skills",      headcount: 9,  registered: 10, avgQuizScore: 82, rating: 4.3 },
+  { sessionId: "P24", title: "Reading Buying Signals",                  date: day(-11), trainerId: "E003", kind: "Sharing Session", topic: "Sales",               headcount: 20, registered: 22, avgQuizScore: 89, rating: 4.7 },
 ];
 
 /** Every staff-led sharing session that has already run. */
@@ -888,8 +905,8 @@ export function daysUntil(iso: string) {
 // versioned key on every change and rehydrated on load, so a deployed
 // prototype survives a refresh. Bump the version when the seed data changes
 // shape and stale snapshots clear themselves instead of half-loading.
-const STORAGE_KEY = "apex-training-store-v4";
-export const TRAINING_STORE_VERSION = 4;
+const STORAGE_KEY = "apex-training-store-v6";
+export const TRAINING_STORE_VERSION = 6;
 
 /** Every collection a mutation can reach. */
 const PERSISTED: Record<string, unknown[]> = {

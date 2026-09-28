@@ -376,18 +376,6 @@ export function SharingSessions({ embedded = false }: { embedded?: boolean } = {
               Schedule a sharing session <ChevronRight size={11} />
             </Link>
           </div>
-
-          {/* How it is counted */}
-          <div className="rounded-xl px-4 py-3.5" style={{ backgroundColor: "#FFFBEB" }}>
-            <div className="flex items-start gap-2">
-              <Sparkles size={13} className="mt-0.5 shrink-0" style={{ color: AMBER }} />
-              <p className="text-[10px] leading-relaxed" style={{ color: "#92400E" }}>
-                Any staff member may present, whether or not they hold the trainer permission. The presenter is
-                recorded as the trainer on the session, and every attendee whose attendance was confirmed is
-                counted here and in their own training record.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

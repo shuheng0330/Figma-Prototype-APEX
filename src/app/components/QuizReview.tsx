@@ -374,12 +374,14 @@ export function QuizReview() {
         {/* Actions area */}
         <div className="shrink-0 p-5 border-b border-gray-100 space-y-3">
 
-          {/* STATE 1 — Pending */}
-          {qd.status === "pending" && (
+          {/* STATE 1 — Pending, or approved and still revocable */}
+          {(qd.status === "pending" || qd.status === "approved") && (
             <>
-              <button onClick={approve} className="w-full px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white hover:opacity-90 transition-all" style={{ backgroundColor: TEAL }}>
-                <CheckCircle size={14} className="inline mr-2" /> Approve Quiz
-              </button>
+              {qd.status !== "approved" && (
+                <button onClick={approve} className="w-full px-4 py-2.5 rounded-lg text-[13px] font-semibold text-white hover:opacity-90 transition-all" style={{ backgroundColor: TEAL }}>
+                  <CheckCircle size={14} className="inline mr-2" /> Approve Quiz
+                </button>
+              )}
               <button onClick={() => setRejecting(r => !r)} className="w-full px-4 py-2.5 rounded-lg text-[13px] font-semibold border-2 hover:bg-red-50 transition-all" style={{ borderColor: "#DC2626", color: "#DC2626" }}>
                 <XCircle size={14} className="inline mr-2" /> Reject Quiz
               </button>
@@ -484,7 +486,7 @@ export function QuizReview() {
             </>
           )}
 
-          {/* Approved */}
+          {/* Approved — shown alongside the reject action, which stays available */}
           {qd.status === "approved" && (
             <div className="p-4 rounded-lg flex items-start gap-3" style={{ backgroundColor: "#ECFDF5", border: "1px solid #A7F3D0" }}>
               <CheckCircle size={16} style={{ color: "#059669" }} className="mt-0.5 shrink-0" />
